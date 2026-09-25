@@ -1,0 +1,33 @@
+# Optional XcodeGen spec
+# Regenerates ProShow.xcodeproj on a Mac: `brew install xcodegen && xcodegen generate`
+# Checked-in ProShow.xcodeproj already opens without xcodegen.
+name: ProShow
+options:
+  bundleIdPrefix: com.kaleel
+  deploymentTarget:
+    iOS: "17.0"
+    macOS: "14.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    CURRENT_PROJECT_VERSION: 1
+    MARKETING_VERSION: "0.1.0"
+targets:
+  ProShow:
+    type: application
+    platform: [iOS, macOS]
+    sources:
+      - path: ProShow
+        excludes:
+          - "**/.DS_Store"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kaleel.proshow
+        INFOPLIST_KEY_CFBundleDisplayName: ProShow
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_NAME: ProShow
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MACCATALYST: NO
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "17.0"

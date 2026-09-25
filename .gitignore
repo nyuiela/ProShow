@@ -1,0 +1,11 @@
+# Ignore local Xcode junk; keep shared schemes.
+xcuserdata/
+*.xcuserstate
+DerivedData/
+.build/
+.DS_Store
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
