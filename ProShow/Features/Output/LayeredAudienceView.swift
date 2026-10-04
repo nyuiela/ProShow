@@ -7,7 +7,8 @@ import AppKit
 import UIKit
 #endif
 
-/// One program draw path for Audience, Stream, and the encoder host.
+/// Canonical SwiftUI program stack (Audience, Stage, multiviewer). RTMP/ISO encodes the
+/// matching composite via `ProgramOutputComposer` into `ProgramOutputComposer.previewEndpoint`.
 struct ProgramSurfaceView: View {
     @Bindable var controller: ShowController
     var outputEnabled: Bool
@@ -18,6 +19,7 @@ struct ProgramSurfaceView: View {
 
     var body: some View {
         let _ = controller.inspector.timers.map { "\($0.id)-\($0.displaySeconds)-\($0.isRunning)" }
+        let _ = controller.liveQuotePresentationStamp
         LayeredAudienceView(
             compositor: controller.compositor,
             playback: controller.playback,
@@ -34,9 +36,11 @@ struct ProgramSurfaceView: View {
         .environment(\.resolvePlaceholderSource) { letter in
             controller.resolvedAssignedSource(forPlaceholder: letter)
         }
-        .environment(\.dynamicText, controller.dynamicTextContext())
+        .environment(\.dynamicText, controller.canonicalProgramDynamicText())
+        .environment(\.liveQuoteEngine, controller.liveQuotes)
         .environment(\.buildClock, controller.liveBuildClock())
         .environment(\.animationEvaluationMode, .liveClock)
+        .onAppear { controller.evaluateProgramClockState() }
     }
 }
 
@@ -122,6 +126,8 @@ struct LayeredAudienceView: View {
             .environment(\.proShowVideoInputs, videoInputs)
             .environment(\.proShowPlayback, playback)
             .environment(\.programRenderPaused, isRenderingPaused)
+            .environment(\.proShowProgramVideoInput, stack.videoInput)
+            .environment(\.proShowShowsProgramVideoLayer, stack.isVisible(.videoInput, onStage: onStage))
             #if os(macOS)
             .environment(\.mirrorsProgramPlayer, true)
             #endif
@@ -131,6 +137,8 @@ struct LayeredAudienceView: View {
                 .environment(\.proShowVideoInputs, videoInputs)
                 .environment(\.proShowPlayback, playback)
                 .environment(\.programRenderPaused, isRenderingPaused)
+                .environment(\.proShowProgramVideoInput, stack.videoInput)
+                .environment(\.proShowShowsProgramVideoLayer, stack.isVisible(.videoInput, onStage: onStage))
                 #if os(macOS)
                 .environment(\.mirrorsProgramPlayer, true)
                 #endif
@@ -266,6 +274,7 @@ struct LayeredAudienceView: View {
                         playsAssignedVideo: true,
                         muteAssignedVideo: isLayerAudioMuted(.slide)
                     )
+                    .id(compositor.slideRevision)
                 } else if !stack.slideElements.isEmpty {
                     GeometryReader { proxy in
                         VStack(spacing: max(8, proxy.size.height * 0.03)) {
@@ -394,7 +403,7 @@ struct LayeredAudienceView: View {
                         HStack(spacing: 6) {
                             Text(card.message.author)
                                 .font(.caption.weight(.bold))
-                            Text(card.message.platform.rawValue.uppercased())
+                            Text(card.message.platform.displayTitle.uppercased())
                                 .font(.caption2.weight(.semibold))
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
@@ -591,6 +600,35 @@ struct StageDisplayView: View {
 struct LiveStageView: View {
     @Bindable var controller: ShowController
 
+    @ViewBuilder
+    private func rundownStageOverlay(scale: CGFloat) -> some View {
+        if controller.rundownClock.isShowRunning {
+            VStack(spacing: 8 * scale) {
+                if let title = controller.rundownStageSegmentTitle {
+                    Text(title)
+                        .font(.system(size: 28 * scale, weight: .semibold))
+                        .foregroundStyle(ProShowTheme.lyricWhite)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                }
+                if controller.stageDisplayLayout.showCountdown,
+                   let countdown = controller.rundownStageCountdownText {
+                    Text(countdown)
+                        .font(.system(size: 56 * scale, weight: .bold).monospacedDigit())
+                        .foregroundStyle(ProShowTheme.accent)
+                }
+                if let next = controller.rundownStageNextCue {
+                    Text(next)
+                        .font(.system(size: 20 * scale, weight: .medium))
+                        .foregroundStyle(ProShowTheme.statusOn)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 12 * scale)
+                }
+            }
+            .padding(.top, 24 * scale)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+    }
+
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             let document = controller.liveStageDocument
@@ -615,6 +653,7 @@ struct LiveStageView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .accessibilityLabel("Stage alert \(controller.stageAlertBanner)")
                     }
+                    rundownStageOverlay(scale: scale)
                     ForEach(document.objects.sorted(by: { $0.zIndex < $1.zIndex })) { object in
                         let text = StageLiveBinder.resolvedText(
                             for: object,
@@ -819,6 +858,7 @@ struct CanvasObjectShapeLayer: View {
         if let assigned = resolvedAssignedSource(), assigned.isMappedFill {
             AssignedSourcePreview(
                 source: assigned,
+                canvasObjectKind: object.kind,
                 cornerRadius: mediaStyle.cornerRadius,
                 playsVideo: playsAssignedVideo,
                 mutesVideo: muteAssignedVideo || object.isAudioMuted || assigned.audioMuted == true,
@@ -992,6 +1032,7 @@ struct ProgramSlideCanvas: View {
                     if object.visibleOnAudience {
                         ProgramCanvasObjectView(
                             object: object,
+                            canvasObjects: objects,
                             slideSteps: objects.flatMap(\.resolvedBuildSteps),
                             scale: scale,
                             playsAssignedVideo: playsAssignedVideo,
@@ -1014,11 +1055,13 @@ struct ProgramSlideCanvas: View {
 
 private struct ProgramCanvasObjectView: View {
     let object: CanvasObject
+    var canvasObjects: [CanvasObject] = []
     var slideSteps: [ElementBuildStep] = []
     let scale: CGFloat
     var playsAssignedVideo: Bool = false
     var muteAssignedVideo: Bool = true
     @Environment(\.dynamicText) private var dynamicText
+    @Environment(\.liveQuoteEngine) private var liveQuoteEngine
     @Environment(\.proShowPlayback) private var playback
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -1033,8 +1076,16 @@ private struct ProgramCanvasObjectView: View {
 
     @ViewBuilder
     private func programBody(_ state: TransformedRenderState) -> some View {
-        let label = objectLabel(state)
-            .frame(width: width, height: height, alignment: textFrameAlignment)
+        let label = Group {
+            if object.isTextLike {
+                objectLabel(state)
+                    .canvasTextBoxFrame(object: object, width: width, height: height, scale: scale)
+            } else {
+                objectLabel(state)
+                    .frame(width: width, height: height, alignment: .topLeading)
+            }
+        }
+        .canvasElementShimmer(object.resolvedShimmer, scale: scale)
         if object.hostsLayerBackedMedia {
             label
                 .shadow(color: dropShadowColor, radius: dropShadowRadius, x: dropShadowX, y: dropShadowY)
@@ -1057,15 +1108,12 @@ private struct ProgramCanvasObjectView: View {
     @ViewBuilder
     private func objectLabel(_ state: TransformedRenderState) -> some View {
         if object.isTextLike {
-            TimelineView(.periodic(from: .now, by: textTimelineInterval)) { timeline in
-                let resolved = DynamicTextEngine.resolve(object, context: countdownContext(at: timeline.date))
-                if object.textLayout.isLooping {
-                    TextLoopMarquee(object: object, text: resolved, scale: scale, reduceMotion: reduceMotion) {
-                        programText(resolved, expands: false)
-                    }
-                } else {
-                    marqueeText(resolved, state: state)
+            if let liveQuoteEngine {
+                LiveQuoteRefreshScope(engine: liveQuoteEngine) {
+                    objectLabelText(state)
                 }
+            } else {
+                objectLabelText(state)
             }
         } else {
             CanvasObjectShapeLayer(
@@ -1079,70 +1127,137 @@ private struct ProgramCanvasObjectView: View {
         }
     }
 
+    @ViewBuilder
+    private func objectLabelText(_ state: TransformedRenderState) -> some View {
+        TimelineView(.periodic(from: .now, by: textTimelineInterval)) { timeline in
+            let context = countdownContext(at: timeline.date)
+            if DynamicTextEngine.shouldDeferProgramLiveQuoteOutput(
+                object: object,
+                context: context,
+                canvasObjects: canvasObjects
+            ) {
+                Color.clear
+            } else {
+            let resolved = DynamicTextEngine.resolve(object, context: context)
+            if object.textLayout.isLooping {
+                MarqueeTextLoopView(
+                    object: object,
+                    text: DynamicTextEngine.loopScrollText(for: object, resolved: resolved),
+                    scale: scale,
+                    reduceMotion: reduceMotion,
+                    canvasObjects: canvasObjects,
+                    liveQuotes: context.quotes,
+                    dynamicTextContext: context
+                )
+            } else if MarketTickerRouting.usesStaticColoredLiveQuote(object) {
+                StaticColoredLiveQuoteView(
+                    object: object,
+                    canvasObjects: canvasObjects,
+                    scale: scale,
+                    liveQuotes: context.quotes
+                )
+            } else {
+                marqueeText(resolved, context: context, state: state)
+            }
+            }
+        }
+    }
+
     private var textTimelineInterval: TimeInterval {
         if object.textLayout.isLooping { return object.kind.usesLiveText ? 1 : 60 }
         if object.resolvedCountdownValueSource == .programMedia { return 0.25 }
         if object.kind.usesLiveText { return 1 }
+        if !DynamicTextEngine.requiredLiveQuoteRequests(for: object, canvasObjects: canvasObjects).isEmpty { return 1 }
         return 60
     }
 
     private func countdownContext(at date: Date) -> DynamicTextContext {
-        var context = dynamicText.ticking(now: date)
+        var context = LiveQuoteEnvironment.mergedContext(
+            base: dynamicText,
+            engine: liveQuoteEngine,
+            at: date
+        )
         if object.resolvedCountdownValueSource == .programMedia, let playback, playback.duration > 0.05 {
             context.mediaRemainingSeconds = Int(playback.remaining.rounded(.towardZero))
+        }
+        if let liveQuoteEngine {
+            context.liveQuotesInitialLoadPending = liveQuoteEngine.isAwaitingFirstQuotePayload
         }
         return context
     }
 
     @ViewBuilder
-    private func marqueeText(_ value: String, state: TransformedRenderState) -> some View {
+    private func marqueeText(_ value: String, context: DynamicTextContext, state: TransformedRenderState) -> some View {
         if state.usesMarquee {
             Group {
                 if state.marqueeVertical {
                     VStack(spacing: max(0, state.marqueeGapPx * scale)) {
-                        programText(value).fixedSize(horizontal: false, vertical: true)
-                        programText(value).fixedSize(horizontal: false, vertical: true)
+                        programText(value, context: context).fixedSize(horizontal: false, vertical: true)
+                        programText(value, context: context).fixedSize(horizontal: false, vertical: true)
                     }
                     .offset(y: state.scrollOffsetPx * scale)
                 } else {
                     HStack(spacing: max(0, state.marqueeGapPx * scale)) {
-                        programText(value).fixedSize(horizontal: true, vertical: false)
-                        programText(value).fixedSize(horizontal: true, vertical: false)
+                        programText(value, context: context).fixedSize(horizontal: true, vertical: false)
+                        programText(value, context: context).fixedSize(horizontal: true, vertical: false)
                     }
                     .offset(x: state.scrollOffsetPx * scale)
                 }
             }
         } else {
-            programText(value)
+            programText(value, context: context)
         }
     }
 
-    private func programText(_ value: String, expands: Bool = true) -> some View {
-        Text(value)
-            .font(canvasFont)
-            .italic(object.typography.isItalic)
-            .underline(object.typography.isUnderline)
-            .strikethrough(object.typography.isStrikethrough)
-            .foregroundStyle(Color(hex: object.typography.color) ?? ProShowTheme.lyricWhite)
-            .shadow(color: outlineColor, radius: 0, x: outlineWidth, y: 0)
-            .shadow(color: outlineColor, radius: 0, x: -outlineWidth, y: 0)
-            .shadow(color: outlineColor, radius: 0, x: 0, y: outlineWidth)
-            .shadow(color: outlineColor, radius: 0, x: 0, y: -outlineWidth)
-            .shadow(
-                color: textShadowColor,
-                radius: textShadowRadius,
-                x: object.textShadow.enabled ? cos(object.textShadow.angle * .pi / 180) * object.textShadow.offset * scale : 0,
-                y: object.textShadow.enabled ? sin(object.textShadow.angle * .pi / 180) * object.textShadow.offset * scale : 0
-            )
+    private func programText(_ value: String, context: DynamicTextContext? = nil, expands: Bool = true) -> some View {
+        Group {
+            #if os(macOS)
+            if LiveQuoteDisplayRouting.usesTokenDisplayTemplate(object),
+               let context,
+               let liveQuote = LiveQuoteTemplateRenderer.makeAttributedString(
+                   object: object,
+                   scale: scale,
+                   context: context,
+                   colorConfig: TickerConfigStore.shared.colorConfig
+               ) {
+                CanvasStaticAttributedTextView(object: object, attributed: liveQuote, scale: scale)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: object.canvasTextFrameAlignment)
+            } else {
+            Text(AttributedString(TextAttributeConverter.makeAttributedString(
+                object: object,
+                text: value,
+                scale: scale
+            )))
             .multilineTextAlignment(textAlignment)
-            .lineSpacing(max(0, (object.textLayout.lineHeight - 1) * object.typography.fontSize * scale))
-            .kerning(object.textLayout.characterSpacing * scale)
-            .modifier(LoopingTextFit(layout: object.textLayout, maxLines: 12))
-            .frame(
-                maxWidth: expands ? .infinity : nil,
-                maxHeight: expands ? .infinity : nil,
-                alignment: textFrameAlignment
-            )
+            }
+            #else
+            Text(value)
+                .font(canvasFont)
+                .italic(object.typography.isItalic)
+                .underline(object.typography.isUnderline)
+                .strikethrough(object.typography.isStrikethrough)
+                .foregroundStyle(Color(hex: object.typography.color) ?? ProShowTheme.lyricWhite)
+                .shadow(color: outlineColor, radius: 0, x: outlineWidth, y: 0)
+                .shadow(color: outlineColor, radius: 0, x: -outlineWidth, y: 0)
+                .shadow(color: outlineColor, radius: 0, x: 0, y: outlineWidth)
+                .shadow(color: outlineColor, radius: 0, x: 0, y: -outlineWidth)
+                .shadow(
+                    color: textShadowColor,
+                    radius: textShadowRadius,
+                    x: object.textShadow.enabled ? cos(object.textShadow.angle * .pi / 180) * object.textShadow.offset * scale : 0,
+                    y: object.textShadow.enabled ? sin(object.textShadow.angle * .pi / 180) * object.textShadow.offset * scale : 0
+                )
+                .multilineTextAlignment(textAlignment)
+                .lineSpacing(max(0, (object.textLayout.lineHeight - 1) * object.typography.fontSize * scale))
+                .kerning(object.textLayout.characterSpacing * scale)
+            #endif
+        }
+        .modifier(LoopingTextFit(layout: object.textLayout, maxLines: CanvasTextBoxLayout.autoFitMaxLines))
+        .frame(
+            maxWidth: expands ? .infinity : nil,
+            maxHeight: expands ? .infinity : nil,
+            alignment: CanvasTextBoxLayout.frameAlignment(for: object)
+        )
     }
 
     private var layerBlend: BlendMode {
@@ -1212,27 +1327,9 @@ private struct ProgramCanvasObjectView: View {
 
     private var textAlignment: TextAlignment {
         switch object.textLayout.horizontalAlign {
-        case .left, .justifyLeft: return .leading
-        case .right: return .trailing
-        default: return .center
+        case .left, .justify, .justifyLeft, .justifyAll: .leading
+        case .center: .center
+        case .right: .trailing
         }
-    }
-
-    private var textFrameAlignment: Alignment {
-        let horizontal: HorizontalAlignment = {
-            switch object.textLayout.horizontalAlign {
-            case .left, .justifyLeft: return .leading
-            case .right: return .trailing
-            default: return .center
-            }
-        }()
-        let vertical: VerticalAlignment = {
-            switch object.textLayout.verticalAlign {
-            case .top: return .top
-            case .bottom: return .bottom
-            default: return .center
-            }
-        }()
-        return Alignment(horizontal: horizontal, vertical: vertical)
     }
 }

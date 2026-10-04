@@ -12,9 +12,21 @@
 		A10000000000000000000003 /* SampleContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* SampleContent.swift */; };
 		A10000000000000000000004 /* ShowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000004 /* ShowController.swift */; };
 		A10000000000000000000005 /* ProShowTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000005 /* ProShowTheme.swift */; };
+		A100000000000000000000F1 /* ThemeTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000F1 /* ThemeTokens.swift */; };
+		A10000000000000000000039 /* DeskChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000039 /* DeskChrome.swift */; };
+		C6D100000000000000000011 /* CanvasElementShimmer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D200000000000000000011 /* CanvasElementShimmer.swift */; };
+		A10000000000000000000043 /* InspectorChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000043 /* InspectorChrome.swift */; };
+		C7E100000000000000000015 /* ScrubbableComboInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E200000000000000000015 /* ScrubbableComboInput.swift */; };
+		C7E100000000000000000016 /* RadialAngleInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E200000000000000000016 /* RadialAngleInput.swift */; };
+		C7E100000000000000000017 /* BoundsMatrixInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E200000000000000000017 /* BoundsMatrixInput.swift */; };
+		C7E100000000000000000018 /* InlineOpacityField.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E200000000000000000018 /* InlineOpacityField.swift */; };
+		C7E100000000000000000019 /* CanvasTextBoxLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E200000000000000000019 /* CanvasTextBoxLayout.swift */; };
+		C7E10000000000000000001A /* CanvasEditorScreenAlign.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E20000000000000000001A /* CanvasEditorScreenAlign.swift */; };
 		A10000000000000000000006 /* AudienceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000006 /* AudienceView.swift */; };
 		A10000000000000000000007 /* AudienceWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* AudienceWindowController.swift */; };
 		A10000000000000000000008 /* OperatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* OperatorView.swift */; };
+		A100000000000000000000C3 /* AppWorkspaceRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000C3 /* AppWorkspaceRouter.swift */; };
+		A100000000000000000000C4 /* AudioMeterBridgeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000C4 /* AudioMeterBridgeView.swift */; };
 		A10000000000000000000009 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* Assets.xcassets */; };
 		A1000000000000000000000B /* DeskModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000B /* DeskModels.swift */; };
 		A1000000000000000000000C /* TopToolbarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000C /* TopToolbarView.swift */; };
@@ -22,6 +34,300 @@
 		A1000000000000000000000E /* SlideWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000E /* SlideWorkspaceView.swift */; };
 		A1000000000000000000000F /* MediaBinView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000F /* MediaBinView.swift */; };
 		A10000000000000000000010 /* OutputSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* OutputSidebarView.swift */; };
+		C7R100000000000000000001 /* RightPaneProgramView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7R200000000000000000001 /* RightPaneProgramView.swift */; };
+		C7R100000000000000000002 /* AudioMonitoringEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7R200000000000000000002 /* AudioMonitoringEngine.swift */; };
+		C7R100000000000000000003 /* ProgramAudioMonitorBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7R200000000000000000003 /* ProgramAudioMonitorBridge.swift */; };
+		A10000000000000000000011 /* EngineModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000011 /* EngineModels.swift */; };
+		A10000000000000000000012 /* CompositorEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000012 /* CompositorEngine.swift */; };
+		A10000000000000000000013 /* ContentEngines.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000013 /* ContentEngines.swift */; };
+		A10000000000000000000014 /* StreamingEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000014 /* StreamingEngine.swift */; };
+		A10000000000000000000015 /* ControlAPIServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000015 /* ControlAPIServer.swift */; };
+		A10000000000000000000016 /* LayeredAudienceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000016 /* LayeredAudienceView.swift */; };
+		A10000000000000000000017 /* ProductEngines.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000017 /* ProductEngines.swift */; };
+		A10000000000000000000018 /* ProjectModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000018 /* ProjectModels.swift */; };
+		A10000000000000000000019 /* ProjectStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000019 /* ProjectStore.swift */; };
+		A1000000000000000000001A /* AssetPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001A /* AssetPipeline.swift */; };
+		A1000000000000000000001B /* StartMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001B /* StartMenuView.swift */; };
+		A1000000000000000000001C /* EditorModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001C /* EditorModels.swift */; };
+		A1000000000000000000001D /* EditorEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001D /* EditorEngine.swift */; };
+		A1000000000000000000001E /* CanvasEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001E /* CanvasEditorView.swift */; };
+		A1000000000000000000001F /* EditorInspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001F /* EditorInspectorView.swift */; };
+		A1000000000000000000002B /* ProjectSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002B /* ProjectSettingsView.swift */; };
+		A10000000000000000000020 /* CanvasConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000020 /* CanvasConfig.swift */; };
+		A10000000000000000000021 /* DefaultSeedData.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000021 /* DefaultSeedData.swift */; };
+		A10000000000000000000022 /* StudioModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000022 /* StudioModels.swift */; };
+		A1000000000000000000002C /* CanvasEngineModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002C /* CanvasEngineModels.swift */; };
+		A1000000000000000000002D /* CanvasTransformEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002D /* CanvasTransformEngine.swift */; };
+		A1000000000000000000002E /* SelectionChromeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002E /* SelectionChromeView.swift */; };
+		A1000000000000000000002F /* ActionInspectorModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002F /* ActionInspectorModels.swift */; };
+		A10000000000000000000030 /* ActionInspectorEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000030 /* ActionInspectorEngine.swift */; };
+		A10000000000000000000031 /* RightInspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000031 /* RightInspectorView.swift */; };
+		A10000000000000000000032 /* MediaPlaybackEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000032 /* MediaPlaybackEngine.swift */; };
+		A10000000000000000000033 /* ProgramCompositor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000033 /* ProgramCompositor.swift */; };
+		A10000000000000000000034 /* ChromaKeyFilter.metal in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000034 /* ChromaKeyFilter.metal */; };
+		A10000000000000000000035 /* VideoIngestEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000035 /* VideoIngestEngine.swift */; };
+		A10000000000000000000036 /* AudioIOEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000036 /* AudioIOEngine.swift */; };
+		A10000000000000000000037 /* PathGeometryEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000037 /* PathGeometryEngine.swift */; };
+		A10000000000000000000038 /* RTMPStreamTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000038 /* RTMPStreamTransport.swift */; };
+		A10000000000000000000023 /* SceneManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000023 /* SceneManager.swift */; };
+		A10000000000000000000024 /* VideoInputEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000024 /* VideoInputEngine.swift */; };
+		A10000000000000000000025 /* VideoFilterEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000025 /* VideoFilterEngine.swift */; };
+		A10000000000000000000026 /* AudioMatrixEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000026 /* AudioMatrixEngine.swift */; };
+		A10000000000000000000027 /* SoundboardStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000027 /* SoundboardStore.swift */; };
+		A10000000000000000000028 /* IsoRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000028 /* IsoRecorder.swift */; };
+		B100000000000000000000B1 /* ProgramOutputMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000000000000000000B1 /* ProgramOutputMode.swift */; };
+		B100000000000000000000B2 /* ProgramRenderContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000000000000000000B2 /* ProgramRenderContract.swift */; };
+		B100000000000000000000B3 /* ProgramOutputBus.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000000000000000000B3 /* ProgramOutputBus.swift */; };
+		B100000000000000000000B4 /* ShowController+OutputBus.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000000000000000000B4 /* ShowController+OutputBus.swift */; };
+		A10000000000000000000029 /* LiveChatEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000029 /* LiveChatEngine.swift */; };
+		A1000000000000000000002A /* ProShowVirtualCam.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002A /* ProShowVirtualCam.swift */; };
+		A1000000000000000000003A /* ControlAPIOpenAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000003A /* ControlAPIOpenAPI.swift */; };
+		A1000000000000000000003B /* NDIRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000003B /* NDIRuntime.swift */; };
+		A1000000000000000000003D /* AddShotModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000003D /* AddShotModels.swift */; };
+		A1000000000000000000003E /* SourceDiscoveryManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000003E /* SourceDiscoveryManager.swift */; };
+		A10000000000000000000094 /* InputAccessBroker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000094 /* InputAccessBroker.swift */; };
+		A10000000000000000000095 /* InputPreviewEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000095 /* InputPreviewEngine.swift */; };
+		A1000000000000000000003F /* AddShotModalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000003F /* AddShotModalView.swift */; };
+		A1T000000000000000000023 /* AddShotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000023 /* AddShotTests.swift */; };
+		A10000000000000000000040 /* PlaceholderMatrix.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000040 /* PlaceholderMatrix.swift */; };
+		A10000000000000000000041 /* MapWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000041 /* MapWorkspaceView.swift */; };
+		A10000000000000000000042 /* PlaceholderTransitionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000042 /* PlaceholderTransitionEngine.swift */; };
+		A1T000000000000000000024 /* PlaceholderMatrixTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000024 /* PlaceholderMatrixTests.swift */; };
+		A10000000000000000000044 /* NodeRoutingModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000044 /* NodeRoutingModels.swift */; };
+		A10000000000000000000045 /* NodeRoutingEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000045 /* NodeRoutingEngine.swift */; };
+		A10000000000000000000046 /* BezierWireCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000046 /* BezierWireCanvas.swift */; };
+		A10000000000000000000047 /* RoutingNodeGraphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000047 /* RoutingNodeGraphView.swift */; };
+		A1T000000000000000000025 /* NodeRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000025 /* NodeRoutingTests.swift */; };
+		A10000000000000000000048 /* TransitionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000048 /* TransitionModels.swift */; };
+		A10000000000000000000049 /* TransitionShaderEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000049 /* TransitionShaderEngine.swift */; };
+		A1000000000000000000004A /* TransitionShaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000004A /* TransitionShaders.metal */; };
+		A1000000000000000000004B /* StingerPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000004B /* StingerPlayer.swift */; };
+		A1000000000000000000004C /* LottieTransitionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000004C /* LottieTransitionEngine.swift */; };
+		A1000000000000000000004D /* CoreImageTransitionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000004D /* CoreImageTransitionEngine.swift */; };
+		A1000000000000000000004E /* TransitionPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000004E /* TransitionPickerView.swift */; };
+		A1000000000000000000004F /* SettingsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000004F /* SettingsModels.swift */; };
+		A10000000000000000000050 /* KeychainStreamVault.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000050 /* KeychainStreamVault.swift */; };
+		A10000000000000000000051 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000051 /* SettingsStore.swift */; };
+		C7M100000000000000000001 /* UserSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7M200000000000000000001 /* UserSettingsStore.swift */; };
+		C7M100000000000000000002 /* SlideCacheManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7M200000000000000000002 /* SlideCacheManager.swift */; };
+		C7A100000000000000000001 /* AudioMatrixReconciler.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A200000000000000000001 /* AudioMatrixReconciler.swift */; };
+		A10000000000000000000052 /* SettingsWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000052 /* SettingsWindowView.swift */; };
+		A10000000000000000000053 /* StreamingSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000053 /* StreamingSettingsView.swift */; };
+		A10000000000000000000054 /* MultiScreenManagerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000054 /* MultiScreenManagerView.swift */; };
+		A10000000000000000000055 /* AudioDSP.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000055 /* AudioDSP.swift */; };
+		A10000000000000000000056 /* ShowAudioController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000056 /* ShowAudioController.swift */; };
+		A10000000000000000000057 /* AudioMixerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000057 /* AudioMixerView.swift */; };
+		A10000000000000000000058 /* FFTSpectrumView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000058 /* FFTSpectrumView.swift */; };
+		A10000000000000000000059 /* ParametricEQView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000059 /* ParametricEQView.swift */; };
+		A1000000000000000000005A /* FairlightChannelStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000005A /* FairlightChannelStrip.swift */; };
+		A1000000000000000000005B /* LiveStackState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000005B /* LiveStackState.swift */; };
+		A1000000000000000000005C /* MediaActionEvaluator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000005C /* MediaActionEvaluator.swift */; };
+		A1000000000000000000005D /* NativeSplitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000005D /* NativeSplitView.swift */; };
+		A1000000000000000000005E /* DynamicTextModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000005E /* DynamicTextModels.swift */; };
+		A1000000000000000000005F /* DynamicTextEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000005F /* DynamicTextEngine.swift */; };
+		A10000000000000000000060 /* LiveQuoteEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000060 /* LiveQuoteEngine.swift */; };
+		A10000000000000000000061 /* BuildAnimationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000061 /* BuildAnimationModels.swift */; };
+		A10000000000000000000062 /* BuildAnimationEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000062 /* BuildAnimationEngine.swift */; };
+		A10000000000000000000063 /* BuildInspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000063 /* BuildInspectorView.swift */; };
+		A10000000000000000000064 /* ProShowQueues.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000064 /* ProShowQueues.swift */; };
+		C6D100000000000000000001 /* TickerEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D200000000000000000001 /* TickerEngine.swift */; };
+		C6D100000000000000000002 /* MarqueeTickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D200000000000000000002 /* MarqueeTickerView.swift */; };
+		C6D100000000000000000099 /* ProjectTitleHeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D200000000000000000099 /* ProjectTitleHeaderView.swift */; };
+		C6D100000000000000000003 /* MarqueeTextLoopView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D200000000000000000003 /* MarqueeTextLoopView.swift */; };
+		C6D100000000000000000004 /* TextAttributeConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D200000000000000000004 /* TextAttributeConverter.swift */; };
+		C6D100000000000000000005 /* MarketTickerModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D200000000000000000005 /* MarketTickerModel.swift */; };
+		C6D100000000000000000006 /* CryptoTickerFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D200000000000000000006 /* CryptoTickerFormatter.swift */; };
+		C6D10000000000000000000B /* CoreTextRasterizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D20000000000000000000B /* CoreTextRasterizer.swift */; };
+		C6D10000000000000000000C /* LiveQuoteTemplateRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D20000000000000000000C /* LiveQuoteTemplateRenderer.swift */; };
+		C6D10000000000000000000D /* AdobeLayerRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D20000000000000000000D /* AdobeLayerRowView.swift */; };
+		C6D10000000000000000000E /* CanvasLayerModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D20000000000000000000E /* CanvasLayerModels.swift */; };
+		C6D10000000000000000000F /* CanvasLayerStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D20000000000000000000F /* CanvasLayerStore.swift */; };
+		C6D100000000000000000010 /* ShowController+CompositionPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D200000000000000000010 /* ShowController+CompositionPanel.swift */; };
+		C6D100000000000000000020 /* ProgramDocumentSchema.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D200000000000000000020 /* ProgramDocumentSchema.swift */; };
+		C6D100000000000000000021 /* ProgramDocumentStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D200000000000000000021 /* ProgramDocumentStore.swift */; };
+		C6D100000000000000000022 /* RundownClockEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D200000000000000000022 /* RundownClockEngine.swift */; };
+		C6D100000000000000000023 /* TalentManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D200000000000000000023 /* TalentManager.swift */; };
+		C6D100000000000000000024 /* StageCueController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D200000000000000000024 /* StageCueController.swift */; };
+		C6D100000000000000000025 /* ShowController+Program.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D200000000000000000025 /* ShowController+Program.swift */; };
+		C6D100000000000000000026 /* RundownWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D200000000000000000026 /* RundownWorkspaceView.swift */; };
+		C6D100000000000000000027 /* ProgramInspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D200000000000000000027 /* ProgramInspectorView.swift */; };
+		C6D100000000000000000028 /* ProgramFileDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D200000000000000000028 /* ProgramFileDocument.swift */; };
+		C6D100000000000000000029 /* RundownDetailPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D200000000000000000029 /* RundownDetailPane.swift */; };
+		C6D10000000000000000002A /* RundownProgramEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D20000000000000000002A /* RundownProgramEditor.swift */; };
+		C6D10000000000000000002B /* ProgramLayerModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D20000000000000000002B /* ProgramLayerModels.swift */; };
+		C6D10000000000000000002C /* ProgramLayersEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D20000000000000000002C /* ProgramLayersEngine.swift */; };
+		C6D10000000000000000002D /* ShowController+ProgramLayers.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D20000000000000000002D /* ShowController+ProgramLayers.swift */; };
+		C6D10000000000000000002E /* LayerSemanticMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D20000000000000000002E /* LayerSemanticMapper.swift */; };
+		C6D10000000000000000002F /* ShowController+UserComposition.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D20000000000000000002F /* ShowController+UserComposition.swift */; };
+		C6D100000000000000000030 /* UserCompositionPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D200000000000000000030 /* UserCompositionPanelView.swift */; };
+		C6D100000000000000000031 /* ShowStateTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D200000000000000000031 /* ShowStateTracker.swift */; };
+		C6D100000000000000000032 /* EntityRevisionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D200000000000000000032 /* EntityRevisionStore.swift */; };
+		C6D100000000000000000033 /* UnifiedCacheRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D200000000000000000033 /* UnifiedCacheRegistry.swift */; };
+		C6D100000000000000000034 /* AtomicPersistenceEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D200000000000000000034 /* AtomicPersistenceEngine.swift */; };
+		C6D100000000000000000035 /* ShowDocumentStateEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D200000000000000000035 /* ShowDocumentStateEngine.swift */; };
+		C6D100000000000000000036 /* ShowController+ElementLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D200000000000000000036 /* ShowController+ElementLifecycle.swift */; };
+		C6D100000000000000000037 /* ShowController+Rehydration.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D200000000000000000037 /* ShowController+Rehydration.swift */; };
+		C6D100000000000000000038 /* FrameRevisionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D200000000000000000038 /* FrameRevisionModels.swift */; };
+		C6D100000000000000000039 /* FrameRevisionClock.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D200000000000000000039 /* FrameRevisionClock.swift */; };
+		C6D10000000000000000003A /* VideoInvalidationEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D20000000000000000003A /* VideoInvalidationEngine.swift */; };
+		C6D10000000000000000003B /* ShowController+TokenSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D20000000000000000003B /* ShowController+TokenSync.swift */; };
+		C6D10000000000000000003D /* DeskSignalProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D20000000000000000003D /* DeskSignalProbe.swift */; };
+		C6D10000000000000000003E /* ShowController+DeskSignalProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D20000000000000000003E /* ShowController+DeskSignalProbe.swift */; };
+		C6D10000000000000000003C /* ProgramCanonicalMonitorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D20000000000000000003C /* ProgramCanonicalMonitorView.swift */; };
+		C7E100000000000000000001 /* PrecisionLayoutModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E200000000000000000001 /* PrecisionLayoutModels.swift */; };
+		C7E100000000000000000002 /* SnapToGridEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E200000000000000000002 /* SnapToGridEngine.swift */; };
+		C7E100000000000000000003 /* SmartGuideEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E200000000000000000003 /* SmartGuideEngine.swift */; };
+		C7E100000000000000000004 /* AlignmentController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E200000000000000000004 /* AlignmentController.swift */; };
+		C7E100000000000000000005 /* CanvasGuideOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E200000000000000000005 /* CanvasGuideOverlayView.swift */; };
+		C7E100000000000000000006 /* AlignmentToolbarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E200000000000000000006 /* AlignmentToolbarView.swift */; };
+		C7E100000000000000000007 /* ContextBarPositionCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E200000000000000000007 /* ContextBarPositionCalculator.swift */; };
+		C7E100000000000000000008 /* CanvasContextBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E200000000000000000008 /* CanvasContextBarView.swift */; };
+		C7E10000000000000000000D /* GuideLineEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E20000000000000000000D /* GuideLineEngine.swift */; };
+		C7E100000000000000000013 /* CanvasGridDisplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E200000000000000000013 /* CanvasGridDisplay.swift */; };
+		C7E100000000000000000014 /* VideoResizePreviewScaler.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E200000000000000000014 /* VideoResizePreviewScaler.swift */; };
+		C7E10000000000000000000E /* CanvasRulerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E20000000000000000000E /* CanvasRulerView.swift */; };
+		C7E10000000000000000000F /* BroadcastFrameGuideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E20000000000000000000F /* BroadcastFrameGuideView.swift */; };
+		C7E100000000000000000010 /* CanvasMinimapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E200000000000000000010 /* CanvasMinimapView.swift */; };
+		C7E100000000000000000011 /* CanvasWorkbenchGuideOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E200000000000000000011 /* CanvasWorkbenchGuideOverlay.swift */; };
+		C7E100000000000000000012 /* CanvasUserGuideViewportOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E200000000000000000012 /* CanvasUserGuideViewportOverlay.swift */; };
+		C7F100000000000000000001 /* PropLifecycleEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F200000000000000000001 /* PropLifecycleEngine.swift */; };
+		C7F100000000000000000002 /* ShowController+PropLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F200000000000000000002 /* ShowController+PropLifecycle.swift */; };
+		C7F100000000000000000003 /* RemoteGuestAndMeetingModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F200000000000000000003 /* RemoteGuestAndMeetingModels.swift */; };
+		C7F100000000000000000004 /* VirtualCameraOutputService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F200000000000000000004 /* VirtualCameraOutputService.swift */; };
+		C7F100000000000000000005 /* ProShowBackstageEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F200000000000000000005 /* ProShowBackstageEngine.swift */; };
+		C7F100000000000000000006 /* LiveChatStreamManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F200000000000000000006 /* LiveChatStreamManager.swift */; };
+		C7F100000000000000000007 /* MeetingSdkBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F200000000000000000007 /* MeetingSdkBridge.swift */; };
+		C7F100000000000000000008 /* ShowController+Backstage.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F200000000000000000008 /* ShowController+Backstage.swift */; };
+		C7F100000000000000000013 /* ShowController+LibraryHierarchy.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F200000000000000000013 /* ShowController+LibraryHierarchy.swift */; };
+		C7F100000000000000000009 /* BackstageControlPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F200000000000000000009 /* BackstageControlPanelView.swift */; };
+		C7F10000000000000000000A /* BackstageEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F20000000000000000000A /* BackstageEngineTests.swift */; };
+		C7F10000000000000000000B /* VirtualCameraFrameQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F20000000000000000000B /* VirtualCameraFrameQueue.swift */; };
+		C7F10000000000000000000C /* VirtualAudioLoopbackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F20000000000000000000C /* VirtualAudioLoopbackService.swift */; };
+		C7F10000000000000000000D /* BackstageSignalingEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F20000000000000000000D /* BackstageSignalingEngine.swift */; };
+		C7F10000000000000000000E /* BackstageWebRTCIngestEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F20000000000000000000E /* BackstageWebRTCIngestEngine.swift */; };
+		C7F10000000000000000000F /* LiveChatIngestService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F20000000000000000000F /* LiveChatIngestService.swift */; };
+		C7F100000000000000000010 /* MeetingOAuthClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F200000000000000000010 /* MeetingOAuthClient.swift */; };
+		C7F100000000000000000011 /* CanvasShimmerRasterizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F200000000000000000011 /* CanvasShimmerRasterizer.swift */; };
+		C7F100000000000000000012 /* BackstageIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F200000000000000000012 /* BackstageIntegrationTests.swift */; };
+		C6D100000000000000000007 /* MarketDataStreamEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D200000000000000000007 /* MarketDataStreamEngine.swift */; };
+		C6D100000000000000000008 /* TickerConfigStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D200000000000000000008 /* TickerConfigStore.swift */; };
+		C6D10000000000000000000A /* LiveQuoteTickerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D20000000000000000000A /* LiveQuoteTickerBridge.swift */; };
+		C6D100000000000000000009 /* LiveMarketMarqueeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D200000000000000000009 /* LiveMarketMarqueeView.swift */; };
+		A100000000000000000000C5 /* OffThreadVideoPublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000C5 /* OffThreadVideoPublisher.swift */; };
+		A10000000000000000000065 /* ZeroCopyMetalPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000065 /* ZeroCopyMetalPipeline.swift */; };
+		A10000000000000000000066 /* HardwareVideoEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000066 /* HardwareVideoEncoder.swift */; };
+		C7D301000000000000000001 /* MediaClockAnchor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7D301000000000000000002 /* MediaClockAnchor.swift */; };
+		C7D302000000000000000001 /* RTMPEndpointQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7D302000000000000000002 /* RTMPEndpointQueue.swift */; };
+		A10000000000000000000067 /* AssetCacheManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000067 /* AssetCacheManager.swift */; };
+		A10000000000000000000068 /* DefaultBuildFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000068 /* DefaultBuildFactory.swift */; };
+		A10000000000000000000069 /* ProShowFlippedSplitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000069 /* ProShowFlippedSplitView.swift */; };
+		A10000000000000000000070 /* ProShow3ColumnDeskController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000070 /* ProShow3ColumnDeskController.swift */; };
+		A10000000000000000000071 /* ProShow2RowCenterController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000071 /* ProShow2RowCenterController.swift */; };
+		A10000000000000000000072 /* ProShowStudioDeskView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000072 /* ProShowStudioDeskView.swift */; };
+		A10000000000000000000073 /* LiveTransportClock.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000073 /* LiveTransportClock.swift */; };
+		A10000000000000000000074 /* KeyboardShortcutManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000074 /* KeyboardShortcutManager.swift */; };
+		A10000000000000000000075 /* ClipboardController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000075 /* ClipboardController.swift */; };
+		A10000000000000000000076 /* ShapeDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000076 /* ShapeDefaults.swift */; };
+		A10000000000000000000077 /* TransformHandleEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000077 /* TransformHandleEngine.swift */; };
+		A100000000000000000000C1 /* CanvasGroupNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000C1 /* CanvasGroupNode.swift */; };
+		A100000000000000000000C2 /* GroupSelectionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000C2 /* GroupSelectionController.swift */; };
+		A10000000000000000000078 /* SmartMeasurementModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000078 /* SmartMeasurementModel.swift */; };
+		A10000000000000000000079 /* SmartMeasurementEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000079 /* SmartMeasurementEngine.swift */; };
+		A10000000000000000000080 /* SmartMeasurementOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000080 /* SmartMeasurementOverlayView.swift */; };
+		A10000000000000000000081 /* CanvasEditorMouseTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000081 /* CanvasEditorMouseTracker.swift */; };
+		A10000000000000000000082 /* MediaFrameEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000082 /* MediaFrameEngine.swift */; };
+		A10000000000000000000083 /* SharedTexturePublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000083 /* SharedTexturePublisher.swift */; };
+		A10000000000000000000084 /* ProShowMetalHostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000084 /* ProShowMetalHostView.swift */; };
+		A10000000000000000000085 /* PlayheadTimecodeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000085 /* PlayheadTimecodeView.swift */; };
+		A10000000000000000000086 /* LivePixelHub.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000086 /* LivePixelHub.swift */; };
+		A10000000000000000000087 /* ProgramOutputComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000087 /* ProgramOutputComposer.swift */; };
+		A10000000000000000000096 /* PreFlightEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000096 /* PreFlightEngine.swift */; };
+		A10000000000000000000097 /* PreFlightHealthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000097 /* PreFlightHealthView.swift */; };
+		A10000000000000000000098 /* RemoteControlBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000098 /* RemoteControlBridge.swift */; };
+		A10000000000000000000099 /* StageDisplayEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000099 /* StageDisplayEngine.swift */; };
+		A100000000000000000000A0 /* ImportReflowEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A0 /* ImportReflowEngine.swift */; };
+		A100000000000000000000A1 /* StreamAccountModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A1 /* StreamAccountModel.swift */; };
+		A100000000000000000000A2 /* StreamAccountManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A2 /* StreamAccountManager.swift */; };
+		A100000000000000000000A3 /* PlatformLiveApiService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A3 /* PlatformLiveApiService.swift */; };
+		A100000000000000000000A4 /* GoLiveSetupSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A4 /* GoLiveSetupSheet.swift */; };
+		C7E300000000000000000001 /* EncoderPresetPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E300000000000000000002 /* EncoderPresetPickerView.swift */; };
+		C7E401000000000000000001 /* EncoderPresetStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E401000000000000000002 /* EncoderPresetStore.swift */; };
+		C7E402000000000000000001 /* StreamTelemetryMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E402000000000000000002 /* StreamTelemetryMonitor.swift */; };
+		C7E403000000000000000001 /* IsoRecorderEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E403000000000000000002 /* IsoRecorderEngine.swift */; };
+		C7E404000000000000000001 /* LowLatencyIngestPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E404000000000000000002 /* LowLatencyIngestPipeline.swift */; };
+		C7E405000000000000000001 /* MultiDeviceIngestManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E405000000000000000002 /* MultiDeviceIngestManager.swift */; };
+		C7E406000000000000000001 /* InputFailoverEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E406000000000000000002 /* InputFailoverEngine.swift */; };
+		C7E407000000000000000001 /* SRTStreamReceiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E407000000000000000002 /* SRTStreamReceiver.swift */; };
+		A100000000000000000000A5 /* ShowController+GoLive.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A5 /* ShowController+GoLive.swift */; };
+		A100000000000000000000A6 /* RemoteControlRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A6 /* RemoteControlRuntime.swift */; };
+		A100000000000000000000A7 /* ControlWebSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A7 /* ControlWebSocket.swift */; };
+		A100000000000000000000A8 /* StreamIdentityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A8 /* StreamIdentityService.swift */; };
+		A100000000000000000000A9 /* ConnectDestinationSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A9 /* ConnectDestinationSheet.swift */; };
+		A100000000000000000000AA /* OAuthLoopbackServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000AA /* OAuthLoopbackServer.swift */; };
+		A100000000000000000000AB /* MultiViewerMatrixView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000AB /* MultiViewerMatrixView.swift */; };
+		A100000000000000000000AC /* MultiViewerModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000AC /* MultiViewerModels.swift */; };
+		A100000000000000000000AD /* MultiViewerWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000AD /* MultiViewerWindowController.swift */; };
+		A100000000000000000000AE /* ActionStackInspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000AE /* ActionStackInspectorView.swift */; };
+		A100000000000000000000AF /* LayerLockController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000AF /* LayerLockController.swift */; };
+		A100000000000000000000B0 /* MultiViewerGridEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000B0 /* MultiViewerGridEngine.swift */; };
+		A100000000000000000000B1 /* MultiViewerToolbarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000B1 /* MultiViewerToolbarView.swift */; };
+		A100000000000000000000B2 /* MultiViewerAudioBridgeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000B2 /* MultiViewerAudioBridgeView.swift */; };
+		A1T000000000000000000038 /* BroadcastGoLiveTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000038 /* BroadcastGoLiveTests.swift */; };
+		A1T000000000000000000039 /* MultiViewerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000039 /* MultiViewerTests.swift */; };
+		A1T00000000000000000003A /* ActionStackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T00000000000000000003A /* ActionStackTests.swift */; };
+		A1T000000000000000000035 /* PreFlightTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000035 /* PreFlightTests.swift */; };
+		A1T000000000000000000036 /* RemoteControlTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000036 /* RemoteControlTests.swift */; };
+		A1T000000000000000000037 /* ImportReflowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000037 /* ImportReflowTests.swift */; };
+		A1T00000000000000000002E /* StudioGeometryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T00000000000000000002E /* StudioGeometryTests.swift */; };
+		A1T00000000000000000002F /* LiveEditorSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T00000000000000000002F /* LiveEditorSyncTests.swift */; };
+		A1T000000000000000000030 /* CanvasInteractionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000030 /* CanvasInteractionTests.swift */; };
+		A1T000000000000000000031 /* SmartMeasurementEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000031 /* SmartMeasurementEngineTests.swift */; };
+		A1T000000000000000000032 /* MediaFrameTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000032 /* MediaFrameTests.swift */; };
+		A1T000000000000000000033 /* SharedTexturePipelineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000033 /* SharedTexturePipelineTests.swift */; };
+		A10000000000000000000090 /* NodeGraphCommandEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000090 /* NodeGraphCommandEngine.swift */; };
+		A10000000000000000000091 /* NodeCommandPaletteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000091 /* NodeCommandPaletteView.swift */; };
+		A10000000000000000000092 /* NodeBackdropView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000092 /* NodeBackdropView.swift */; };
+		A10000000000000000000093 /* MapSourcePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000093 /* MapSourcePickerView.swift */; };
+		A1T000000000000000000034 /* NodeGraphCommandTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000034 /* NodeGraphCommandTests.swift */; };
+		A1T00000000000000000002D /* ProEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T00000000000000000002D /* ProEngineTests.swift */; };
+		A1T00000000000000000002A /* DynamicTextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T00000000000000000002A /* DynamicTextTests.swift */; };
+		A1T00000000000000000002B /* BuildAnimationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T00000000000000000002B /* BuildAnimationTests.swift */; };
+		A1T000000000000000000029 /* LayerContinuityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000029 /* LayerContinuityTests.swift */; };
+		AKLINK000000000000000001 /* AudioKit in Frameworks */ = {isa = PBXBuildFile; productRef = AKPROD000000000000000001 /* AudioKit */; };
+		AKLINK000000000000000002 /* AudioKitUI in Frameworks */ = {isa = PBXBuildFile; productRef = AKPROD000000000000000002 /* AudioKitUI */; };
+		AKLINK000000000000000003 /* Controls in Frameworks */ = {isa = PBXBuildFile; productRef = AKPROD000000000000000003 /* Controls */; };
+		A1T000000000000000000028 /* AudioDSPTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000028 /* AudioDSPTests.swift */; };
+		A1T000000000000000000026 /* TransitionEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000026 /* TransitionEngineTests.swift */; };
+		A1T000000000000000000027 /* SettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000027 /* SettingsTests.swift */; };
+		A1T000000000000000000001 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000001 /* TestSupport.swift */; };
+		A1T000000000000000000002 /* CompositorEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000002 /* CompositorEngineTests.swift */; };
+		A1T000000000000000000003 /* CueTransportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000003 /* CueTransportTests.swift */; };
+		A1T000000000000000000004 /* LibraryStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000004 /* LibraryStoreTests.swift */; };
+		A1T000000000000000000005 /* SearchIndexTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000005 /* SearchIndexTests.swift */; };
+		A1T000000000000000000006 /* BibleEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000006 /* BibleEngineTests.swift */; };
+		A1T000000000000000000007 /* ReflowEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000007 /* ReflowEngineTests.swift */; };
+		A1T000000000000000000008 /* MediaLoaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000008 /* MediaLoaderTests.swift */; };
+		A1T000000000000000000009 /* StagePayloadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000009 /* StagePayloadTests.swift */; };
+		A1T00000000000000000000A /* ControlAPITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T00000000000000000000A /* ControlAPITests.swift */; };
+		A1T00000000000000000000B /* StreamingEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T00000000000000000000B /* StreamingEngineTests.swift */; };
+		C7E4B1000000000000000001 /* EncoderPresetStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E4B2000000000000000001 /* EncoderPresetStoreTests.swift */; };
+		A1T00000000000000000000C /* PresentationImportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T00000000000000000000C /* PresentationImportTests.swift */; };
+		A1T00000000000000000000D /* ParityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T00000000000000000000D /* ParityTests.swift */; };
+		A1T00000000000000000000E /* ProjectStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T00000000000000000000E /* ProjectStoreTests.swift */; };
+		A1T00000000000000000000F /* AssetPipelineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T00000000000000000000F /* AssetPipelineTests.swift */; };
+		A1T000000000000000000010 /* EditorEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000010 /* EditorEngineTests.swift */; };
+		A1T000000000000000000011 /* SceneManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000011 /* SceneManagerTests.swift */; };
+		A1T000000000000000000012 /* ChromaKeyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000012 /* ChromaKeyTests.swift */; };
+		A1T000000000000000000013 /* AudioMatrixTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000013 /* AudioMatrixTests.swift */; };
+		A1T000000000000000000014 /* IsoRecorderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000014 /* IsoRecorderTests.swift */; };
+		A1T000000000000000000015 /* LiveChatOverlayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000015 /* LiveChatOverlayTests.swift */; };
+		A1T000000000000000000016 /* ProjectSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000016 /* ProjectSettingsTests.swift */; };
+		A1T000000000000000000017 /* CanvasEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000017 /* CanvasEngineTests.swift */; };
+		A1T000000000000000000018 /* ActionInspectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000018 /* ActionInspectorTests.swift */; };
+		A1T000000000000000000019 /* ProgramCompositorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000019 /* ProgramCompositorTests.swift */; };
+		A1T000000000000000000020 /* VideoIngestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000020 /* VideoIngestTests.swift */; };
+		A1T000000000000000000021 /* AudioIOTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000021 /* AudioIOTests.swift */; };
+		A1T000000000000000000022 /* NDIRuntimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000022 /* NDIRuntimeTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -30,6 +336,15 @@
 		A20000000000000000000003 /* SampleContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleContent.swift; sourceTree = "<group>"; };
 		A20000000000000000000004 /* ShowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShowController.swift; sourceTree = "<group>"; };
 		A20000000000000000000005 /* ProShowTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProShowTheme.swift; sourceTree = "<group>"; };
+		A200000000000000000000F1 /* ThemeTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeTokens.swift; sourceTree = "<group>"; };
+		A20000000000000000000039 /* DeskChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeskChrome.swift; sourceTree = "<group>"; };
+		A20000000000000000000043 /* InspectorChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorChrome.swift; sourceTree = "<group>"; };
+		C7E200000000000000000015 /* ScrubbableComboInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrubbableComboInput.swift; sourceTree = "<group>"; };
+		C7E200000000000000000016 /* RadialAngleInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RadialAngleInput.swift; sourceTree = "<group>"; };
+		C7E200000000000000000017 /* BoundsMatrixInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundsMatrixInput.swift; sourceTree = "<group>"; };
+		C7E200000000000000000018 /* InlineOpacityField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InlineOpacityField.swift; sourceTree = "<group>"; };
+		C7E200000000000000000019 /* CanvasTextBoxLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasTextBoxLayout.swift; sourceTree = "<group>"; };
+		C7E20000000000000000001A /* CanvasEditorScreenAlign.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasEditorScreenAlign.swift; sourceTree = "<group>"; };
 		A20000000000000000000006 /* AudienceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudienceView.swift; sourceTree = "<group>"; };
 		A20000000000000000000007 /* AudienceWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudienceWindowController.swift; sourceTree = "<group>"; };
 		A20000000000000000000008 /* OperatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OperatorView.swift; sourceTree = "<group>"; };
@@ -41,10 +356,326 @@
 		A2000000000000000000000E /* SlideWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlideWorkspaceView.swift; sourceTree = "<group>"; };
 		A2000000000000000000000F /* MediaBinView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaBinView.swift; sourceTree = "<group>"; };
 		A20000000000000000000010 /* OutputSidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutputSidebarView.swift; sourceTree = "<group>"; };
+		C7R200000000000000000001 /* RightPaneProgramView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RightPaneProgramView.swift; sourceTree = "<group>"; };
+		C7R200000000000000000002 /* AudioMonitoringEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMonitoringEngine.swift; sourceTree = "<group>"; };
+		C7R200000000000000000003 /* ProgramAudioMonitorBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramAudioMonitorBridge.swift; sourceTree = "<group>"; };
+		A20000000000000000000011 /* EngineModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngineModels.swift; sourceTree = "<group>"; };
+		A20000000000000000000012 /* CompositorEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompositorEngine.swift; sourceTree = "<group>"; };
+		A20000000000000000000013 /* ContentEngines.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentEngines.swift; sourceTree = "<group>"; };
+		A20000000000000000000014 /* StreamingEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingEngine.swift; sourceTree = "<group>"; };
+		A20000000000000000000015 /* ControlAPIServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlAPIServer.swift; sourceTree = "<group>"; };
+		A20000000000000000000016 /* LayeredAudienceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayeredAudienceView.swift; sourceTree = "<group>"; };
+		A20000000000000000000017 /* ProductEngines.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductEngines.swift; sourceTree = "<group>"; };
+		A20000000000000000000018 /* ProjectModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectModels.swift; sourceTree = "<group>"; };
+		A20000000000000000000019 /* ProjectStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectStore.swift; sourceTree = "<group>"; };
+		A2000000000000000000001A /* AssetPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssetPipeline.swift; sourceTree = "<group>"; };
+		A2000000000000000000001B /* StartMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartMenuView.swift; sourceTree = "<group>"; };
+		A2000000000000000000001C /* EditorModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorModels.swift; sourceTree = "<group>"; };
+		A2000000000000000000001D /* EditorEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorEngine.swift; sourceTree = "<group>"; };
+		A2000000000000000000001E /* CanvasEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasEditorView.swift; sourceTree = "<group>"; };
+		A2000000000000000000001F /* EditorInspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorInspectorView.swift; sourceTree = "<group>"; };
+		A2000000000000000000002B /* ProjectSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSettingsView.swift; sourceTree = "<group>"; };
+		A20000000000000000000020 /* CanvasConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasConfig.swift; sourceTree = "<group>"; };
+		A20000000000000000000021 /* DefaultSeedData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultSeedData.swift; sourceTree = "<group>"; };
+		A20000000000000000000022 /* StudioModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioModels.swift; sourceTree = "<group>"; };
+		A2000000000000000000002C /* CanvasEngineModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasEngineModels.swift; sourceTree = "<group>"; };
+		A2000000000000000000002D /* CanvasTransformEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasTransformEngine.swift; sourceTree = "<group>"; };
+		A2000000000000000000002E /* SelectionChromeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionChromeView.swift; sourceTree = "<group>"; };
+		A2000000000000000000002F /* ActionInspectorModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionInspectorModels.swift; sourceTree = "<group>"; };
+		A20000000000000000000030 /* ActionInspectorEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionInspectorEngine.swift; sourceTree = "<group>"; };
+		A20000000000000000000031 /* RightInspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RightInspectorView.swift; sourceTree = "<group>"; };
+		A20000000000000000000032 /* MediaPlaybackEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPlaybackEngine.swift; sourceTree = "<group>"; };
+		A20000000000000000000033 /* ProgramCompositor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramCompositor.swift; sourceTree = "<group>"; };
+		A20000000000000000000034 /* ChromaKeyFilter.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = ChromaKeyFilter.metal; sourceTree = "<group>"; };
+		A20000000000000000000035 /* VideoIngestEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoIngestEngine.swift; sourceTree = "<group>"; };
+		A20000000000000000000036 /* AudioIOEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioIOEngine.swift; sourceTree = "<group>"; };
+		A20000000000000000000037 /* PathGeometryEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PathGeometryEngine.swift; sourceTree = "<group>"; };
+		A20000000000000000000038 /* RTMPStreamTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RTMPStreamTransport.swift; sourceTree = "<group>"; };
+		A20000000000000000000023 /* SceneManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneManager.swift; sourceTree = "<group>"; };
+		A20000000000000000000024 /* VideoInputEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoInputEngine.swift; sourceTree = "<group>"; };
+		A20000000000000000000025 /* VideoFilterEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoFilterEngine.swift; sourceTree = "<group>"; };
+		A20000000000000000000026 /* AudioMatrixEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMatrixEngine.swift; sourceTree = "<group>"; };
+		A20000000000000000000027 /* SoundboardStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundboardStore.swift; sourceTree = "<group>"; };
+		A20000000000000000000028 /* IsoRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IsoRecorder.swift; sourceTree = "<group>"; };
+		B200000000000000000000B1 /* ProgramOutputMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramOutputMode.swift; sourceTree = "<group>"; };
+		B200000000000000000000B2 /* ProgramRenderContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramRenderContract.swift; sourceTree = "<group>"; };
+		B200000000000000000000B3 /* ProgramOutputBus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramOutputBus.swift; sourceTree = "<group>"; };
+		B200000000000000000000B4 /* ShowController+OutputBus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ShowController+OutputBus.swift"; sourceTree = "<group>"; };
+		A20000000000000000000029 /* LiveChatEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveChatEngine.swift; sourceTree = "<group>"; };
+		A2000000000000000000002A /* ProShowVirtualCam.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProShowVirtualCam.swift; sourceTree = "<group>"; };
+		A2000000000000000000003A /* ControlAPIOpenAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlAPIOpenAPI.swift; sourceTree = "<group>"; };
+		A2000000000000000000003B /* NDIRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NDIRuntime.swift; sourceTree = "<group>"; };
+		A2000000000000000000003D /* AddShotModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddShotModels.swift; sourceTree = "<group>"; };
+		A2000000000000000000003E /* SourceDiscoveryManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceDiscoveryManager.swift; sourceTree = "<group>"; };
+		A20000000000000000000094 /* InputAccessBroker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputAccessBroker.swift; sourceTree = "<group>"; };
+		A20000000000000000000095 /* InputPreviewEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputPreviewEngine.swift; sourceTree = "<group>"; };
+		A2000000000000000000003F /* AddShotModalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddShotModalView.swift; sourceTree = "<group>"; };
+		A2T000000000000000000023 /* AddShotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddShotTests.swift; sourceTree = "<group>"; };
+		A20000000000000000000040 /* PlaceholderMatrix.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceholderMatrix.swift; sourceTree = "<group>"; };
+		A20000000000000000000041 /* MapWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapWorkspaceView.swift; sourceTree = "<group>"; };
+		A20000000000000000000042 /* PlaceholderTransitionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceholderTransitionEngine.swift; sourceTree = "<group>"; };
+		A2T000000000000000000024 /* PlaceholderMatrixTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceholderMatrixTests.swift; sourceTree = "<group>"; };
+		A20000000000000000000044 /* NodeRoutingModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodeRoutingModels.swift; sourceTree = "<group>"; };
+		A20000000000000000000045 /* NodeRoutingEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodeRoutingEngine.swift; sourceTree = "<group>"; };
+		A20000000000000000000046 /* BezierWireCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BezierWireCanvas.swift; sourceTree = "<group>"; };
+		A20000000000000000000047 /* RoutingNodeGraphView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutingNodeGraphView.swift; sourceTree = "<group>"; };
+		A2T000000000000000000025 /* NodeRoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodeRoutingTests.swift; sourceTree = "<group>"; };
+		A20000000000000000000048 /* TransitionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitionModels.swift; sourceTree = "<group>"; };
+		A20000000000000000000049 /* TransitionShaderEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitionShaderEngine.swift; sourceTree = "<group>"; };
+		A2000000000000000000004A /* TransitionShaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = TransitionShaders.metal; sourceTree = "<group>"; };
+		A2000000000000000000004B /* StingerPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StingerPlayer.swift; sourceTree = "<group>"; };
+		A2000000000000000000004C /* LottieTransitionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LottieTransitionEngine.swift; sourceTree = "<group>"; };
+		A2000000000000000000004D /* CoreImageTransitionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreImageTransitionEngine.swift; sourceTree = "<group>"; };
+		A2000000000000000000004E /* TransitionPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitionPickerView.swift; sourceTree = "<group>"; };
+		A2000000000000000000004F /* SettingsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsModels.swift; sourceTree = "<group>"; };
+		A20000000000000000000050 /* KeychainStreamVault.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStreamVault.swift; sourceTree = "<group>"; };
+		A20000000000000000000051 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
+		C7M200000000000000000001 /* UserSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserSettingsStore.swift; sourceTree = "<group>"; };
+		C7M200000000000000000002 /* SlideCacheManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlideCacheManager.swift; sourceTree = "<group>"; };
+		C7A200000000000000000001 /* AudioMatrixReconciler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMatrixReconciler.swift; sourceTree = "<group>"; };
+		A20000000000000000000052 /* SettingsWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowView.swift; sourceTree = "<group>"; };
+		A20000000000000000000053 /* StreamingSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingSettingsView.swift; sourceTree = "<group>"; };
+		A20000000000000000000054 /* MultiScreenManagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultiScreenManagerView.swift; sourceTree = "<group>"; };
+		A20000000000000000000055 /* AudioDSP.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioDSP.swift; sourceTree = "<group>"; };
+		A20000000000000000000056 /* ShowAudioController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShowAudioController.swift; sourceTree = "<group>"; };
+		A20000000000000000000057 /* AudioMixerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMixerView.swift; sourceTree = "<group>"; };
+		A20000000000000000000058 /* FFTSpectrumView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FFTSpectrumView.swift; sourceTree = "<group>"; };
+		A20000000000000000000059 /* ParametricEQView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParametricEQView.swift; sourceTree = "<group>"; };
+		A2000000000000000000005A /* FairlightChannelStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FairlightChannelStrip.swift; sourceTree = "<group>"; };
+		A2000000000000000000005B /* LiveStackState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveStackState.swift; sourceTree = "<group>"; };
+		A2000000000000000000005C /* MediaActionEvaluator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaActionEvaluator.swift; sourceTree = "<group>"; };
+		A2000000000000000000005D /* NativeSplitView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeSplitView.swift; sourceTree = "<group>"; };
+		A2000000000000000000005E /* DynamicTextModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynamicTextModels.swift; sourceTree = "<group>"; };
+		A2000000000000000000005F /* DynamicTextEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynamicTextEngine.swift; sourceTree = "<group>"; };
+		A20000000000000000000060 /* LiveQuoteEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveQuoteEngine.swift; sourceTree = "<group>"; };
+		A20000000000000000000061 /* BuildAnimationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildAnimationModels.swift; sourceTree = "<group>"; };
+		A20000000000000000000062 /* BuildAnimationEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildAnimationEngine.swift; sourceTree = "<group>"; };
+		A20000000000000000000063 /* BuildInspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildInspectorView.swift; sourceTree = "<group>"; };
+		A20000000000000000000064 /* ProShowQueues.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProShowQueues.swift; sourceTree = "<group>"; };
+		C6D200000000000000000001 /* TickerEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TickerEngine.swift; sourceTree = "<group>"; };
+		C6D200000000000000000002 /* MarqueeTickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarqueeTickerView.swift; sourceTree = "<group>"; };
+		C6D200000000000000000099 /* ProjectTitleHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectTitleHeaderView.swift; sourceTree = "<group>"; };
+		C6D200000000000000000003 /* MarqueeTextLoopView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarqueeTextLoopView.swift; sourceTree = "<group>"; };
+		C6D200000000000000000004 /* TextAttributeConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextAttributeConverter.swift; sourceTree = "<group>"; };
+		C6D200000000000000000005 /* MarketTickerModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarketTickerModel.swift; sourceTree = "<group>"; };
+		C6D200000000000000000006 /* CryptoTickerFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CryptoTickerFormatter.swift; sourceTree = "<group>"; };
+		C6D20000000000000000000B /* CoreTextRasterizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreTextRasterizer.swift; sourceTree = "<group>"; };
+		C6D20000000000000000000C /* LiveQuoteTemplateRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveQuoteTemplateRenderer.swift; sourceTree = "<group>"; };
+		C6D20000000000000000000D /* AdobeLayerRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdobeLayerRowView.swift; sourceTree = "<group>"; };
+		C6D20000000000000000000E /* CanvasLayerModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasLayerModels.swift; sourceTree = "<group>"; };
+		C6D20000000000000000000F /* CanvasLayerStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasLayerStore.swift; sourceTree = "<group>"; };
+		C6D200000000000000000010 /* ShowController+CompositionPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ShowController+CompositionPanel.swift"; sourceTree = "<group>"; };
+		C6D200000000000000000011 /* CanvasElementShimmer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasElementShimmer.swift; sourceTree = "<group>"; };
+		C6D200000000000000000020 /* ProgramDocumentSchema.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramDocumentSchema.swift; sourceTree = "<group>"; };
+		C6D200000000000000000021 /* ProgramDocumentStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramDocumentStore.swift; sourceTree = "<group>"; };
+		C6D200000000000000000022 /* RundownClockEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RundownClockEngine.swift; sourceTree = "<group>"; };
+		C6D200000000000000000023 /* TalentManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TalentManager.swift; sourceTree = "<group>"; };
+		C6D200000000000000000024 /* StageCueController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StageCueController.swift; sourceTree = "<group>"; };
+		C6D200000000000000000025 /* ShowController+Program.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ShowController+Program.swift"; sourceTree = "<group>"; };
+		C6D200000000000000000026 /* RundownWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RundownWorkspaceView.swift; sourceTree = "<group>"; };
+		C6D200000000000000000027 /* ProgramInspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramInspectorView.swift; sourceTree = "<group>"; };
+		C6D200000000000000000028 /* ProgramFileDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramFileDocument.swift; sourceTree = "<group>"; };
+		C6D200000000000000000029 /* RundownDetailPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RundownDetailPane.swift; sourceTree = "<group>"; };
+		C6D20000000000000000002A /* RundownProgramEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RundownProgramEditor.swift; sourceTree = "<group>"; };
+		C6D20000000000000000002B /* ProgramLayerModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramLayerModels.swift; sourceTree = "<group>"; };
+		C6D20000000000000000002C /* ProgramLayersEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramLayersEngine.swift; sourceTree = "<group>"; };
+		C6D20000000000000000002D /* ShowController+ProgramLayers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ShowController+ProgramLayers.swift"; sourceTree = "<group>"; };
+		C6D20000000000000000002E /* LayerSemanticMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayerSemanticMapper.swift; sourceTree = "<group>"; };
+		C6D20000000000000000002F /* ShowController+UserComposition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ShowController+UserComposition.swift"; sourceTree = "<group>"; };
+		C6D200000000000000000030 /* UserCompositionPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserCompositionPanelView.swift; sourceTree = "<group>"; };
+		C6D200000000000000000031 /* ShowStateTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShowStateTracker.swift; sourceTree = "<group>"; };
+		C6D200000000000000000032 /* EntityRevisionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntityRevisionStore.swift; sourceTree = "<group>"; };
+		C6D200000000000000000033 /* UnifiedCacheRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnifiedCacheRegistry.swift; sourceTree = "<group>"; };
+		C6D200000000000000000034 /* AtomicPersistenceEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AtomicPersistenceEngine.swift; sourceTree = "<group>"; };
+		C6D200000000000000000035 /* ShowDocumentStateEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShowDocumentStateEngine.swift; sourceTree = "<group>"; };
+		C6D200000000000000000036 /* ShowController+ElementLifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ShowController+ElementLifecycle.swift"; sourceTree = "<group>"; };
+		C6D200000000000000000037 /* ShowController+Rehydration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ShowController+Rehydration.swift"; sourceTree = "<group>"; };
+		C6D200000000000000000038 /* FrameRevisionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameRevisionModels.swift; sourceTree = "<group>"; };
+		C6D200000000000000000039 /* FrameRevisionClock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameRevisionClock.swift; sourceTree = "<group>"; };
+		C6D20000000000000000003A /* VideoInvalidationEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoInvalidationEngine.swift; sourceTree = "<group>"; };
+		C6D20000000000000000003B /* ShowController+TokenSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ShowController+TokenSync.swift"; sourceTree = "<group>"; };
+		C6D20000000000000000003D /* DeskSignalProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeskSignalProbe.swift; sourceTree = "<group>"; };
+		C6D20000000000000000003E /* ShowController+DeskSignalProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ShowController+DeskSignalProbe.swift"; sourceTree = "<group>"; };
+		C6D20000000000000000003C /* ProgramCanonicalMonitorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramCanonicalMonitorView.swift; sourceTree = "<group>"; };
+		C7E200000000000000000001 /* PrecisionLayoutModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrecisionLayoutModels.swift; sourceTree = "<group>"; };
+		C7E200000000000000000002 /* SnapToGridEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnapToGridEngine.swift; sourceTree = "<group>"; };
+		C7E200000000000000000003 /* SmartGuideEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartGuideEngine.swift; sourceTree = "<group>"; };
+		C7E200000000000000000004 /* AlignmentController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlignmentController.swift; sourceTree = "<group>"; };
+		C7E200000000000000000005 /* CanvasGuideOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasGuideOverlayView.swift; sourceTree = "<group>"; };
+		C7E200000000000000000006 /* AlignmentToolbarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlignmentToolbarView.swift; sourceTree = "<group>"; };
+		C7E200000000000000000007 /* ContextBarPositionCalculator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContextBarPositionCalculator.swift; sourceTree = "<group>"; };
+		C7E200000000000000000008 /* CanvasContextBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasContextBarView.swift; sourceTree = "<group>"; };
+		C7E20000000000000000000D /* GuideLineEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuideLineEngine.swift; sourceTree = "<group>"; };
+		C7E200000000000000000013 /* CanvasGridDisplay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasGridDisplay.swift; sourceTree = "<group>"; };
+		C7E200000000000000000014 /* VideoResizePreviewScaler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoResizePreviewScaler.swift; sourceTree = "<group>"; };
+		C7E20000000000000000000E /* CanvasRulerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasRulerView.swift; sourceTree = "<group>"; };
+		C7E20000000000000000000F /* BroadcastFrameGuideView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BroadcastFrameGuideView.swift; sourceTree = "<group>"; };
+		C7E200000000000000000010 /* CanvasMinimapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasMinimapView.swift; sourceTree = "<group>"; };
+		C7E200000000000000000011 /* CanvasWorkbenchGuideOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasWorkbenchGuideOverlay.swift; sourceTree = "<group>"; };
+		C7E200000000000000000012 /* CanvasUserGuideViewportOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasUserGuideViewportOverlay.swift; sourceTree = "<group>"; };
+		C7F200000000000000000001 /* PropLifecycleEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PropLifecycleEngine.swift; sourceTree = "<group>"; };
+		C7F200000000000000000002 /* ShowController+PropLifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ShowController+PropLifecycle.swift"; sourceTree = "<group>"; };
+		C7F200000000000000000003 /* RemoteGuestAndMeetingModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteGuestAndMeetingModels.swift; sourceTree = "<group>"; };
+		C7F200000000000000000004 /* VirtualCameraOutputService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualCameraOutputService.swift; sourceTree = "<group>"; };
+		C7F200000000000000000005 /* ProShowBackstageEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProShowBackstageEngine.swift; sourceTree = "<group>"; };
+		C7F200000000000000000006 /* LiveChatStreamManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveChatStreamManager.swift; sourceTree = "<group>"; };
+		C7F200000000000000000007 /* MeetingSdkBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingSdkBridge.swift; sourceTree = "<group>"; };
+		C7F200000000000000000008 /* ShowController+Backstage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ShowController+Backstage.swift"; sourceTree = "<group>"; };
+		C7F200000000000000000013 /* ShowController+LibraryHierarchy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ShowController+LibraryHierarchy.swift"; sourceTree = "<group>"; };
+		C7F200000000000000000009 /* BackstageControlPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackstageControlPanelView.swift; sourceTree = "<group>"; };
+		C7F20000000000000000000A /* BackstageEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackstageEngineTests.swift; sourceTree = "<group>"; };
+		C7F20000000000000000000B /* VirtualCameraFrameQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualCameraFrameQueue.swift; sourceTree = "<group>"; };
+		C7F20000000000000000000C /* VirtualAudioLoopbackService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualAudioLoopbackService.swift; sourceTree = "<group>"; };
+		C7F20000000000000000000D /* BackstageSignalingEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackstageSignalingEngine.swift; sourceTree = "<group>"; };
+		C7F20000000000000000000E /* BackstageWebRTCIngestEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackstageWebRTCIngestEngine.swift; sourceTree = "<group>"; };
+		C7F20000000000000000000F /* LiveChatIngestService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveChatIngestService.swift; sourceTree = "<group>"; };
+		C7F200000000000000000010 /* MeetingOAuthClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingOAuthClient.swift; sourceTree = "<group>"; };
+		C7F200000000000000000011 /* CanvasShimmerRasterizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasShimmerRasterizer.swift; sourceTree = "<group>"; };
+		C7F200000000000000000012 /* BackstageIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackstageIntegrationTests.swift; sourceTree = "<group>"; };
+		C6D200000000000000000007 /* MarketDataStreamEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarketDataStreamEngine.swift; sourceTree = "<group>"; };
+		C6D200000000000000000008 /* TickerConfigStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TickerConfigStore.swift; sourceTree = "<group>"; };
+		C6D20000000000000000000A /* LiveQuoteTickerBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveQuoteTickerBridge.swift; sourceTree = "<group>"; };
+		C6D200000000000000000009 /* LiveMarketMarqueeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveMarketMarqueeView.swift; sourceTree = "<group>"; };
+		A200000000000000000000C5 /* OffThreadVideoPublisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OffThreadVideoPublisher.swift; sourceTree = "<group>"; };
+		A20000000000000000000065 /* ZeroCopyMetalPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZeroCopyMetalPipeline.swift; sourceTree = "<group>"; };
+		A20000000000000000000066 /* HardwareVideoEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HardwareVideoEncoder.swift; sourceTree = "<group>"; };
+		C7D301000000000000000002 /* MediaClockAnchor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaClockAnchor.swift; sourceTree = "<group>"; };
+		C7D302000000000000000002 /* RTMPEndpointQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RTMPEndpointQueue.swift; sourceTree = "<group>"; };
+		A20000000000000000000067 /* AssetCacheManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssetCacheManager.swift; sourceTree = "<group>"; };
+		A20000000000000000000068 /* DefaultBuildFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultBuildFactory.swift; sourceTree = "<group>"; };
+		A20000000000000000000069 /* ProShowFlippedSplitView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProShowFlippedSplitView.swift; sourceTree = "<group>"; };
+		A20000000000000000000070 /* ProShow3ColumnDeskController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProShow3ColumnDeskController.swift; sourceTree = "<group>"; };
+		A20000000000000000000071 /* ProShow2RowCenterController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProShow2RowCenterController.swift; sourceTree = "<group>"; };
+		A20000000000000000000072 /* ProShowStudioDeskView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProShowStudioDeskView.swift; sourceTree = "<group>"; };
+		A20000000000000000000073 /* LiveTransportClock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTransportClock.swift; sourceTree = "<group>"; };
+		A20000000000000000000074 /* KeyboardShortcutManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcutManager.swift; sourceTree = "<group>"; };
+		A20000000000000000000075 /* ClipboardController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardController.swift; sourceTree = "<group>"; };
+		A20000000000000000000076 /* ShapeDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShapeDefaults.swift; sourceTree = "<group>"; };
+		A20000000000000000000077 /* TransformHandleEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransformHandleEngine.swift; sourceTree = "<group>"; };
+		A200000000000000000000C1 /* CanvasGroupNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasGroupNode.swift; sourceTree = "<group>"; };
+		A200000000000000000000C2 /* GroupSelectionController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupSelectionController.swift; sourceTree = "<group>"; };
+		A200000000000000000000C3 /* AppWorkspaceRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppWorkspaceRouter.swift; sourceTree = "<group>"; };
+		A200000000000000000000C4 /* AudioMeterBridgeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMeterBridgeView.swift; sourceTree = "<group>"; };
+		A20000000000000000000078 /* SmartMeasurementModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartMeasurementModel.swift; sourceTree = "<group>"; };
+		A20000000000000000000079 /* SmartMeasurementEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartMeasurementEngine.swift; sourceTree = "<group>"; };
+		A20000000000000000000080 /* SmartMeasurementOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartMeasurementOverlayView.swift; sourceTree = "<group>"; };
+		A20000000000000000000081 /* CanvasEditorMouseTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasEditorMouseTracker.swift; sourceTree = "<group>"; };
+		A20000000000000000000082 /* MediaFrameEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaFrameEngine.swift; sourceTree = "<group>"; };
+		A20000000000000000000083 /* SharedTexturePublisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedTexturePublisher.swift; sourceTree = "<group>"; };
+		A20000000000000000000084 /* ProShowMetalHostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProShowMetalHostView.swift; sourceTree = "<group>"; };
+		A20000000000000000000085 /* PlayheadTimecodeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayheadTimecodeView.swift; sourceTree = "<group>"; };
+		A20000000000000000000086 /* LivePixelHub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LivePixelHub.swift; sourceTree = "<group>"; };
+		A20000000000000000000087 /* ProgramOutputComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramOutputComposer.swift; sourceTree = "<group>"; };
+		A20000000000000000000096 /* PreFlightEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreFlightEngine.swift; sourceTree = "<group>"; };
+		A20000000000000000000097 /* PreFlightHealthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreFlightHealthView.swift; sourceTree = "<group>"; };
+		A20000000000000000000098 /* RemoteControlBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteControlBridge.swift; sourceTree = "<group>"; };
+		A20000000000000000000099 /* StageDisplayEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StageDisplayEngine.swift; sourceTree = "<group>"; };
+		A200000000000000000000A0 /* ImportReflowEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportReflowEngine.swift; sourceTree = "<group>"; };
+		A200000000000000000000A1 /* StreamAccountModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamAccountModel.swift; sourceTree = "<group>"; };
+		A200000000000000000000A2 /* StreamAccountManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamAccountManager.swift; sourceTree = "<group>"; };
+		A200000000000000000000A3 /* PlatformLiveApiService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformLiveApiService.swift; sourceTree = "<group>"; };
+		A200000000000000000000A4 /* GoLiveSetupSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoLiveSetupSheet.swift; sourceTree = "<group>"; };
+		C7E300000000000000000002 /* EncoderPresetPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EncoderPresetPickerView.swift; sourceTree = "<group>"; };
+		C7E401000000000000000002 /* EncoderPresetStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EncoderPresetStore.swift; sourceTree = "<group>"; };
+		C7E402000000000000000002 /* StreamTelemetryMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamTelemetryMonitor.swift; sourceTree = "<group>"; };
+		C7E403000000000000000002 /* IsoRecorderEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IsoRecorderEngine.swift; sourceTree = "<group>"; };
+		C7E404000000000000000002 /* LowLatencyIngestPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LowLatencyIngestPipeline.swift; sourceTree = "<group>"; };
+		C7E405000000000000000002 /* MultiDeviceIngestManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultiDeviceIngestManager.swift; sourceTree = "<group>"; };
+		C7E406000000000000000002 /* InputFailoverEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputFailoverEngine.swift; sourceTree = "<group>"; };
+		C7E407000000000000000002 /* SRTStreamReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SRTStreamReceiver.swift; sourceTree = "<group>"; };
+		A200000000000000000000A5 /* ShowController+GoLive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ShowController+GoLive.swift"; sourceTree = "<group>"; };
+		A200000000000000000000A6 /* RemoteControlRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteControlRuntime.swift; sourceTree = "<group>"; };
+		A200000000000000000000A7 /* ControlWebSocket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlWebSocket.swift; sourceTree = "<group>"; };
+		A200000000000000000000A8 /* StreamIdentityService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamIdentityService.swift; sourceTree = "<group>"; };
+		A200000000000000000000A9 /* ConnectDestinationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectDestinationSheet.swift; sourceTree = "<group>"; };
+		A200000000000000000000AA /* OAuthLoopbackServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OAuthLoopbackServer.swift; sourceTree = "<group>"; };
+		A200000000000000000000AB /* MultiViewerMatrixView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultiViewerMatrixView.swift; sourceTree = "<group>"; };
+		A200000000000000000000AC /* MultiViewerModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultiViewerModels.swift; sourceTree = "<group>"; };
+		A200000000000000000000AD /* MultiViewerWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultiViewerWindowController.swift; sourceTree = "<group>"; };
+		A200000000000000000000AE /* ActionStackInspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionStackInspectorView.swift; sourceTree = "<group>"; };
+		A200000000000000000000AF /* LayerLockController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayerLockController.swift; sourceTree = "<group>"; };
+		A200000000000000000000B0 /* MultiViewerGridEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultiViewerGridEngine.swift; sourceTree = "<group>"; };
+		A200000000000000000000B1 /* MultiViewerToolbarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultiViewerToolbarView.swift; sourceTree = "<group>"; };
+		A200000000000000000000B2 /* MultiViewerAudioBridgeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultiViewerAudioBridgeView.swift; sourceTree = "<group>"; };
+		A2T000000000000000000038 /* BroadcastGoLiveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BroadcastGoLiveTests.swift; sourceTree = "<group>"; };
+		A2T000000000000000000039 /* MultiViewerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultiViewerTests.swift; sourceTree = "<group>"; };
+		A2T00000000000000000003A /* ActionStackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionStackTests.swift; sourceTree = "<group>"; };
+		A2T000000000000000000035 /* PreFlightTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreFlightTests.swift; sourceTree = "<group>"; };
+		A2T000000000000000000036 /* RemoteControlTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteControlTests.swift; sourceTree = "<group>"; };
+		A2T000000000000000000037 /* ImportReflowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportReflowTests.swift; sourceTree = "<group>"; };
+		A2T00000000000000000002E /* StudioGeometryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioGeometryTests.swift; sourceTree = "<group>"; };
+		A2T00000000000000000002F /* LiveEditorSyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveEditorSyncTests.swift; sourceTree = "<group>"; };
+		A2T000000000000000000030 /* CanvasInteractionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasInteractionTests.swift; sourceTree = "<group>"; };
+		A2T000000000000000000031 /* SmartMeasurementEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartMeasurementEngineTests.swift; sourceTree = "<group>"; };
+		A2T000000000000000000032 /* MediaFrameTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaFrameTests.swift; sourceTree = "<group>"; };
+		A2T000000000000000000033 /* SharedTexturePipelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedTexturePipelineTests.swift; sourceTree = "<group>"; };
+		A20000000000000000000090 /* NodeGraphCommandEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodeGraphCommandEngine.swift; sourceTree = "<group>"; };
+		A20000000000000000000091 /* NodeCommandPaletteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodeCommandPaletteView.swift; sourceTree = "<group>"; };
+		A20000000000000000000092 /* NodeBackdropView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodeBackdropView.swift; sourceTree = "<group>"; };
+		A20000000000000000000093 /* MapSourcePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapSourcePickerView.swift; sourceTree = "<group>"; };
+		A2T000000000000000000034 /* NodeGraphCommandTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodeGraphCommandTests.swift; sourceTree = "<group>"; };
+		A2T00000000000000000002D /* ProEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProEngineTests.swift; sourceTree = "<group>"; };
+		A2T00000000000000000002A /* DynamicTextTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynamicTextTests.swift; sourceTree = "<group>"; };
+		A2T00000000000000000002B /* BuildAnimationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildAnimationTests.swift; sourceTree = "<group>"; };
+		A2T000000000000000000029 /* LayerContinuityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayerContinuityTests.swift; sourceTree = "<group>"; };
+		A2T000000000000000000028 /* AudioDSPTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioDSPTests.swift; sourceTree = "<group>"; };
+		A2T000000000000000000026 /* TransitionEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitionEngineTests.swift; sourceTree = "<group>"; };
+		A2T000000000000000000027 /* SettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsTests.swift; sourceTree = "<group>"; };
+		A2000000000000000000003C /* ProShow.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ProShow.entitlements; sourceTree = "<group>"; };
+		A200TEST000000000000000A /* ProShowTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ProShowTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A2T000000000000000000001 /* TestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestSupport.swift; sourceTree = "<group>"; };
+		A2T000000000000000000002 /* CompositorEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompositorEngineTests.swift; sourceTree = "<group>"; };
+		A2T000000000000000000003 /* CueTransportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CueTransportTests.swift; sourceTree = "<group>"; };
+		A2T000000000000000000004 /* LibraryStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryStoreTests.swift; sourceTree = "<group>"; };
+		A2T000000000000000000005 /* SearchIndexTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchIndexTests.swift; sourceTree = "<group>"; };
+		A2T000000000000000000006 /* BibleEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BibleEngineTests.swift; sourceTree = "<group>"; };
+		A2T000000000000000000007 /* ReflowEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReflowEngineTests.swift; sourceTree = "<group>"; };
+		A2T000000000000000000008 /* MediaLoaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaLoaderTests.swift; sourceTree = "<group>"; };
+		A2T000000000000000000009 /* StagePayloadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StagePayloadTests.swift; sourceTree = "<group>"; };
+		A2T00000000000000000000A /* ControlAPITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlAPITests.swift; sourceTree = "<group>"; };
+		A2T00000000000000000000B /* StreamingEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingEngineTests.swift; sourceTree = "<group>"; };
+		C7E4B2000000000000000001 /* EncoderPresetStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EncoderPresetStoreTests.swift; sourceTree = "<group>"; };
+		A2T00000000000000000000C /* PresentationImportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresentationImportTests.swift; sourceTree = "<group>"; };
+		A2T00000000000000000000D /* ParityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParityTests.swift; sourceTree = "<group>"; };
+		A2T00000000000000000000E /* ProjectStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectStoreTests.swift; sourceTree = "<group>"; };
+		A2T00000000000000000000F /* AssetPipelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssetPipelineTests.swift; sourceTree = "<group>"; };
+		A2T000000000000000000010 /* EditorEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorEngineTests.swift; sourceTree = "<group>"; };
+		A2T000000000000000000011 /* SceneManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneManagerTests.swift; sourceTree = "<group>"; };
+		A2T000000000000000000012 /* ChromaKeyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromaKeyTests.swift; sourceTree = "<group>"; };
+		A2T000000000000000000013 /* AudioMatrixTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMatrixTests.swift; sourceTree = "<group>"; };
+		A2T000000000000000000014 /* IsoRecorderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IsoRecorderTests.swift; sourceTree = "<group>"; };
+		A2T000000000000000000015 /* LiveChatOverlayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveChatOverlayTests.swift; sourceTree = "<group>"; };
+		A2T000000000000000000016 /* ProjectSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSettingsTests.swift; sourceTree = "<group>"; };
+		A2T000000000000000000017 /* CanvasEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasEngineTests.swift; sourceTree = "<group>"; };
+		A2T000000000000000000018 /* ActionInspectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionInspectorTests.swift; sourceTree = "<group>"; };
+		A2T000000000000000000019 /* ProgramCompositorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramCompositorTests.swift; sourceTree = "<group>"; };
+		A2T000000000000000000020 /* VideoIngestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoIngestTests.swift; sourceTree = "<group>"; };
+		A2T000000000000000000021 /* AudioIOTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioIOTests.swift; sourceTree = "<group>"; };
+		A2T000000000000000000022 /* NDIRuntimeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NDIRuntimeTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXContainerItemProxy section */
+		A550PROXY0000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A80000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A50000000000000000000001;
+			remoteInfo = ProShow;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		A30000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AKLINK000000000000000001 /* AudioKit in Frameworks */,
+				AKLINK000000000000000002 /* AudioKitUI in Frameworks */,
+				AKLINK000000000000000003 /* Controls in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A300TEST0000000000000001 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -58,6 +689,7 @@
 			isa = PBXGroup;
 			children = (
 				A40000000000000000000002 /* ProShow */,
+				A400TEST0000000000000001 /* Tests */,
 				A40000000000000000000009 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -71,6 +703,7 @@
 				A40000000000000000000006 /* Services */,
 				A40000000000000000000007 /* Shared */,
 				A40000000000000000000008 /* Resources */,
+				A2000000000000000000003C /* ProShow.entitlements */,
 			);
 			path = ProShow;
 			sourceTree = "<group>";
@@ -87,7 +720,34 @@
 			isa = PBXGroup;
 			children = (
 				A20000000000000000000002 /* ShowModels.swift */,
+				C6D200000000000000000038 /* FrameRevisionModels.swift */,
 				A2000000000000000000000B /* DeskModels.swift */,
+				A20000000000000000000011 /* EngineModels.swift */,
+				A20000000000000000000018 /* ProjectModels.swift */,
+				C6D200000000000000000020 /* ProgramDocumentSchema.swift */,
+				A2000000000000000000001C /* EditorModels.swift */,
+				C7F200000000000000000003 /* RemoteGuestAndMeetingModels.swift */,
+				C6D20000000000000000000E /* CanvasLayerModels.swift */,
+				C6D20000000000000000002B /* ProgramLayerModels.swift */,
+				C6D20000000000000000002E /* LayerSemanticMapper.swift */,
+				A200000000000000000000C1 /* CanvasGroupNode.swift */,
+				A20000000000000000000020 /* CanvasConfig.swift */,
+				A20000000000000000000022 /* StudioModels.swift */,
+				A2000000000000000000002C /* CanvasEngineModels.swift */,
+				C7E200000000000000000001 /* PrecisionLayoutModels.swift */,
+				A20000000000000000000078 /* SmartMeasurementModel.swift */,
+				A2000000000000000000002F /* ActionInspectorModels.swift */,
+				A2000000000000000000003D /* AddShotModels.swift */,
+				A20000000000000000000040 /* PlaceholderMatrix.swift */,
+				A20000000000000000000044 /* NodeRoutingModels.swift */,
+				A20000000000000000000048 /* TransitionModels.swift */,
+				A2000000000000000000004F /* SettingsModels.swift */,
+				A200000000000000000000AC /* MultiViewerModels.swift */,
+				A200000000000000000000A1 /* StreamAccountModel.swift */,
+				A2000000000000000000005B /* LiveStackState.swift */,
+				A2000000000000000000005E /* DynamicTextModels.swift */,
+				C6D200000000000000000005 /* MarketTickerModel.swift */,
+				A20000000000000000000061 /* BuildAnimationModels.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -105,11 +765,64 @@
 			isa = PBXGroup;
 			children = (
 				A20000000000000000000008 /* OperatorView.swift */,
+				A200000000000000000000C3 /* AppWorkspaceRouter.swift */,
+				A200000000000000000000C4 /* AudioMeterBridgeView.swift */,
+				A20000000000000000000072 /* ProShowStudioDeskView.swift */,
 				A2000000000000000000000C /* TopToolbarView.swift */,
 				A2000000000000000000000D /* LibrarySidebarView.swift */,
 				A2000000000000000000000E /* SlideWorkspaceView.swift */,
 				A2000000000000000000000F /* MediaBinView.swift */,
 				A20000000000000000000010 /* OutputSidebarView.swift */,
+				C7R200000000000000000001 /* RightPaneProgramView.swift */,
+				A2000000000000000000001B /* StartMenuView.swift */,
+				A2000000000000000000001E /* CanvasEditorView.swift */,
+				A2000000000000000000001F /* EditorInspectorView.swift */,
+				A20000000000000000000085 /* PlayheadTimecodeView.swift */,
+				A2000000000000000000002B /* ProjectSettingsView.swift */,
+				A2000000000000000000002E /* SelectionChromeView.swift */,
+				C7E200000000000000000005 /* CanvasGuideOverlayView.swift */,
+				C7E20000000000000000000E /* CanvasRulerView.swift */,
+				C7E20000000000000000000F /* BroadcastFrameGuideView.swift */,
+				C7E200000000000000000010 /* CanvasMinimapView.swift */,
+				C7E200000000000000000011 /* CanvasWorkbenchGuideOverlay.swift */,
+				C7E200000000000000000012 /* CanvasUserGuideViewportOverlay.swift */,
+				C7E200000000000000000006 /* AlignmentToolbarView.swift */,
+				C7E200000000000000000008 /* CanvasContextBarView.swift */,
+				A20000000000000000000080 /* SmartMeasurementOverlayView.swift */,
+				A20000000000000000000081 /* CanvasEditorMouseTracker.swift */,
+				A20000000000000000000031 /* RightInspectorView.swift */,
+				C7F200000000000000000009 /* BackstageControlPanelView.swift */,
+				A200000000000000000000AE /* ActionStackInspectorView.swift */,
+				C6D200000000000000000030 /* UserCompositionPanelView.swift */,
+				C6D20000000000000000000D /* AdobeLayerRowView.swift */,
+				A2000000000000000000003F /* AddShotModalView.swift */,
+				A20000000000000000000097 /* PreFlightHealthView.swift */,
+				A200000000000000000000A4 /* GoLiveSetupSheet.swift */,
+				C7E300000000000000000002 /* EncoderPresetPickerView.swift */,
+				A200000000000000000000A9 /* ConnectDestinationSheet.swift */,
+				A20000000000000000000041 /* MapWorkspaceView.swift */,
+				C6D200000000000000000026 /* RundownWorkspaceView.swift */,
+				C6D200000000000000000027 /* ProgramInspectorView.swift */,
+				C6D200000000000000000028 /* ProgramFileDocument.swift */,
+				C6D200000000000000000029 /* RundownDetailPane.swift */,
+				C6D20000000000000000002A /* RundownProgramEditor.swift */,
+				A20000000000000000000046 /* BezierWireCanvas.swift */,
+				A20000000000000000000047 /* RoutingNodeGraphView.swift */,
+				A20000000000000000000091 /* NodeCommandPaletteView.swift */,
+				A20000000000000000000092 /* NodeBackdropView.swift */,
+				A20000000000000000000093 /* MapSourcePickerView.swift */,
+				A2000000000000000000004E /* TransitionPickerView.swift */,
+				A20000000000000000000052 /* SettingsWindowView.swift */,
+				A20000000000000000000053 /* StreamingSettingsView.swift */,
+				A20000000000000000000054 /* MultiScreenManagerView.swift */,
+				A200000000000000000000AB /* MultiViewerMatrixView.swift */,
+				A200000000000000000000B1 /* MultiViewerToolbarView.swift */,
+				A200000000000000000000B2 /* MultiViewerAudioBridgeView.swift */,
+				A20000000000000000000057 /* AudioMixerView.swift */,
+				A20000000000000000000058 /* FFTSpectrumView.swift */,
+				A20000000000000000000059 /* ParametricEQView.swift */,
+				A2000000000000000000005A /* FairlightChannelStrip.swift */,
+				A20000000000000000000063 /* BuildInspectorView.swift */,
 			);
 			path = Operator;
 			sourceTree = "<group>";
@@ -118,7 +831,10 @@
 			isa = PBXGroup;
 			children = (
 				A20000000000000000000006 /* AudienceView.swift */,
+				C6D20000000000000000003C /* ProgramCanonicalMonitorView.swift */,
 				A20000000000000000000007 /* AudienceWindowController.swift */,
+				A200000000000000000000AD /* MultiViewerWindowController.swift */,
+				A20000000000000000000016 /* LayeredAudienceView.swift */,
 			);
 			path = Output;
 			sourceTree = "<group>";
@@ -127,7 +843,152 @@
 			isa = PBXGroup;
 			children = (
 				A20000000000000000000003 /* SampleContent.swift */,
+				A20000000000000000000021 /* DefaultSeedData.swift */,
 				A20000000000000000000004 /* ShowController.swift */,
+				A20000000000000000000012 /* CompositorEngine.swift */,
+				A20000000000000000000013 /* ContentEngines.swift */,
+				A20000000000000000000014 /* StreamingEngine.swift */,
+				A20000000000000000000015 /* ControlAPIServer.swift */,
+				A2000000000000000000003A /* ControlAPIOpenAPI.swift */,
+				A2000000000000000000003B /* NDIRuntime.swift */,
+				A2000000000000000000003E /* SourceDiscoveryManager.swift */,
+				A20000000000000000000094 /* InputAccessBroker.swift */,
+				A20000000000000000000095 /* InputPreviewEngine.swift */,
+				A20000000000000000000017 /* ProductEngines.swift */,
+				A20000000000000000000019 /* ProjectStore.swift */,
+				A2000000000000000000001A /* AssetPipeline.swift */,
+				A2000000000000000000001D /* EditorEngine.swift */,
+				A20000000000000000000023 /* SceneManager.swift */,
+				A20000000000000000000024 /* VideoInputEngine.swift */,
+				A20000000000000000000025 /* VideoFilterEngine.swift */,
+				A20000000000000000000026 /* AudioMatrixEngine.swift */,
+				A20000000000000000000027 /* SoundboardStore.swift */,
+				A20000000000000000000028 /* IsoRecorder.swift */,
+				B200000000000000000000B1 /* ProgramOutputMode.swift */,
+				B200000000000000000000B2 /* ProgramRenderContract.swift */,
+				B200000000000000000000B3 /* ProgramOutputBus.swift */,
+				B200000000000000000000B4 /* ShowController+OutputBus.swift */,
+				A20000000000000000000029 /* LiveChatEngine.swift */,
+				A2000000000000000000002A /* ProShowVirtualCam.swift */,
+				A2000000000000000000002D /* CanvasTransformEngine.swift */,
+				C7E200000000000000000002 /* SnapToGridEngine.swift */,
+				C7E200000000000000000003 /* SmartGuideEngine.swift */,
+				C7E20000000000000000000D /* GuideLineEngine.swift */,
+				C7E200000000000000000013 /* CanvasGridDisplay.swift */,
+				C7E200000000000000000014 /* VideoResizePreviewScaler.swift */,
+				C7E200000000000000000004 /* AlignmentController.swift */,
+				C7E200000000000000000007 /* ContextBarPositionCalculator.swift */,
+				C7F200000000000000000001 /* PropLifecycleEngine.swift */,
+				A20000000000000000000042 /* PlaceholderTransitionEngine.swift */,
+				A20000000000000000000045 /* NodeRoutingEngine.swift */,
+				A20000000000000000000090 /* NodeGraphCommandEngine.swift */,
+				A20000000000000000000030 /* ActionInspectorEngine.swift */,
+				A20000000000000000000032 /* MediaPlaybackEngine.swift */,
+				A20000000000000000000073 /* LiveTransportClock.swift */,
+				A20000000000000000000074 /* KeyboardShortcutManager.swift */,
+				A20000000000000000000075 /* ClipboardController.swift */,
+				A20000000000000000000076 /* ShapeDefaults.swift */,
+				A20000000000000000000077 /* TransformHandleEngine.swift */,
+				A200000000000000000000C2 /* GroupSelectionController.swift */,
+				A20000000000000000000079 /* SmartMeasurementEngine.swift */,
+				A20000000000000000000082 /* MediaFrameEngine.swift */,
+				A20000000000000000000033 /* ProgramCompositor.swift */,
+				A20000000000000000000034 /* ChromaKeyFilter.metal */,
+				A20000000000000000000049 /* TransitionShaderEngine.swift */,
+				A2000000000000000000004A /* TransitionShaders.metal */,
+				A2000000000000000000004B /* StingerPlayer.swift */,
+				A2000000000000000000004C /* LottieTransitionEngine.swift */,
+				A2000000000000000000004D /* CoreImageTransitionEngine.swift */,
+				A20000000000000000000050 /* KeychainStreamVault.swift */,
+				A20000000000000000000051 /* SettingsStore.swift */,
+				C7M200000000000000000001 /* UserSettingsStore.swift */,
+				C7M200000000000000000002 /* SlideCacheManager.swift */,
+				C7A200000000000000000001 /* AudioMatrixReconciler.swift */,
+				A20000000000000000000035 /* VideoIngestEngine.swift */,
+				A20000000000000000000036 /* AudioIOEngine.swift */,
+				C7R200000000000000000002 /* AudioMonitoringEngine.swift */,
+				C7R200000000000000000003 /* ProgramAudioMonitorBridge.swift */,
+				A20000000000000000000055 /* AudioDSP.swift */,
+				A20000000000000000000056 /* ShowAudioController.swift */,
+				A2000000000000000000005C /* MediaActionEvaluator.swift */,
+				A200000000000000000000AF /* LayerLockController.swift */,
+				A200000000000000000000B0 /* MultiViewerGridEngine.swift */,
+				A2000000000000000000005F /* DynamicTextEngine.swift */,
+				A20000000000000000000060 /* LiveQuoteEngine.swift */,
+				A20000000000000000000062 /* BuildAnimationEngine.swift */,
+				A20000000000000000000068 /* DefaultBuildFactory.swift */,
+				A20000000000000000000064 /* ProShowQueues.swift */,
+				C6D200000000000000000001 /* TickerEngine.swift */,
+				C6D200000000000000000006 /* CryptoTickerFormatter.swift */,
+				C6D200000000000000000007 /* MarketDataStreamEngine.swift */,
+				C6D200000000000000000008 /* TickerConfigStore.swift */,
+				C6D20000000000000000000A /* LiveQuoteTickerBridge.swift */,
+				A200000000000000000000C5 /* OffThreadVideoPublisher.swift */,
+				A20000000000000000000065 /* ZeroCopyMetalPipeline.swift */,
+				A20000000000000000000083 /* SharedTexturePublisher.swift */,
+				A20000000000000000000086 /* LivePixelHub.swift */,
+				A20000000000000000000087 /* ProgramOutputComposer.swift */,
+				C6D20000000000000000000B /* CoreTextRasterizer.swift */,
+				C6D20000000000000000000C /* LiveQuoteTemplateRenderer.swift */,
+				C6D20000000000000000000F /* CanvasLayerStore.swift */,
+				C6D200000000000000000010 /* ShowController+CompositionPanel.swift */,
+				C6D200000000000000000021 /* ProgramDocumentStore.swift */,
+				C6D200000000000000000022 /* RundownClockEngine.swift */,
+				C6D200000000000000000023 /* TalentManager.swift */,
+				C6D200000000000000000024 /* StageCueController.swift */,
+				C6D200000000000000000025 /* ShowController+Program.swift */,
+				C6D20000000000000000002C /* ProgramLayersEngine.swift */,
+				C6D20000000000000000002D /* ShowController+ProgramLayers.swift */,
+				C6D20000000000000000002F /* ShowController+UserComposition.swift */,
+				C6D200000000000000000031 /* ShowStateTracker.swift */,
+				C6D200000000000000000032 /* EntityRevisionStore.swift */,
+				C6D200000000000000000033 /* UnifiedCacheRegistry.swift */,
+				C6D200000000000000000034 /* AtomicPersistenceEngine.swift */,
+				C6D200000000000000000035 /* ShowDocumentStateEngine.swift */,
+				C6D200000000000000000036 /* ShowController+ElementLifecycle.swift */,
+				C6D200000000000000000037 /* ShowController+Rehydration.swift */,
+				C6D200000000000000000039 /* FrameRevisionClock.swift */,
+				C6D20000000000000000003A /* VideoInvalidationEngine.swift */,
+				C6D20000000000000000003B /* ShowController+TokenSync.swift */,
+				C6D20000000000000000003D /* DeskSignalProbe.swift */,
+				C6D20000000000000000003E /* ShowController+DeskSignalProbe.swift */,
+				A20000000000000000000096 /* PreFlightEngine.swift */,
+				A20000000000000000000098 /* RemoteControlBridge.swift */,
+				A200000000000000000000A6 /* RemoteControlRuntime.swift */,
+				A200000000000000000000A7 /* ControlWebSocket.swift */,
+				A20000000000000000000099 /* StageDisplayEngine.swift */,
+				A200000000000000000000A0 /* ImportReflowEngine.swift */,
+				A200000000000000000000A2 /* StreamAccountManager.swift */,
+				A200000000000000000000A3 /* PlatformLiveApiService.swift */,
+				A200000000000000000000A8 /* StreamIdentityService.swift */,
+				A200000000000000000000AA /* OAuthLoopbackServer.swift */,
+				A200000000000000000000A5 /* ShowController+GoLive.swift */,
+				C7F200000000000000000002 /* ShowController+PropLifecycle.swift */,
+				C7F200000000000000000004 /* VirtualCameraOutputService.swift */,
+				C7F200000000000000000005 /* ProShowBackstageEngine.swift */,
+				C7F200000000000000000006 /* LiveChatStreamManager.swift */,
+				C7F200000000000000000007 /* MeetingSdkBridge.swift */,
+				C7F200000000000000000008 /* ShowController+Backstage.swift */,
+				C7F200000000000000000013 /* ShowController+LibraryHierarchy.swift */,
+				C7F20000000000000000000B /* VirtualCameraFrameQueue.swift */,
+				C7F20000000000000000000C /* VirtualAudioLoopbackService.swift */,
+				C7F20000000000000000000D /* BackstageSignalingEngine.swift */,
+				C7F20000000000000000000E /* BackstageWebRTCIngestEngine.swift */,
+				C7F20000000000000000000F /* LiveChatIngestService.swift */,
+				C7F200000000000000000010 /* MeetingOAuthClient.swift */,
+				A20000000000000000000066 /* HardwareVideoEncoder.swift */,
+				C7D301000000000000000002 /* MediaClockAnchor.swift */,
+				C7D302000000000000000002 /* RTMPEndpointQueue.swift */,
+				C7E401000000000000000002 /* EncoderPresetStore.swift */,
+				C7E402000000000000000002 /* StreamTelemetryMonitor.swift */,
+				C7E403000000000000000002 /* IsoRecorderEngine.swift */,
+				C7E404000000000000000002 /* LowLatencyIngestPipeline.swift */,
+				C7E405000000000000000002 /* MultiDeviceIngestManager.swift */,
+				C7E406000000000000000002 /* InputFailoverEngine.swift */,
+				C7E407000000000000000002 /* SRTStreamReceiver.swift */,
+				A20000000000000000000067 /* AssetCacheManager.swift */,
+				A20000000000000000000037 /* PathGeometryEngine.swift */,
+				A20000000000000000000038 /* RTMPStreamTransport.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -136,6 +997,27 @@
 			isa = PBXGroup;
 			children = (
 				A20000000000000000000005 /* ProShowTheme.swift */,
+				A200000000000000000000F1 /* ThemeTokens.swift */,
+				A20000000000000000000039 /* DeskChrome.swift */,
+				C6D200000000000000000011 /* CanvasElementShimmer.swift */,
+				C7F200000000000000000011 /* CanvasShimmerRasterizer.swift */,
+				A20000000000000000000084 /* ProShowMetalHostView.swift */,
+				C6D200000000000000000002 /* MarqueeTickerView.swift */,
+				C6D200000000000000000099 /* ProjectTitleHeaderView.swift */,
+				C6D200000000000000000003 /* MarqueeTextLoopView.swift */,
+				C6D200000000000000000004 /* TextAttributeConverter.swift */,
+				C6D200000000000000000009 /* LiveMarketMarqueeView.swift */,
+				A2000000000000000000005D /* NativeSplitView.swift */,
+				A20000000000000000000069 /* ProShowFlippedSplitView.swift */,
+				A20000000000000000000070 /* ProShow3ColumnDeskController.swift */,
+				A20000000000000000000071 /* ProShow2RowCenterController.swift */,
+				A20000000000000000000043 /* InspectorChrome.swift */,
+				C7E200000000000000000015 /* ScrubbableComboInput.swift */,
+				C7E200000000000000000016 /* RadialAngleInput.swift */,
+				C7E200000000000000000017 /* BoundsMatrixInput.swift */,
+				C7E200000000000000000018 /* InlineOpacityField.swift */,
+				C7E200000000000000000019 /* CanvasTextBoxLayout.swift */,
+				C7E20000000000000000001A /* CanvasEditorScreenAlign.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -152,8 +1034,78 @@
 			isa = PBXGroup;
 			children = (
 				A2000000000000000000000A /* ProShow.app */,
+				A200TEST000000000000000A /* ProShowTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		A400TEST0000000000000001 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				A400TEST0000000000000002 /* ProShowCoreTests */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
+		A400TEST0000000000000002 /* ProShowCoreTests */ = {
+			isa = PBXGroup;
+			children = (
+				A2T000000000000000000001 /* TestSupport.swift */,
+				A2T000000000000000000002 /* CompositorEngineTests.swift */,
+				A2T000000000000000000003 /* CueTransportTests.swift */,
+				A2T000000000000000000004 /* LibraryStoreTests.swift */,
+				A2T000000000000000000005 /* SearchIndexTests.swift */,
+				A2T000000000000000000006 /* BibleEngineTests.swift */,
+				A2T000000000000000000007 /* ReflowEngineTests.swift */,
+				A2T000000000000000000008 /* MediaLoaderTests.swift */,
+				A2T000000000000000000009 /* StagePayloadTests.swift */,
+				A2T00000000000000000000A /* ControlAPITests.swift */,
+				A2T00000000000000000000B /* StreamingEngineTests.swift */,
+				C7E4B2000000000000000001 /* EncoderPresetStoreTests.swift */,
+				A2T00000000000000000000C /* PresentationImportTests.swift */,
+				A2T00000000000000000000D /* ParityTests.swift */,
+				A2T00000000000000000000E /* ProjectStoreTests.swift */,
+				A2T00000000000000000000F /* AssetPipelineTests.swift */,
+				A2T000000000000000000010 /* EditorEngineTests.swift */,
+				A2T000000000000000000011 /* SceneManagerTests.swift */,
+				A2T000000000000000000012 /* ChromaKeyTests.swift */,
+				A2T000000000000000000013 /* AudioMatrixTests.swift */,
+				A2T000000000000000000014 /* IsoRecorderTests.swift */,
+				A2T000000000000000000015 /* LiveChatOverlayTests.swift */,
+				C7F20000000000000000000A /* BackstageEngineTests.swift */,
+				C7F200000000000000000012 /* BackstageIntegrationTests.swift */,
+				A2T000000000000000000016 /* ProjectSettingsTests.swift */,
+				A2T000000000000000000017 /* CanvasEngineTests.swift */,
+				A2T000000000000000000018 /* ActionInspectorTests.swift */,
+				A2T000000000000000000019 /* ProgramCompositorTests.swift */,
+				A2T000000000000000000020 /* VideoIngestTests.swift */,
+				A2T000000000000000000021 /* AudioIOTests.swift */,
+				A2T000000000000000000022 /* NDIRuntimeTests.swift */,
+				A2T000000000000000000023 /* AddShotTests.swift */,
+				A2T000000000000000000024 /* PlaceholderMatrixTests.swift */,
+				A2T000000000000000000025 /* NodeRoutingTests.swift */,
+				A2T000000000000000000026 /* TransitionEngineTests.swift */,
+				A2T000000000000000000027 /* SettingsTests.swift */,
+				A2T000000000000000000028 /* AudioDSPTests.swift */,
+				A2T000000000000000000029 /* LayerContinuityTests.swift */,
+				A2T00000000000000000002A /* DynamicTextTests.swift */,
+				A2T00000000000000000002B /* BuildAnimationTests.swift */,
+				A2T00000000000000000002D /* ProEngineTests.swift */,
+				A2T00000000000000000002E /* StudioGeometryTests.swift */,
+				A2T00000000000000000002F /* LiveEditorSyncTests.swift */,
+				A2T000000000000000000030 /* CanvasInteractionTests.swift */,
+				A2T000000000000000000031 /* SmartMeasurementEngineTests.swift */,
+				A2T000000000000000000032 /* MediaFrameTests.swift */,
+				A2T000000000000000000033 /* SharedTexturePipelineTests.swift */,
+				A2T000000000000000000034 /* NodeGraphCommandTests.swift */,
+				A2T000000000000000000035 /* PreFlightTests.swift */,
+				A2T000000000000000000036 /* RemoteControlTests.swift */,
+				A2T000000000000000000037 /* ImportReflowTests.swift */,
+				A2T000000000000000000038 /* BroadcastGoLiveTests.swift */,
+				A2T000000000000000000039 /* MultiViewerTests.swift */,
+				A2T00000000000000000003A /* ActionStackTests.swift */,
+			);
+			path = ProShowCoreTests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -166,15 +1118,39 @@
 				A60000000000000000000001 /* Sources */,
 				A30000000000000000000001 /* Frameworks */,
 				A60000000000000000000002 /* Resources */,
+				A600PIN00000000000000001 /* Pin Debug App */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
 			name = ProShow;
+			packageProductDependencies = (
+				AKPROD000000000000000001 /* AudioKit */,
+				AKPROD000000000000000002 /* AudioKitUI */,
+				AKPROD000000000000000003 /* Controls */,
+			);
 			productName = ProShow;
 			productReference = A2000000000000000000000A /* ProShow.app */;
 			productType = "com.apple.product-type.application";
+		};
+		A500TEST0000000000000001 /* ProShowTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A700TEST0000000000000001 /* Build configuration list for PBXNativeTarget "ProShowTests" */;
+			buildPhases = (
+				A600TEST0000000000000001 /* Sources */,
+				A300TEST0000000000000001 /* Frameworks */,
+				A600TEST0000000000000002 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A550DEP00000000000000001 /* PBXTargetDependency */,
+			);
+			name = ProShowTests;
+			productName = ProShowTests;
+			productReference = A200TEST000000000000000A /* ProShowTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
@@ -189,6 +1165,9 @@
 					A50000000000000000000001 = {
 						CreatedOnToolsVersion = 15.4;
 					};
+					A500TEST0000000000000001 = {
+						CreatedOnToolsVersion = 15.4;
+					};
 				};
 			};
 			buildConfigurationList = A70000000000000000000001 /* Build configuration list for PBXProject "ProShow" */;
@@ -200,11 +1179,17 @@
 				Base,
 			);
 			mainGroup = A40000000000000000000001;
+			packageReferences = (
+				AKPKG00000000000000000001 /* XCRemoteSwiftPackageReference "AudioKit" */,
+				AKPKG00000000000000000002 /* XCRemoteSwiftPackageReference "AudioKitUI" */,
+				AKPKG00000000000000000003 /* XCRemoteSwiftPackageReference "Controls" */,
+			);
 			productRefGroup = A40000000000000000000009 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				A50000000000000000000001 /* ProShow */,
+				A500TEST0000000000000001 /* ProShowTests */,
 			);
 		};
 /* End PBXProject section */
@@ -218,7 +1203,38 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A600TEST0000000000000002 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		A600PIN00000000000000001 /* Pin Debug App */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/$(FULL_PRODUCT_NAME)",
+			);
+			name = "Pin Debug App";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"/Applications/ProShow.app",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/zsh;
+			shellScript = "\"${SRCROOT}/scripts/pin_debug_app.sh\" \"${BUILT_PRODUCTS_DIR}/${FULL_PRODUCT_NAME}\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		A60000000000000000000001 /* Sources */ = {
@@ -230,19 +1246,337 @@
 				A10000000000000000000003 /* SampleContent.swift in Sources */,
 				A10000000000000000000004 /* ShowController.swift in Sources */,
 				A10000000000000000000005 /* ProShowTheme.swift in Sources */,
+				A100000000000000000000F1 /* ThemeTokens.swift in Sources */,
+				A10000000000000000000039 /* DeskChrome.swift in Sources */,
+				C6D100000000000000000011 /* CanvasElementShimmer.swift in Sources */,
+				A1000000000000000000005D /* NativeSplitView.swift in Sources */,
+				A10000000000000000000069 /* ProShowFlippedSplitView.swift in Sources */,
+				A10000000000000000000070 /* ProShow3ColumnDeskController.swift in Sources */,
+				A10000000000000000000071 /* ProShow2RowCenterController.swift in Sources */,
+				A10000000000000000000072 /* ProShowStudioDeskView.swift in Sources */,
+				A1000000000000000000005E /* DynamicTextModels.swift in Sources */,
+				A1000000000000000000005F /* DynamicTextEngine.swift in Sources */,
+				A10000000000000000000060 /* LiveQuoteEngine.swift in Sources */,
+				A10000000000000000000061 /* BuildAnimationModels.swift in Sources */,
+				A10000000000000000000062 /* BuildAnimationEngine.swift in Sources */,
+				A10000000000000000000068 /* DefaultBuildFactory.swift in Sources */,
+				A10000000000000000000063 /* BuildInspectorView.swift in Sources */,
+				A10000000000000000000064 /* ProShowQueues.swift in Sources */,
+				C6D100000000000000000001 /* TickerEngine.swift in Sources */,
+				C6D100000000000000000002 /* MarqueeTickerView.swift in Sources */,
+				C6D100000000000000000099 /* ProjectTitleHeaderView.swift in Sources */,
+				C6D100000000000000000003 /* MarqueeTextLoopView.swift in Sources */,
+				C6D100000000000000000004 /* TextAttributeConverter.swift in Sources */,
+				C6D100000000000000000005 /* MarketTickerModel.swift in Sources */,
+				C6D100000000000000000006 /* CryptoTickerFormatter.swift in Sources */,
+				C6D100000000000000000007 /* MarketDataStreamEngine.swift in Sources */,
+				C6D100000000000000000008 /* TickerConfigStore.swift in Sources */,
+				C6D10000000000000000000A /* LiveQuoteTickerBridge.swift in Sources */,
+				C6D100000000000000000009 /* LiveMarketMarqueeView.swift in Sources */,
+				A100000000000000000000C5 /* OffThreadVideoPublisher.swift in Sources */,
+				A10000000000000000000065 /* ZeroCopyMetalPipeline.swift in Sources */,
+				A10000000000000000000066 /* HardwareVideoEncoder.swift in Sources */,
+				C7D301000000000000000001 /* MediaClockAnchor.swift in Sources */,
+				C7D302000000000000000001 /* RTMPEndpointQueue.swift in Sources */,
+				C7E401000000000000000001 /* EncoderPresetStore.swift in Sources */,
+				C7E402000000000000000001 /* StreamTelemetryMonitor.swift in Sources */,
+				C7E403000000000000000001 /* IsoRecorderEngine.swift in Sources */,
+				C7E404000000000000000001 /* LowLatencyIngestPipeline.swift in Sources */,
+				C7E405000000000000000001 /* MultiDeviceIngestManager.swift in Sources */,
+				C7E406000000000000000001 /* InputFailoverEngine.swift in Sources */,
+				C7E407000000000000000001 /* SRTStreamReceiver.swift in Sources */,
+				A10000000000000000000067 /* AssetCacheManager.swift in Sources */,
+				A10000000000000000000043 /* InspectorChrome.swift in Sources */,
+				C7E100000000000000000015 /* ScrubbableComboInput.swift in Sources */,
+				C7E100000000000000000016 /* RadialAngleInput.swift in Sources */,
+				C7E100000000000000000017 /* BoundsMatrixInput.swift in Sources */,
+				C7E100000000000000000018 /* InlineOpacityField.swift in Sources */,
+				C7E100000000000000000019 /* CanvasTextBoxLayout.swift in Sources */,
+				C7E10000000000000000001A /* CanvasEditorScreenAlign.swift in Sources */,
 				A10000000000000000000006 /* AudienceView.swift in Sources */,
 				A10000000000000000000007 /* AudienceWindowController.swift in Sources */,
 				A10000000000000000000008 /* OperatorView.swift in Sources */,
+				A100000000000000000000C3 /* AppWorkspaceRouter.swift in Sources */,
+				A100000000000000000000C4 /* AudioMeterBridgeView.swift in Sources */,
 				A1000000000000000000000B /* DeskModels.swift in Sources */,
 				A1000000000000000000000C /* TopToolbarView.swift in Sources */,
 				A1000000000000000000000D /* LibrarySidebarView.swift in Sources */,
 				A1000000000000000000000E /* SlideWorkspaceView.swift in Sources */,
 				A1000000000000000000000F /* MediaBinView.swift in Sources */,
 				A10000000000000000000010 /* OutputSidebarView.swift in Sources */,
+				C7R100000000000000000001 /* RightPaneProgramView.swift in Sources */,
+				C7R100000000000000000002 /* AudioMonitoringEngine.swift in Sources */,
+				C7R100000000000000000003 /* ProgramAudioMonitorBridge.swift in Sources */,
+				A10000000000000000000011 /* EngineModels.swift in Sources */,
+				A10000000000000000000012 /* CompositorEngine.swift in Sources */,
+				A10000000000000000000013 /* ContentEngines.swift in Sources */,
+				A10000000000000000000014 /* StreamingEngine.swift in Sources */,
+				A10000000000000000000015 /* ControlAPIServer.swift in Sources */,
+				A1000000000000000000003A /* ControlAPIOpenAPI.swift in Sources */,
+				A1000000000000000000003B /* NDIRuntime.swift in Sources */,
+				A1000000000000000000003D /* AddShotModels.swift in Sources */,
+				A1000000000000000000003E /* SourceDiscoveryManager.swift in Sources */,
+				A10000000000000000000094 /* InputAccessBroker.swift in Sources */,
+				A10000000000000000000095 /* InputPreviewEngine.swift in Sources */,
+				A1000000000000000000003F /* AddShotModalView.swift in Sources */,
+				A10000000000000000000040 /* PlaceholderMatrix.swift in Sources */,
+				A10000000000000000000041 /* MapWorkspaceView.swift in Sources */,
+				A10000000000000000000042 /* PlaceholderTransitionEngine.swift in Sources */,
+				A10000000000000000000044 /* NodeRoutingModels.swift in Sources */,
+				A10000000000000000000045 /* NodeRoutingEngine.swift in Sources */,
+				A10000000000000000000090 /* NodeGraphCommandEngine.swift in Sources */,
+				A10000000000000000000091 /* NodeCommandPaletteView.swift in Sources */,
+				A10000000000000000000092 /* NodeBackdropView.swift in Sources */,
+				A10000000000000000000093 /* MapSourcePickerView.swift in Sources */,
+				A10000000000000000000046 /* BezierWireCanvas.swift in Sources */,
+				A10000000000000000000047 /* RoutingNodeGraphView.swift in Sources */,
+				A10000000000000000000048 /* TransitionModels.swift in Sources */,
+				A10000000000000000000049 /* TransitionShaderEngine.swift in Sources */,
+				A1000000000000000000004A /* TransitionShaders.metal in Sources */,
+				A1000000000000000000004B /* StingerPlayer.swift in Sources */,
+				A1000000000000000000004C /* LottieTransitionEngine.swift in Sources */,
+				A1000000000000000000004D /* CoreImageTransitionEngine.swift in Sources */,
+				A1000000000000000000004E /* TransitionPickerView.swift in Sources */,
+				A1000000000000000000004F /* SettingsModels.swift in Sources */,
+				A10000000000000000000050 /* KeychainStreamVault.swift in Sources */,
+				A10000000000000000000051 /* SettingsStore.swift in Sources */,
+				C7M100000000000000000001 /* UserSettingsStore.swift in Sources */,
+				C7M100000000000000000002 /* SlideCacheManager.swift in Sources */,
+				C7A100000000000000000001 /* AudioMatrixReconciler.swift in Sources */,
+				A10000000000000000000052 /* SettingsWindowView.swift in Sources */,
+				A10000000000000000000053 /* StreamingSettingsView.swift in Sources */,
+				A10000000000000000000054 /* MultiScreenManagerView.swift in Sources */,
+				A10000000000000000000055 /* AudioDSP.swift in Sources */,
+				A10000000000000000000056 /* ShowAudioController.swift in Sources */,
+				A10000000000000000000057 /* AudioMixerView.swift in Sources */,
+				A10000000000000000000058 /* FFTSpectrumView.swift in Sources */,
+				A10000000000000000000059 /* ParametricEQView.swift in Sources */,
+				A1000000000000000000005A /* FairlightChannelStrip.swift in Sources */,
+				A1000000000000000000005B /* LiveStackState.swift in Sources */,
+				A1000000000000000000005C /* MediaActionEvaluator.swift in Sources */,
+				A10000000000000000000016 /* LayeredAudienceView.swift in Sources */,
+				A10000000000000000000017 /* ProductEngines.swift in Sources */,
+				A10000000000000000000018 /* ProjectModels.swift in Sources */,
+				A10000000000000000000019 /* ProjectStore.swift in Sources */,
+				A1000000000000000000001A /* AssetPipeline.swift in Sources */,
+				A1000000000000000000001B /* StartMenuView.swift in Sources */,
+				A1000000000000000000001C /* EditorModels.swift in Sources */,
+				A1000000000000000000001D /* EditorEngine.swift in Sources */,
+				A1000000000000000000001E /* CanvasEditorView.swift in Sources */,
+				A1000000000000000000001F /* EditorInspectorView.swift in Sources */,
+				A1000000000000000000002B /* ProjectSettingsView.swift in Sources */,
+				A10000000000000000000020 /* CanvasConfig.swift in Sources */,
+				A10000000000000000000021 /* DefaultSeedData.swift in Sources */,
+				A10000000000000000000022 /* StudioModels.swift in Sources */,
+				A1000000000000000000002C /* CanvasEngineModels.swift in Sources */,
+				A1000000000000000000002D /* CanvasTransformEngine.swift in Sources */,
+				A1000000000000000000002E /* SelectionChromeView.swift in Sources */,
+				C7E100000000000000000001 /* PrecisionLayoutModels.swift in Sources */,
+				C7E100000000000000000002 /* SnapToGridEngine.swift in Sources */,
+				C7E100000000000000000003 /* SmartGuideEngine.swift in Sources */,
+				C7E100000000000000000004 /* AlignmentController.swift in Sources */,
+				C7E100000000000000000005 /* CanvasGuideOverlayView.swift in Sources */,
+				C7E100000000000000000006 /* AlignmentToolbarView.swift in Sources */,
+				C7E100000000000000000007 /* ContextBarPositionCalculator.swift in Sources */,
+				C7E100000000000000000008 /* CanvasContextBarView.swift in Sources */,
+				C7E10000000000000000000D /* GuideLineEngine.swift in Sources */,
+				C7E100000000000000000013 /* CanvasGridDisplay.swift in Sources */,
+				C7E100000000000000000014 /* VideoResizePreviewScaler.swift in Sources */,
+				C7E10000000000000000000E /* CanvasRulerView.swift in Sources */,
+				C7E10000000000000000000F /* BroadcastFrameGuideView.swift in Sources */,
+				C7E100000000000000000010 /* CanvasMinimapView.swift in Sources */,
+				C7E100000000000000000011 /* CanvasWorkbenchGuideOverlay.swift in Sources */,
+				C7E100000000000000000012 /* CanvasUserGuideViewportOverlay.swift in Sources */,
+				C7F100000000000000000001 /* PropLifecycleEngine.swift in Sources */,
+				C7F100000000000000000002 /* ShowController+PropLifecycle.swift in Sources */,
+				C7F100000000000000000003 /* RemoteGuestAndMeetingModels.swift in Sources */,
+				C7F100000000000000000004 /* VirtualCameraOutputService.swift in Sources */,
+				C7F100000000000000000005 /* ProShowBackstageEngine.swift in Sources */,
+				C7F100000000000000000006 /* LiveChatStreamManager.swift in Sources */,
+				C7F100000000000000000007 /* MeetingSdkBridge.swift in Sources */,
+				C7F100000000000000000008 /* ShowController+Backstage.swift in Sources */,
+				C7F100000000000000000013 /* ShowController+LibraryHierarchy.swift in Sources */,
+				C7F100000000000000000009 /* BackstageControlPanelView.swift in Sources */,
+				C7F10000000000000000000B /* VirtualCameraFrameQueue.swift in Sources */,
+				C7F10000000000000000000C /* VirtualAudioLoopbackService.swift in Sources */,
+				C7F10000000000000000000D /* BackstageSignalingEngine.swift in Sources */,
+				C7F10000000000000000000E /* BackstageWebRTCIngestEngine.swift in Sources */,
+				C7F10000000000000000000F /* LiveChatIngestService.swift in Sources */,
+				C7F100000000000000000010 /* MeetingOAuthClient.swift in Sources */,
+				C7F100000000000000000011 /* CanvasShimmerRasterizer.swift in Sources */,
+				A1000000000000000000002F /* ActionInspectorModels.swift in Sources */,
+				A10000000000000000000030 /* ActionInspectorEngine.swift in Sources */,
+				A10000000000000000000031 /* RightInspectorView.swift in Sources */,
+				A10000000000000000000032 /* MediaPlaybackEngine.swift in Sources */,
+				A10000000000000000000073 /* LiveTransportClock.swift in Sources */,
+				A10000000000000000000074 /* KeyboardShortcutManager.swift in Sources */,
+				A10000000000000000000075 /* ClipboardController.swift in Sources */,
+				A10000000000000000000076 /* ShapeDefaults.swift in Sources */,
+				A10000000000000000000077 /* TransformHandleEngine.swift in Sources */,
+				A100000000000000000000C1 /* CanvasGroupNode.swift in Sources */,
+				A100000000000000000000C2 /* GroupSelectionController.swift in Sources */,
+				A10000000000000000000078 /* SmartMeasurementModel.swift in Sources */,
+				A10000000000000000000079 /* SmartMeasurementEngine.swift in Sources */,
+				A10000000000000000000080 /* SmartMeasurementOverlayView.swift in Sources */,
+				A10000000000000000000081 /* CanvasEditorMouseTracker.swift in Sources */,
+				A10000000000000000000082 /* MediaFrameEngine.swift in Sources */,
+				A10000000000000000000083 /* SharedTexturePublisher.swift in Sources */,
+				A10000000000000000000086 /* LivePixelHub.swift in Sources */,
+				A10000000000000000000087 /* ProgramOutputComposer.swift in Sources */,
+				C6D10000000000000000000B /* CoreTextRasterizer.swift in Sources */,
+				C6D10000000000000000000C /* LiveQuoteTemplateRenderer.swift in Sources */,
+				C6D10000000000000000000D /* AdobeLayerRowView.swift in Sources */,
+				C6D10000000000000000000E /* CanvasLayerModels.swift in Sources */,
+				C6D10000000000000000000F /* CanvasLayerStore.swift in Sources */,
+				C6D100000000000000000010 /* ShowController+CompositionPanel.swift in Sources */,
+				C6D100000000000000000020 /* ProgramDocumentSchema.swift in Sources */,
+				C6D100000000000000000021 /* ProgramDocumentStore.swift in Sources */,
+				C6D100000000000000000022 /* RundownClockEngine.swift in Sources */,
+				C6D100000000000000000023 /* TalentManager.swift in Sources */,
+				C6D100000000000000000024 /* StageCueController.swift in Sources */,
+				C6D100000000000000000025 /* ShowController+Program.swift in Sources */,
+				C6D100000000000000000026 /* RundownWorkspaceView.swift in Sources */,
+				C6D100000000000000000027 /* ProgramInspectorView.swift in Sources */,
+				C6D100000000000000000028 /* ProgramFileDocument.swift in Sources */,
+				C6D100000000000000000029 /* RundownDetailPane.swift in Sources */,
+				C6D10000000000000000002A /* RundownProgramEditor.swift in Sources */,
+				C6D10000000000000000002B /* ProgramLayerModels.swift in Sources */,
+				C6D10000000000000000002C /* ProgramLayersEngine.swift in Sources */,
+				C6D10000000000000000002D /* ShowController+ProgramLayers.swift in Sources */,
+				C6D10000000000000000002E /* LayerSemanticMapper.swift in Sources */,
+				C6D10000000000000000002F /* ShowController+UserComposition.swift in Sources */,
+				C6D100000000000000000030 /* UserCompositionPanelView.swift in Sources */,
+				C6D100000000000000000031 /* ShowStateTracker.swift in Sources */,
+				C6D100000000000000000032 /* EntityRevisionStore.swift in Sources */,
+				C6D100000000000000000033 /* UnifiedCacheRegistry.swift in Sources */,
+				C6D100000000000000000034 /* AtomicPersistenceEngine.swift in Sources */,
+				C6D100000000000000000035 /* ShowDocumentStateEngine.swift in Sources */,
+				C6D100000000000000000036 /* ShowController+ElementLifecycle.swift in Sources */,
+				C6D100000000000000000037 /* ShowController+Rehydration.swift in Sources */,
+				C6D100000000000000000038 /* FrameRevisionModels.swift in Sources */,
+				C6D100000000000000000039 /* FrameRevisionClock.swift in Sources */,
+				C6D10000000000000000003A /* VideoInvalidationEngine.swift in Sources */,
+				C6D10000000000000000003B /* ShowController+TokenSync.swift in Sources */,
+				C6D10000000000000000003D /* DeskSignalProbe.swift in Sources */,
+				C6D10000000000000000003E /* ShowController+DeskSignalProbe.swift in Sources */,
+				C6D10000000000000000003C /* ProgramCanonicalMonitorView.swift in Sources */,
+				A10000000000000000000096 /* PreFlightEngine.swift in Sources */,
+				A10000000000000000000097 /* PreFlightHealthView.swift in Sources */,
+				A100000000000000000000A1 /* StreamAccountModel.swift in Sources */,
+				A100000000000000000000A2 /* StreamAccountManager.swift in Sources */,
+				A100000000000000000000A3 /* PlatformLiveApiService.swift in Sources */,
+				A100000000000000000000A4 /* GoLiveSetupSheet.swift in Sources */,
+				C7E300000000000000000001 /* EncoderPresetPickerView.swift in Sources */,
+				A100000000000000000000A5 /* ShowController+GoLive.swift in Sources */,
+				A100000000000000000000A8 /* StreamIdentityService.swift in Sources */,
+				A100000000000000000000AA /* OAuthLoopbackServer.swift in Sources */,
+				A100000000000000000000AB /* MultiViewerMatrixView.swift in Sources */,
+				A100000000000000000000AC /* MultiViewerModels.swift in Sources */,
+				A100000000000000000000AD /* MultiViewerWindowController.swift in Sources */,
+				A100000000000000000000AE /* ActionStackInspectorView.swift in Sources */,
+				A100000000000000000000AF /* LayerLockController.swift in Sources */,
+				A100000000000000000000B0 /* MultiViewerGridEngine.swift in Sources */,
+				A100000000000000000000B1 /* MultiViewerToolbarView.swift in Sources */,
+				A100000000000000000000B2 /* MultiViewerAudioBridgeView.swift in Sources */,
+				A100000000000000000000A9 /* ConnectDestinationSheet.swift in Sources */,
+				A10000000000000000000098 /* RemoteControlBridge.swift in Sources */,
+				A100000000000000000000A6 /* RemoteControlRuntime.swift in Sources */,
+				A100000000000000000000A7 /* ControlWebSocket.swift in Sources */,
+				A10000000000000000000099 /* StageDisplayEngine.swift in Sources */,
+				A100000000000000000000A0 /* ImportReflowEngine.swift in Sources */,
+				A10000000000000000000084 /* ProShowMetalHostView.swift in Sources */,
+				A10000000000000000000085 /* PlayheadTimecodeView.swift in Sources */,
+				A10000000000000000000033 /* ProgramCompositor.swift in Sources */,
+				A10000000000000000000034 /* ChromaKeyFilter.metal in Sources */,
+				A10000000000000000000035 /* VideoIngestEngine.swift in Sources */,
+				A10000000000000000000036 /* AudioIOEngine.swift in Sources */,
+				A10000000000000000000037 /* PathGeometryEngine.swift in Sources */,
+				A10000000000000000000038 /* RTMPStreamTransport.swift in Sources */,
+				A10000000000000000000023 /* SceneManager.swift in Sources */,
+				A10000000000000000000024 /* VideoInputEngine.swift in Sources */,
+				A10000000000000000000025 /* VideoFilterEngine.swift in Sources */,
+				A10000000000000000000026 /* AudioMatrixEngine.swift in Sources */,
+				A10000000000000000000027 /* SoundboardStore.swift in Sources */,
+				A10000000000000000000028 /* IsoRecorder.swift in Sources */,
+				B100000000000000000000B1 /* ProgramOutputMode.swift in Sources */,
+				B100000000000000000000B2 /* ProgramRenderContract.swift in Sources */,
+				B100000000000000000000B3 /* ProgramOutputBus.swift in Sources */,
+				B100000000000000000000B4 /* ShowController+OutputBus.swift in Sources */,
+				A10000000000000000000029 /* LiveChatEngine.swift in Sources */,
+				A1000000000000000000002A /* ProShowVirtualCam.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A600TEST0000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1T000000000000000000001 /* TestSupport.swift in Sources */,
+				A1T000000000000000000002 /* CompositorEngineTests.swift in Sources */,
+				A1T000000000000000000003 /* CueTransportTests.swift in Sources */,
+				A1T000000000000000000004 /* LibraryStoreTests.swift in Sources */,
+				A1T000000000000000000005 /* SearchIndexTests.swift in Sources */,
+				A1T000000000000000000006 /* BibleEngineTests.swift in Sources */,
+				A1T000000000000000000007 /* ReflowEngineTests.swift in Sources */,
+				A1T000000000000000000008 /* MediaLoaderTests.swift in Sources */,
+				A1T000000000000000000009 /* StagePayloadTests.swift in Sources */,
+				A1T00000000000000000000A /* ControlAPITests.swift in Sources */,
+				A1T00000000000000000000B /* StreamingEngineTests.swift in Sources */,
+				C7E4B1000000000000000001 /* EncoderPresetStoreTests.swift in Sources */,
+				A1T00000000000000000000C /* PresentationImportTests.swift in Sources */,
+				A1T00000000000000000000D /* ParityTests.swift in Sources */,
+				A1T00000000000000000000E /* ProjectStoreTests.swift in Sources */,
+				A1T00000000000000000000F /* AssetPipelineTests.swift in Sources */,
+				A1T000000000000000000010 /* EditorEngineTests.swift in Sources */,
+				A1T000000000000000000011 /* SceneManagerTests.swift in Sources */,
+				A1T000000000000000000012 /* ChromaKeyTests.swift in Sources */,
+				A1T000000000000000000013 /* AudioMatrixTests.swift in Sources */,
+				A1T000000000000000000014 /* IsoRecorderTests.swift in Sources */,
+				A1T000000000000000000015 /* LiveChatOverlayTests.swift in Sources */,
+				C7F10000000000000000000A /* BackstageEngineTests.swift in Sources */,
+				C7F100000000000000000012 /* BackstageIntegrationTests.swift in Sources */,
+				A1T000000000000000000016 /* ProjectSettingsTests.swift in Sources */,
+				A1T000000000000000000017 /* CanvasEngineTests.swift in Sources */,
+				A1T000000000000000000018 /* ActionInspectorTests.swift in Sources */,
+				A1T000000000000000000019 /* ProgramCompositorTests.swift in Sources */,
+				A1T000000000000000000023 /* AddShotTests.swift in Sources */,
+				A1T000000000000000000024 /* PlaceholderMatrixTests.swift in Sources */,
+				A1T000000000000000000025 /* NodeRoutingTests.swift in Sources */,
+				A1T000000000000000000026 /* TransitionEngineTests.swift in Sources */,
+				A1T000000000000000000027 /* SettingsTests.swift in Sources */,
+				A1T000000000000000000028 /* AudioDSPTests.swift in Sources */,
+				A1T000000000000000000029 /* LayerContinuityTests.swift in Sources */,
+				A1T00000000000000000002A /* DynamicTextTests.swift in Sources */,
+				A1T00000000000000000002B /* BuildAnimationTests.swift in Sources */,
+				A1T00000000000000000002D /* ProEngineTests.swift in Sources */,
+				A1T00000000000000000002E /* StudioGeometryTests.swift in Sources */,
+				A1T00000000000000000002F /* LiveEditorSyncTests.swift in Sources */,
+				A1T000000000000000000030 /* CanvasInteractionTests.swift in Sources */,
+				A1T000000000000000000031 /* SmartMeasurementEngineTests.swift in Sources */,
+				A1T000000000000000000032 /* MediaFrameTests.swift in Sources */,
+				A1T000000000000000000033 /* SharedTexturePipelineTests.swift in Sources */,
+				A1T000000000000000000034 /* NodeGraphCommandTests.swift in Sources */,
+				A1T000000000000000000035 /* PreFlightTests.swift in Sources */,
+				A1T000000000000000000036 /* RemoteControlTests.swift in Sources */,
+				A1T000000000000000000037 /* ImportReflowTests.swift in Sources */,
+				A1T000000000000000000038 /* BroadcastGoLiveTests.swift in Sources */,
+				A1T000000000000000000039 /* MultiViewerTests.swift in Sources */,
+				A1T00000000000000000003A /* ActionStackTests.swift in Sources */,
+				A1T000000000000000000020 /* VideoIngestTests.swift in Sources */,
+				A1T000000000000000000021 /* AudioIOTests.swift in Sources */,
+				A1T000000000000000000022 /* NDIRuntimeTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A550DEP00000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A50000000000000000000001 /* ProShow */;
+			targetProxy = A550PROXY0000000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		A90000000000000000000001 /* Debug */ = {
@@ -291,12 +1625,18 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = ProShow/ProShow.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ProShow/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = ProShow;
+				INFOPLIST_KEY_NSCameraUsageDescription = "ProShow uses the Mac camera as a video input layer.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "ProShow uses the microphone for program and ISO audio.";
+				INFOPLIST_KEY_NSScreenCaptureUsageDescription = "ProShow captures a display for the screen-share input.";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © Kaleel. Original work. Not affiliated with FreeShow or ProPresenter.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -313,7 +1653,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.kaleel.proshow;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -332,12 +1672,18 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = ProShow/ProShow.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ProShow/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = ProShow;
+				INFOPLIST_KEY_NSCameraUsageDescription = "ProShow uses the Mac camera as a video input layer.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "ProShow uses the microphone for program and ISO audio.";
+				INFOPLIST_KEY_NSScreenCaptureUsageDescription = "ProShow captures a display for the screen-share input.";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © Kaleel. Original work. Not affiliated with FreeShow or ProPresenter.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -354,7 +1700,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.kaleel.proshow;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -365,6 +1711,46 @@
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		A900TEST0000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.kaleel.proshow.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_STRICT_CONCURRENCY = targeted;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ProShow.app/Contents/MacOS/ProShow";
+			};
+			name = Debug;
+		};
+		A900TEST0000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.kaleel.proshow.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_STRICT_CONCURRENCY = targeted;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ProShow.app/Contents/MacOS/ProShow";
 			};
 			name = Release;
 		};
@@ -389,7 +1775,61 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		A700TEST0000000000000001 /* Build configuration list for PBXNativeTarget "ProShowTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A900TEST0000000000000001 /* Debug */,
+				A900TEST0000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		AKPKG00000000000000000001 /* XCRemoteSwiftPackageReference "AudioKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/AudioKit/AudioKit.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 5.6.1;
+			};
+		};
+		AKPKG00000000000000000002 /* XCRemoteSwiftPackageReference "AudioKitUI" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/AudioKit/AudioKitUI.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.3.6;
+			};
+		};
+		AKPKG00000000000000000003 /* XCRemoteSwiftPackageReference "Controls" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/AudioKit/Controls.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.1.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		AKPROD000000000000000001 /* AudioKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AKPKG00000000000000000001 /* XCRemoteSwiftPackageReference "AudioKit" */;
+			productName = AudioKit;
+		};
+		AKPROD000000000000000002 /* AudioKitUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AKPKG00000000000000000002 /* XCRemoteSwiftPackageReference "AudioKitUI" */;
+			productName = AudioKitUI;
+		};
+		AKPROD000000000000000003 /* Controls */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AKPKG00000000000000000003 /* XCRemoteSwiftPackageReference "Controls" */;
+			productName = Controls;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = A80000000000000000000001 /* Project object */;
 }

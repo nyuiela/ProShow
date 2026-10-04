@@ -65,6 +65,7 @@ struct CanvasEditorView: View {
     @State private var liveDrag = CanvasLiveDragSession()
     @State private var liveGlowPulse = false
     @State private var mouseTracker = CanvasEditorMouseTracker()
+    @State private var rulerDraggingGuideID: UUID?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var editor: EditorEngine { controller.editors }
@@ -72,6 +73,9 @@ struct CanvasEditorView: View {
         let _ = editor.documents
         let _ = editor.selectedObjectIDs
         let _ = editor.selectedDocumentID
+        let _ = editor.liveHandleBounds
+        let _ = editor.guideLines.isInteracting
+        let _ = editor.guideLines.draggingGuideLivePosition
         let _ = controller.inspector.timers.map { "\($0.id)-\($0.displaySeconds)-\($0.isRunning)-\($0.durationSeconds)" }
         VStack(spacing: 0) {
             HStack(spacing: 0) {
@@ -87,12 +91,17 @@ struct CanvasEditorView: View {
         }
         .background(ProShowTheme.canvas)
         .lockFlickerFreeBackground()
+        .background {
+            let _ = controller.liveQuotePresentationStamp
+            Color.clear
+        }
         .environment(\.dynamicText, controller.dynamicTextContext())
+        .environment(\.liveQuoteEngine, controller.liveQuotes)
         .environment(\.buildClock, controller.editorBuildClock())
         .environment(\.animationEvaluationMode, controller.isCanvasEditorPresented ? controller.editorAnimationMode() : .thumbnailPreview)
         .environment(\.buildPhaseFilter, controller.editorBuildPhaseFilter())
-        // Program video uses AVPlayerLayer on canvas so playback is not tied to SharedTexture pulls.
-        .environment(\.mirrorsProgramPlayer, false)
+        // Same copied program frame as Audience. A second AVPlayerLayer stalls the decoder after a few seconds.
+        .environment(\.mirrorsProgramPlayer, true)
         .preferredColorScheme(.dark)
         .focusEffectDisabled()
         .onAppear {
@@ -177,9 +186,14 @@ struct CanvasEditorView: View {
                     } label: {
                         VStack(alignment: .leading, spacing: 5) {
                             if editor.kind == .presentation {
+                                let slide = document.slideID.flatMap { controller.show.slide(id: $0) }
                                 EditorSlideThumbnail(
                                     document: document,
-                                    selected: document.id == editor.selectedDocumentID
+                                    selected: document.id == editor.selectedDocumentID,
+                                    mediaProjectRoot: controller.mediaProjectRoot,
+                                    linkedMedia: slide?.showsLinkedProgramMediaUnderCanvas == true
+                                    ? slide.flatMap { controller.resolvedAssociatedMedia(for: $0) }
+                                    : nil
                                 )
                             }
                             Text(editor.kind == .presentation ? "\(index + 1). \(document.name)" : document.name)
@@ -233,7 +247,7 @@ struct CanvasEditorView: View {
     }
 
     private var islandAccent: Color {
-        controller.isSandboxEditingLive ? ProShowTheme.sandboxOrange : ProShowTheme.liveRed
+        controller.isEditingLiveSlide ? ProShowTheme.liveRed : ProShowTheme.secondaryLabel
     }
 
     private var liveBorderOpacity: Double {
@@ -253,41 +267,13 @@ struct CanvasEditorView: View {
     }
 
     private var liveEditorIsland: some View {
-        HStack(spacing: 8) {
-            islandModeButton(
-                title: "Live",
-                selected: controller.isEditorLockedToLive,
-                color: ProShowTheme.liveRed
-            ) {
-                controller.setEditorLockedToLive(true)
-            }
-            islandModeButton(
-                title: "Sandbox",
-                selected: controller.isSandboxEditingLive,
-                color: ProShowTheme.sandboxOrange
-            ) {
-                controller.setEditorLockedToLive(false)
-            }
-            if controller.isSandboxEditingLive {
-                Button {
-                    controller.applySandboxChanges()
-                } label: {
-                    Text("Apply Changes")
-                        .font(DeskType.micro)
-                        .foregroundStyle(controller.hasSandboxChanges ? Color.white : ProShowTheme.secondaryLabel)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(controller.hasSandboxChanges ? ProShowTheme.sandboxOrange : ProShowTheme.well)
-                        )
-                }
-                .buttonStyle(DeskPressButtonStyle())
-                .disabled(!controller.hasSandboxChanges)
-                .help("Push sandbox edits to the live audience")
-                .accessibilityLabel("Apply Changes")
-                .accessibilityHint("Moves sandbox edits onto the live output.")
-            }
+        HStack(spacing: 6) {
+            Circle()
+                .fill(islandAccent)
+                .frame(width: 8, height: 8)
+            Text(controller.isEditingLiveSlide ? "PROGRAM EDIT" : "SLIDE EDIT")
+                .font(DeskType.micro)
+                .foregroundStyle(.white)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
@@ -299,31 +285,8 @@ struct CanvasEditorView: View {
                         .strokeBorder(islandAccent.opacity(0.55), lineWidth: 1)
                 }
         }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(controller.isSandboxEditingLive ? "Sandbox mode" : "Live edit mode")
-    }
-
-    private func islandModeButton(title: String, selected: Bool, color: Color, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 5) {
-                Circle()
-                    .fill(selected ? Color.white : color)
-                    .frame(width: 6, height: 6)
-                    .accessibilityHidden(true)
-                Text(title)
-                    .font(DeskType.micro)
-            }
-            .foregroundStyle(selected ? Color.white : ProShowTheme.primaryLabel)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(selected ? color : Color.clear)
-            )
-        }
-        .buttonStyle(DeskPressButtonStyle())
-        .accessibilityLabel(title)
-        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(controller.isEditingLiveSlide ? "Editing live program slide" : "Editing slide")
     }
 
     private var canvasBoard: some View {
@@ -341,26 +304,50 @@ struct CanvasEditorView: View {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 0) {
                     ProShowTheme.panel.frame(width: 24, height: 20)
-                    LiveOriginRuler(
-                        session: liveDrag,
+                    CanvasRulerView(
                         axis: .horizontal,
                         scale: scale,
-                        origin: originX,
+                        origin: originX + liveDrag.pan.width,
                         majorTick: metrics.majorTick,
-                        minorTick: metrics.minorTick
+                        minorTick: metrics.minorTick,
+                        isActive: editor.guideLines.spawnAxis == .horizontal || rulerDraggingGuideOnHorizontalRuler,
+                        userGuides: editor.userGuides.filter { $0.axis == .vertical }
                     )
                     .frame(width: workspace.width, height: 20)
+                    .contentShape(Rectangle())
+                    .highPriorityGesture(
+                        userGuideWorkbenchGesture(
+                            scale: scale,
+                            originX: originX,
+                            originY: originY,
+                            canvasWidth: width,
+                            canvasHeight: height,
+                            startMode: .horizontalRulerBand
+                        )
+                    )
                 }
                 HStack(spacing: 0) {
-                    LiveOriginRuler(
-                        session: liveDrag,
+                    CanvasRulerView(
                         axis: .vertical,
                         scale: scale,
-                        origin: originY,
+                        origin: originY + liveDrag.pan.height,
                         majorTick: metrics.majorTick,
-                        minorTick: metrics.minorTick
+                        minorTick: metrics.minorTick,
+                        isActive: editor.guideLines.spawnAxis == .vertical || rulerDraggingGuideOnVerticalRuler,
+                        userGuides: editor.userGuides.filter { $0.axis == .horizontal }
                     )
                     .frame(width: 24, height: workspace.height)
+                    .contentShape(Rectangle())
+                    .highPriorityGesture(
+                        userGuideWorkbenchGesture(
+                            scale: scale,
+                            originX: originX,
+                            originY: originY,
+                            canvasWidth: width,
+                            canvasHeight: height,
+                            startMode: .verticalRulerBand
+                        )
+                    )
                     workspacePane(
                         document: document,
                         canvasWidth: width,
@@ -375,6 +362,33 @@ struct CanvasEditorView: View {
                     )
                     .frame(width: workspace.width, height: workspace.height)
                     .clipped()
+                    .overlay(alignment: .bottomTrailing) {
+                        if editor.gridConfig.showCanvasMinimap {
+                            CanvasMinimapView(
+                                canvasSize: CGSize(width: width, height: height),
+                                objects: document?.objects ?? [],
+                                currentZoom: CGFloat(scale),
+                                viewportOriginCanvas: viewportOriginCanvas(
+                                    originX: originX,
+                                    originY: originY,
+                                    scale: scale
+                                ),
+                                paneSize: workspace,
+                                onNavigate: { point in
+                                    editor.centerViewportOn(
+                                        canvasX: Double(point.x),
+                                        canvasY: Double(point.y),
+                                        paneWidth: workspace.width,
+                                        paneHeight: workspace.height,
+                                        canvasWidth: width,
+                                        canvasHeight: height
+                                    )
+                                }
+                            )
+                            .padding(10)
+                            .fixedSize()
+                        }
+                    }
                     .onAppear {
                         fittedDocumentID = nil
                         rememberAndFit(session: editor.kind, workspace: workspace, canvasWidth: width, canvasHeight: height)
@@ -390,6 +404,23 @@ struct CanvasEditorView: View {
                     }
                 }
             }
+            .coordinateSpace(name: "canvasWorkbench")
+            .overlay {
+                if editor.guideLines.isInteracting || rulerDraggingGuideID != nil {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .gesture(
+                            userGuideWorkbenchGesture(
+                                scale: scale,
+                                originX: originX,
+                                originY: originY,
+                                canvasWidth: width,
+                                canvasHeight: height,
+                                startMode: .continuationOnly
+                            )
+                        )
+                }
+            }
             #if os(macOS)
             .focusable()
             .focusEffectDisabled()
@@ -403,7 +434,12 @@ struct CanvasEditorView: View {
                 }
             }
             .onDeleteCommand {
-                editor.deleteSelected()
+                let ids = editor.selectedObjectIDs
+                guard !ids.isEmpty else { return }
+                for id in ids {
+                    controller.deleteElement(id: id)
+                }
+                editor.selectedObjectIDs = []
             }
             #endif
         }
@@ -421,23 +457,67 @@ struct CanvasEditorView: View {
         originY: Double,
         workspace: CGSize
     ) -> some View {
-        ZStack(alignment: .topLeading) {
+        let canvasOrigin = CGPoint(
+            x: CanvasEditorScreenAlign.screenPoint(originX + liveDrag.pan.width),
+            y: CanvasEditorScreenAlign.screenPoint(originY + liveDrag.pan.height)
+        )
+        let viewport = workspace
+        return ZStack(alignment: .topLeading) {
             Color(red: 0.31, green: 0.31, blue: 0.33)
-                .onTapGesture { editor.clearObjectSelection() }
-                .gesture(workspacePan)
-                .contextMenu { CanvasBlankContextMenu(editor: editor, controller: controller) }
-            canvasSurface(
+                .frame(width: viewport.width, height: viewport.height)
+            CanvasWorkbenchGuideOverlay(
+                gridConfig: editor.gridConfig,
+                snapState: editor.layoutSnapState,
                 canvasWidth: canvasWidth,
                 canvasHeight: canvasHeight,
-                gridStep: gridStep,
-                scale: scale,
-                canvasW: canvasW,
-                canvasH: canvasH,
-                originX: originX,
-                originY: originY
+                scale: CGFloat(scale),
+                viewportSize: viewport,
+                canvasOrigin: canvasOrigin
             )
-            .modifier(CanvasLivePanModifier(session: liveDrag, originX: originX, originY: originY))
+            ZStack(alignment: .topLeading) {
+                Color.clear
+                    .frame(width: viewport.width, height: viewport.height)
+                    .contentShape(Rectangle())
+                    .onTapGesture { editor.clearObjectSelection() }
+                    .gesture(workspacePan)
+                    .contextMenu { CanvasBlankContextMenu(editor: editor, controller: controller) }
+                canvasSurface(
+                    canvasWidth: canvasWidth,
+                    canvasHeight: canvasHeight,
+                    gridStep: gridStep,
+                    scale: scale,
+                    canvasW: canvasW,
+                    canvasH: canvasH,
+                    originX: originX,
+                    originY: originY
+                )
+                .frame(width: canvasW, height: canvasH, alignment: .topLeading)
+                .offset(x: canvasOrigin.x, y: canvasOrigin.y)
+            }
+            .frame(width: viewport.width, height: viewport.height, alignment: .topLeading)
+            .clipped()
+            CanvasUserGuideViewportOverlay(
+                viewportSize: viewport,
+                canvasOrigin: canvasOrigin,
+                scale: CGFloat(scale),
+                userGuides: displayedUserGuides,
+                spawnPreview: guideSpawnPreview(
+                    axis: editor.guideLines.spawnAxis,
+                    position: editor.guideLines.spawnPreviewPosition
+                )
+            )
+            .frame(width: viewport.width, height: viewport.height)
+            CanvasFloatingContextBarLayer(
+                editor: editor,
+                scale: scale,
+                canvasOrigin: CGPoint(x: originX, y: originY),
+                panOffset: liveDrag.pan,
+                viewportSize: viewport
+            )
+            .frame(width: viewport.width, height: viewport.height)
         }
+        .frame(width: viewport.width, height: viewport.height, alignment: .topLeading)
+        .clipped()
         .coordinateSpace(name: "editorWorkspace")
         .simultaneousGesture(workspaceMagnify(canvasWidth: canvasWidth, canvasHeight: canvasHeight, workspace: workspace))
     }
@@ -522,9 +602,8 @@ struct CanvasEditorView: View {
         originX: CGFloat,
         originY: CGFloat
     ) -> some View {
-        canvasBackdrop
+        canvasBackdrop(scale: scale)
             .frame(width: canvasW, height: canvasH)
-            .clipped()
             .contextMenu { CanvasBlankContextMenu(editor: editor, controller: controller) }
             .overlay(alignment: .topLeading) {
                 PulsedBuildEnvironment(
@@ -544,14 +623,19 @@ struct CanvasEditorView: View {
                             )
                         )
                         .contextMenu { CanvasBlankContextMenu(editor: editor, controller: controller) }
-                    if editor.snapToGrid {
-                        CanvasGridOverlay(width: canvasWidth, height: canvasHeight, scale: scale, step: gridStep)
-                            .frame(width: canvasW, height: canvasH)
-                            .allowsHitTesting(false)
+                    if editor.gridConfig.isGridVisible {
+                        CanvasArtboardGridView(
+                            gridConfig: editor.gridConfig,
+                            canvasWidth: canvasWidth,
+                            canvasHeight: canvasHeight,
+                            scale: CGFloat(scale)
+                        )
                     }
                     ForEach(editor.selectedDocument?.sortedObjects.reversed() ?? []) { object in
                         CanvasObjectView(
+                            editor: editor,
                             object: object,
+                            canvasObjects: editor.selectedDocument?.sortedObjects ?? [],
                             slideSteps: editor.selectedDocument?.objects.flatMap(\.resolvedBuildSteps) ?? [],
                             scale: scale,
                             selected: editor.selectedObjectIDs.contains(object.id),
@@ -603,14 +687,23 @@ struct CanvasEditorView: View {
                             .allowsHitTesting(false)
                             .accessibilityHidden(true)
                     }
-                    SmartGuidesOverlay(
-                        guides: editor.lastGuides,
-                        canvasWidth: canvasWidth,
-                        canvasHeight: canvasHeight,
-                        scale: scale
+                    BroadcastFrameGuideView(
+                        documentSize: CGSize(width: canvasWidth, height: canvasHeight),
+                        scale: CGFloat(scale),
+                        showSafeAreas: editor.gridConfig.showBroadcastSafeAreas,
+                        showHeaderFooterGuides: editor.gridConfig.showHeaderFooterGuides,
+                        showColumnGrid: editor.gridConfig.showColumnLayoutGrid
                     )
                     .frame(width: canvasW, height: canvasH)
-                    .allowsHitTesting(false)
+                    CanvasGuideOverlayView(
+                        gridConfig: editor.gridConfig,
+                        snapState: editor.layoutSnapState,
+                        canvasWidth: canvasWidth,
+                        canvasHeight: canvasHeight,
+                        scale: scale,
+                        workbenchGuidesEnabled: true
+                    )
+                    .frame(width: canvasW, height: canvasH)
                     #if os(macOS)
                     CanvasHoverTrackingView(scale: scale, editor: editor, tracker: mouseTracker)
                         .frame(width: canvasW, height: canvasH)
@@ -639,15 +732,53 @@ struct CanvasEditorView: View {
             }
     }
 
-    private var canvasBackdrop: some View {
-        ZStack {
+    private func canvasBackdrop(scale: Double) -> some View {
+        let gridUnit = editor.gridConfig.gridSizePoints
+        let cellSize = CanvasGridDisplay.checkerboardCellSize(documentUnit: gridUnit, scale: CGFloat(scale))
+        return ZStack {
             if showsCanvasTransparencyGrid {
-                CheckerboardFill()
+                CheckerboardFill(cellSize: cellSize)
             }
             Rectangle()
                 .fill(canvasFill)
+            if let media = programMediaCueBackdrop {
+                programMediaCuePreview(media)
+                    .allowsHitTesting(false)
+            }
         }
         .accessibilityLabel(showsCanvasTransparencyGrid ? "Transparent canvas" : "Canvas background")
+    }
+
+    /// Linked Layer 3 media under transparent canvas (stays visible after adding text/shapes).
+    private var programMediaCueBackdrop: MediaAction? {
+        guard editor.kind == .presentation,
+              let document = editor.selectedDocument,
+              let slideID = document.slideID,
+              let slide = controller.show.slide(id: slideID),
+              slide.showsLinkedProgramMediaUnderCanvas,
+              let media = controller.editorWorkspaceMedia(for: document)
+        else { return nil }
+        return media
+    }
+
+    @ViewBuilder
+    private func programMediaCuePreview(_ media: MediaAction) -> some View {
+        let onAir = controller.isAudienceOutputOn && !controller.isAudienceCleared
+        let mirrorLiveVideo = !onAir
+            && !media.isImage
+            && controller.playback.sharesClock(with: media)
+            && controller.playback.canPresentVideo
+        if mirrorLiveVideo {
+            SharedProgramPlayerView(playback: controller.playback)
+        } else {
+            MediaPreviewFrame(
+                filePath: media.filePath,
+                artworkURL: media.resolvedFileURL(projectRoot: controller.mediaProjectRoot),
+                kind: media.isImage ? .image : .video(duration: media.duration ?? ""),
+                tintHex: media.tintHex,
+                cornerRadius: 0
+            )
+        }
     }
 
     private var showsCanvasTransparencyGrid: Bool {
@@ -674,27 +805,24 @@ struct CanvasEditorView: View {
                     return
                 }
                 if editor.dragOrigins.isEmpty {
+                    guard let object = editor.selectedDocument?.objects.first(where: { $0.id == id }),
+                          !object.isCanvasLocked
+                    else { return }
                     editor.beginDrag(id: id)
                 }
-                liveDrag.offset = value.translation
+                editor.bypassSnapping = EditorObjectTreeModifiers.commandHeld
+                let tx = Double(value.translation.width / max(scale, 0.0001))
+                let ty = Double(value.translation.height / max(scale, 0.0001))
+                editor.updateDrag(translationX: tx, translationY: ty)
+                liveDrag.offset = .zero
             }
-            .onEnded { value in
+            .onEnded { _ in
                 if isPanning {
                     commitLivePan()
                     return
                 }
-                var transaction = Transaction()
-                transaction.disablesAnimations = true
-                withTransaction(transaction) {
-                    if !editor.dragOrigins.isEmpty {
-                        editor.updateDrag(
-                            translationX: Double(value.translation.width / max(scale, 0.0001)),
-                            translationY: Double(value.translation.height / max(scale, 0.0001))
-                        )
-                        editor.endDrag()
-                    }
-                    liveDrag.offset = .zero
-                }
+                editor.endDrag()
+                liveDrag.offset = .zero
             }
     }
 
@@ -956,8 +1084,10 @@ struct CanvasEditorView: View {
                     .accessibilityLabel("Transparent canvas. Program media stays on output.")
             }
             toggleIcon("square.split.2x2", isOn: editorFlag(\.checkerboard))
-            toggleIcon("line.3.horizontal", isOn: editorFlag(\.snapGuides))
-            toggleIcon("grid", isOn: editorFlag(\.snapToGrid))
+            precisionToggle("eye", title: "Grid", isOn: gridBinding(\.isGridVisible))
+            precisionToggle("arrow.up.and.down.and.arrow.left.and.right", title: "Snap", isOn: gridBinding(\.isSnapToGridEnabled))
+            precisionToggle("ruler", title: "Smart guides", isOn: gridBinding(\.isSmartGuidesEnabled))
+            canvasOverlayMenu
             Button {
                 zoomAroundCenter(editor.zoom / 1.15)
             } label: {
@@ -1018,6 +1148,272 @@ struct CanvasEditorView: View {
                 .foregroundStyle(isOn.wrappedValue ? .white : ProShowTheme.secondaryLabel)
         }
         .buttonStyle(.plain)
+    }
+
+    private func gridBinding(_ keyPath: WritableKeyPath<CanvasGridConfig, Bool>) -> Binding<Bool> {
+        Binding(
+            get: { editor.gridConfig[keyPath: keyPath] },
+            set: { editor.gridConfig[keyPath: keyPath] = $0 }
+        )
+    }
+
+    private var canvasOverlayMenu: some View {
+        Menu {
+            Toggle("Action & title safe", isOn: gridBinding(\.showBroadcastSafeAreas))
+            Toggle("Header & footer zones", isOn: gridBinding(\.showHeaderFooterGuides))
+            Toggle("12-column grid", isOn: gridBinding(\.showColumnLayoutGrid))
+            Toggle("Snap to user guides", isOn: gridBinding(\.snapToUserGuides))
+            Toggle("Minimap navigator", isOn: gridBinding(\.showCanvasMinimap))
+        } label: {
+            Image(systemName: "rectangle.dashed")
+                .foregroundStyle(
+                    editor.gridConfig.showBroadcastSafeAreas
+                        || editor.gridConfig.showHeaderFooterGuides
+                        || editor.gridConfig.showColumnLayoutGrid
+                        ? ProShowTheme.accent
+                        : ProShowTheme.secondaryLabel
+                )
+        }
+        .menuStyle(.borderlessButton)
+        .help("Canvas overlay guides")
+        .accessibilityLabel("Canvas overlay guides")
+    }
+
+    private func guideSpawnPreview(axis: GuideAxis?, position: CGFloat) -> UserGuideLine? {
+        guard let axis else { return nil }
+        return UserGuideLine(axis: axis, position: position)
+    }
+
+    private var displayedUserGuides: [UserGuideLine] {
+        var guides = editor.userGuides
+        guard let dragID = editor.guideLines.activeDraggingGuideID,
+              let live = editor.guideLines.draggingGuideLivePosition,
+              let index = guides.firstIndex(where: { $0.id == dragID })
+        else { return guides }
+        guides[index].position = live
+        return guides
+    }
+
+    private func viewportOriginCanvas(originX: CGFloat, originY: CGFloat, scale: Double) -> CGPoint {
+        let safeScale = max(scale, 0.0001)
+        return CGPoint(
+            x: CGFloat(-(originX + liveDrag.pan.width) / safeScale),
+            y: CGFloat(-(originY + liveDrag.pan.height) / safeScale)
+        )
+    }
+
+    private var rulerDraggingGuideOnHorizontalRuler: Bool {
+        guard let id = rulerDraggingGuideID,
+              let guide = editor.userGuides.first(where: { $0.id == id })
+        else { return false }
+        return guide.axis == .vertical
+    }
+
+    private var rulerDraggingGuideOnVerticalRuler: Bool {
+        guard let id = rulerDraggingGuideID,
+              let guide = editor.userGuides.first(where: { $0.id == id })
+        else { return false }
+        return guide.axis == .horizontal
+    }
+
+    private enum UserGuideGestureStart {
+        case horizontalRulerBand
+        case verticalRulerBand
+        case continuationOnly
+    }
+
+    private func userGuideWorkbenchGesture(
+        scale: Double,
+        originX: CGFloat,
+        originY: CGFloat,
+        canvasWidth: Double,
+        canvasHeight: Double,
+        startMode: UserGuideGestureStart
+    ) -> some Gesture {
+        DragGesture(minimumDistance: 1, coordinateSpace: .named("canvasWorkbench"))
+            .onChanged { value in
+                if startMode != .continuationOnly,
+                   rulerDraggingGuideID == nil,
+                   editor.guideLines.spawnAxis == nil {
+                    if let hit = rulerUserGuideID(
+                        at: value.startLocation,
+                        scale: CGFloat(scale),
+                        originX: originX,
+                        originY: originY
+                    ) {
+                        rulerDraggingGuideID = hit
+                        editor.guideLines.activeDraggingGuideID = hit
+                        if let guide = editor.userGuides.first(where: { $0.id == hit }) {
+                            editor.guideLines.draggingGuideLivePosition = guide.position
+                        }
+                    } else if startMode == .horizontalRulerBand,
+                              value.startLocation.y <= GuideRulerWorkbench.topRulerHeight,
+                              value.startLocation.x > GuideRulerWorkbench.leftRulerWidth {
+                        editor.guideLines.spawnAxis = .horizontal
+                    } else if startMode == .verticalRulerBand,
+                              value.startLocation.x <= GuideRulerWorkbench.leftRulerWidth,
+                              value.startLocation.y > GuideRulerWorkbench.topRulerHeight {
+                        editor.guideLines.spawnAxis = .vertical
+                    } else {
+                        return
+                    }
+                }
+
+                guard editor.guideLines.isInteracting || rulerDraggingGuideID != nil else { return }
+
+                if let dragID = rulerDraggingGuideID,
+                   let guide = editor.userGuides.first(where: { $0.id == dragID }) {
+                    let workspacePoint = workspacePoint(fromWorkbench: value.location)
+                    let mapped = canvasPoint(
+                        fromWorkspace: workspacePoint,
+                        scale: CGFloat(scale),
+                        originX: originX,
+                        originY: originY
+                    )
+                    let pos = guide.axis == .horizontal ? mapped.y : mapped.x
+                    editor.guideLines.draggingGuideLivePosition = pos
+                    return
+                }
+
+                guard let spawnAxis = editor.guideLines.spawnAxis else { return }
+                let workspacePoint = workspacePoint(fromWorkbench: value.location)
+                let mapped = canvasPoint(
+                    fromWorkspace: workspacePoint,
+                    scale: CGFloat(scale),
+                    originX: originX,
+                    originY: originY
+                )
+                switch spawnAxis {
+                case .horizontal:
+                    editor.guideLines.spawnPreviewPosition = mapped.y
+                case .vertical:
+                    editor.guideLines.spawnPreviewPosition = mapped.x
+                }
+            }
+            .onEnded { value in
+                defer { clearRulerGuideInteractionState() }
+
+                if let dragID = rulerDraggingGuideID,
+                   let guide = editor.userGuides.first(where: { $0.id == dragID }) {
+                    let workspacePoint = workspacePoint(fromWorkbench: value.location)
+                    let mapped = canvasPoint(
+                        fromWorkspace: workspacePoint,
+                        scale: CGFloat(scale),
+                        originX: originX,
+                        originY: originY
+                    )
+                    let releasePos = guide.axis == .horizontal ? mapped.y : mapped.x
+                    let stored = editor.guideLines.draggingGuideLivePosition ?? guide.position
+                    let droppedInRuler = editor.guideLines.droppedOnOriginatingRuler(
+                        axis: guide.axis,
+                        workbenchPoint: value.location
+                    )
+                    let canvasSize = CGSize(width: canvasWidth, height: canvasHeight)
+                    let pos = editor.guideLines.resolvedUserGuidePositionAfterDrag(
+                        releasePosition: releasePos,
+                        storedPosition: stored,
+                        axis: guide.axis,
+                        canvasSize: canvasSize,
+                        droppedInRuler: droppedInRuler
+                    )
+                    editor.finishUserGuideDrag(
+                        id: dragID,
+                        position: pos,
+                        axis: guide.axis,
+                        canvasSize: canvasSize,
+                        droppedInRuler: droppedInRuler
+                    )
+                    return
+                }
+
+                guard let spawnAxis = editor.guideLines.spawnAxis else { return }
+                editor.guideLines.spawnAxis = nil
+                let workspacePoint = workspacePoint(fromWorkbench: value.location)
+                guard isOnCanvasArtboard(
+                    workspacePoint: workspacePoint,
+                    canvasWidth: canvasWidth,
+                    canvasHeight: canvasHeight,
+                    scale: CGFloat(scale),
+                    originX: originX,
+                    originY: originY
+                ) else { return }
+
+                let mapped = canvasPoint(
+                    fromWorkspace: workspacePoint,
+                    scale: CGFloat(scale),
+                    originX: originX,
+                    originY: originY
+                )
+                let raw = spawnAxis == .horizontal ? mapped.y : mapped.x
+                let limit = spawnAxis == .horizontal ? canvasHeight : canvasWidth
+                let clamped = min(max(0, raw), limit)
+                editor.addUserGuide(axis: spawnAxis, position: CGFloat(clamped))
+            }
+    }
+
+    private func clearRulerGuideInteractionState() {
+        rulerDraggingGuideID = nil
+        editor.guideLines.clearInteraction()
+    }
+
+    private func workspacePoint(fromWorkbench point: CGPoint) -> CGPoint {
+        CGPoint(x: point.x - 24, y: point.y - 20)
+    }
+
+    private func isOnCanvasArtboard(
+        workspacePoint: CGPoint,
+        canvasWidth: Double,
+        canvasHeight: Double,
+        scale: CGFloat,
+        originX: CGFloat,
+        originY: CGFloat
+    ) -> Bool {
+        let origin = CGPoint(x: originX + liveDrag.pan.width, y: originY + liveDrag.pan.height)
+        let width = canvasWidth * Double(scale)
+        let height = canvasHeight * Double(scale)
+        return workspacePoint.x >= origin.x
+            && workspacePoint.x <= origin.x + width
+            && workspacePoint.y >= origin.y
+            && workspacePoint.y <= origin.y + height
+    }
+
+    private func rulerUserGuideID(
+        at workbenchPoint: CGPoint,
+        scale: CGFloat,
+        originX: CGFloat,
+        originY: CGFloat
+    ) -> UUID? {
+        let threshold: CGFloat = 10
+        let pan = liveDrag.pan
+        for guide in editor.userGuides where !guide.isLocked {
+            switch guide.axis {
+            case .vertical:
+                let markerX = 24 + originX + pan.width + guide.position * scale
+                if workbenchPoint.y <= 20, workbenchPoint.x >= 24,
+                   abs(workbenchPoint.x - markerX) <= threshold {
+                    return guide.id
+                }
+            case .horizontal:
+                let markerY = 20 + originY + pan.height + guide.position * scale
+                if workbenchPoint.x <= 24, workbenchPoint.y >= 20,
+                   abs(workbenchPoint.y - markerY) <= threshold {
+                    return guide.id
+                }
+            }
+        }
+        return nil
+    }
+
+    private func precisionToggle(_ name: String, title: String, isOn: Binding<Bool>) -> some View {
+        Button {
+            isOn.wrappedValue.toggle()
+        } label: {
+            Image(systemName: name)
+                .foregroundStyle(isOn.wrappedValue ? ProShowTheme.accent : ProShowTheme.secondaryLabel)
+        }
+        .buttonStyle(.plain)
+        .help(title)
+        .accessibilityLabel(title)
     }
 
     private func labeled(_ title: String, @ViewBuilder content: () -> some View) -> some View {
@@ -1276,6 +1672,18 @@ private struct EditorObjectTreeRow: View {
             .buttonStyle(DeskPressButtonStyle())
             .help(object.visibleOnAudience ? "Hide on audience" : "Show on audience")
             .accessibilityLabel(object.visibleOnAudience ? "Hide \(object.name) on audience" : "Show \(object.name) on audience")
+            Button {
+                editor.toggleCanvasLock(id: object.id)
+            } label: {
+                Image(systemName: object.isCanvasLocked ? "lock.fill" : "lock.open")
+                    .font(.caption2)
+                    .foregroundStyle(object.isCanvasLocked ? ProShowTheme.accent : ProShowTheme.secondaryLabel)
+                    .frame(width: 22, height: 22)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(DeskPressButtonStyle())
+            .help(object.isCanvasLocked ? "Unlock \(object.name)" : "Lock \(object.name)")
+            .accessibilityLabel(object.isCanvasLocked ? "Unlock \(object.name)" : "Lock \(object.name)")
         }
     }
 
@@ -1509,7 +1917,9 @@ private struct CanvasGridOverlay: View {
 }
 
 private struct CanvasObjectView: View {
+    var editor: EditorEngine
     let object: CanvasObject
+    var canvasObjects: [CanvasObject] = []
     var slideSteps: [ElementBuildStep] = []
     var scale: CGFloat
     var selected: Bool
@@ -1517,26 +1927,53 @@ private struct CanvasObjectView: View {
     var onEdit: ((String) -> Void)? = nil
     var onCommit: ((String) -> Void)? = nil
     @Environment(\.dynamicText) private var dynamicText
+    @Environment(\.liveQuoteEngine) private var liveQuoteEngine
     @Environment(\.proShowPlayback) private var playback
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.animationEvaluationMode) private var evaluationMode
 
-    private var width: CGFloat { max(1, object.bounds.width * scale) }
-    private var height: CGFloat { max(1, object.bounds.height * scale) }
+    private var displayBounds: CanvasBounds { editor.displayBounds(for: object) }
+    private var committedBounds: CanvasBounds { object.bounds }
+    private var layoutBounds: CanvasBounds {
+        editor.usesDecoderFreeResizePreview(for: object) ? committedBounds : displayBounds
+    }
+    private func screenLength(_ document: CGFloat) -> CGFloat {
+        max(1, CanvasEditorScreenAlign.screenPoint(document * scale))
+    }
+
+    private func screenOffset(_ document: Double) -> CGFloat {
+        CanvasEditorScreenAlign.screenPoint(CGFloat(document) * scale)
+    }
+
+    private var width: CGFloat { screenLength(CGFloat(layoutBounds.width)) }
+    private var height: CGFloat { screenLength(CGFloat(layoutBounds.height)) }
+    private var rotation: Double { editor.displayRotation(for: object) }
+    private var resizePreviewTransform: CGAffineTransform {
+        guard editor.usesDecoderFreeResizePreview(for: object),
+              let live = editor.liveHandleBounds[object.id]
+        else { return .identity }
+        return VideoResizePreviewScaler.previewTransformInViewSpace(
+            from: committedBounds,
+            to: live,
+            canvasScale: scale
+        )
+    }
 
     var body: some View {
         BuildAnimated(object: object, slideSteps: slideSteps, scale: scale) { state in
             let stack = objectStack(state)
                 .frame(width: width, height: height)
+                .contentShape(Rectangle())
                 .overlay(selectionRing)
             Group {
                 if object.hostsLayerBackedMedia {
                     stack
+                        .transformEffect(resizePreviewTransform)
                         .shadow(color: dropShadowColor, radius: dropShadowRadius, x: dropShadowX, y: dropShadowY)
-                        .rotationEffect(.degrees(object.transform.rotation))
+                        .rotationEffect(.degrees(rotation))
                         .scaleEffect(x: object.transform.flipHorizontal ? -1 : 1, y: object.transform.flipVertical ? -1 : 1)
                         .blendMode(layerBlend)
-                        .offset(x: object.bounds.x * scale, y: object.bounds.y * scale)
+                        .offset(x: screenOffset(layoutBounds.x), y: screenOffset(layoutBounds.y))
                         .opacity(object.opacity * (object.visibleOnAudience ? 1 : 0.32))
                         .hiddenKeepingAlive(object.opacity < 0.02 || !object.visibleOnAudience)
                 } else {
@@ -1544,10 +1981,10 @@ private struct CanvasObjectView: View {
                         .clipped()
                         .shadow(color: dropShadowColor, radius: dropShadowRadius, x: dropShadowX, y: dropShadowY)
                         .blur(radius: featherRadius)
-                        .rotationEffect(.degrees(object.transform.rotation))
+                        .rotationEffect(.degrees(rotation))
                         .scaleEffect(x: object.transform.flipHorizontal ? -1 : 1, y: object.transform.flipVertical ? -1 : 1)
                         .blendMode(layerBlend)
-                        .offset(x: object.bounds.x * scale, y: object.bounds.y * scale)
+                        .offset(x: screenOffset(displayBounds.x), y: screenOffset(displayBounds.y))
                         .opacity(object.opacity * (object.visibleOnAudience ? 1 : 0.32))
                 }
             }
@@ -1567,15 +2004,14 @@ private struct CanvasObjectView: View {
             )
             overlayContent(state)
         }
+        .canvasElementShimmer(object.resolvedShimmer, scale: scale)
     }
 
     @ViewBuilder
     private func overlayContent(_ state: TransformedRenderState) -> some View {
         if object.isTextLike {
             objectLabel(state)
-                .padding(textInsets)
-                .frame(width: width, height: height, alignment: textFrameAlignment)
-                .clipped()
+                .canvasTextBoxFrame(object: object, width: width, height: height, scale: scale)
         } else if object.assignedSource == nil && object.fill.type != .image && (object.kind == .image || object.kind == .videoInput || object.kind == .webView) {
             mediaPlaceholder
         }
@@ -1609,15 +2045,6 @@ private struct CanvasObjectView: View {
         }
     }
 
-    private var textInsets: EdgeInsets {
-        EdgeInsets(
-            top: object.textLayout.margins.top * scale,
-            leading: object.textLayout.margins.left * scale,
-            bottom: object.textLayout.margins.bottom * scale,
-            trailing: object.textLayout.margins.right * scale
-        )
-    }
-
     private var dropShadowColor: Color {
         object.shadow.enabled ? (Color(hex: object.shadow.color) ?? .black).opacity(0.7) : .clear
     }
@@ -1639,37 +2066,56 @@ private struct CanvasObjectView: View {
     }
 
     private func objectLabel(_ state: TransformedRenderState) -> some View {
-        ZStack(alignment: textFrameAlignment) {
-            TimelineView(.periodic(from: .now, by: textTimelineInterval)) { timeline in
-                let resolved = editing
-                    ? object.text
-                    : DynamicTextEngine.resolve(object, context: countdownContext(at: timeline.date))
-                if object.textLayout.isLooping, !editing {
-                    TextLoopMarquee(object: object, text: resolved, scale: scale, reduceMotion: reduceMotion) {
-                        styledText(resolved, expands: false)
-                    }
-                    .allowsHitTesting(false)
-                } else {
-                    marqueeText(resolved, state: state)
-                        .allowsHitTesting(!editing)
-                }
-            }
+        ZStack(alignment: object.canvasTextFrameAlignment) {
             if editing {
-                TransparentCanvasTextInput(
+                CanvasAttributedTextInput(
+                    object: object,
+                    scale: scale,
                     text: object.text,
-                    fontName: object.typography.fontFamily,
-                    fontSize: max(1, object.typography.fontSize * scale),
-                    weightToken: object.typography.fontWeight,
-                    bold: object.typography.isBold,
-                    italic: object.typography.isItalic,
-                    caret: Color(hex: object.typography.color) ?? .white,
-                    alignment: textAlignment,
                     onChange: { onEdit?($0) },
                     onCommit: { latest in onCommit?(latest) }
                 )
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: object.canvasTextFrameAlignment)
+            } else if let liveQuoteEngine {
+                LiveQuoteRefreshScope(engine: liveQuoteEngine) {
+                    objectLabelLiveText(state)
+                }
+            } else {
+                objectLabelLiveText(state)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: textFrameAlignment)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: object.canvasTextFrameAlignment)
+    }
+
+    @ViewBuilder
+    private func objectLabelLiveText(_ state: TransformedRenderState) -> some View {
+        TimelineView(.periodic(from: .now, by: textTimelineInterval)) { timeline in
+            let context = countdownContext(at: timeline.date)
+            let resolved = DynamicTextEngine.resolve(object, context: context)
+            if object.textLayout.isLooping {
+                MarqueeTextLoopView(
+                    object: object,
+                    text: DynamicTextEngine.loopScrollText(for: object, resolved: resolved),
+                    scale: scale,
+                    reduceMotion: reduceMotion,
+                    canvasObjects: canvasObjects,
+                    liveQuotes: context.quotes,
+                    dynamicTextContext: context
+                )
+                .allowsHitTesting(false)
+            } else if MarketTickerRouting.usesStaticColoredLiveQuote(object) {
+                StaticColoredLiveQuoteView(
+                    object: object,
+                    canvasObjects: canvasObjects,
+                    scale: scale,
+                    liveQuotes: context.quotes
+                )
+                .allowsHitTesting(false)
+            } else {
+                marqueeText(resolved, context: context, state: state)
+                    .allowsHitTesting(true)
+            }
+        }
     }
 
     private var textTimelineInterval: TimeInterval {
@@ -1683,7 +2129,11 @@ private struct CanvasObjectView: View {
     }
 
     private func countdownContext(at date: Date) -> DynamicTextContext {
-        var context = dynamicText.ticking(now: date)
+        var context = LiveQuoteEnvironment.mergedContext(
+            base: dynamicText,
+            engine: liveQuoteEngine,
+            at: date
+        )
         if object.resolvedCountdownValueSource == .programMedia, let playback, playback.duration > 0.05 {
             context.mediaRemainingSeconds = Int(playback.remaining.rounded(.towardZero))
         }
@@ -1691,50 +2141,73 @@ private struct CanvasObjectView: View {
     }
 
     @ViewBuilder
-    private func marqueeText(_ value: String, state: TransformedRenderState) -> some View {
+    private func marqueeText(_ value: String, context: DynamicTextContext, state: TransformedRenderState) -> some View {
         if state.usesMarquee {
             Group {
                 if state.marqueeVertical {
                     VStack(spacing: max(0, state.marqueeGapPx * scale)) {
-                        styledText(value).fixedSize(horizontal: false, vertical: true)
-                        styledText(value).fixedSize(horizontal: false, vertical: true)
+                        styledText(value, context: context).fixedSize(horizontal: false, vertical: true)
+                        styledText(value, context: context).fixedSize(horizontal: false, vertical: true)
                     }
                     .offset(y: state.scrollOffsetPx * scale)
                 } else {
                     HStack(spacing: max(0, state.marqueeGapPx * scale)) {
-                        styledText(value).fixedSize(horizontal: true, vertical: false)
-                        styledText(value).fixedSize(horizontal: true, vertical: false)
+                        styledText(value, context: context).fixedSize(horizontal: true, vertical: false)
+                        styledText(value, context: context).fixedSize(horizontal: true, vertical: false)
                     }
                     .offset(x: state.scrollOffsetPx * scale)
                 }
             }
         } else {
-            styledText(value)
+            styledText(value, context: context)
         }
     }
 
-    private func styledText(_ value: String, expands: Bool = true) -> some View {
-        Text(value)
-            .font(canvasFont)
-            .italic(object.typography.isItalic)
-            .underline(object.typography.isUnderline)
-            .strikethrough(object.typography.isStrikethrough)
-            .baselineOffset(object.typography.isSuperscript ? object.typography.fontSize * scale * 0.35 : (object.typography.isSubscript ? -object.typography.fontSize * scale * 0.25 : 0))
-            .foregroundStyle(Color(hex: object.typography.color) ?? .white)
-            .shadow(color: outlineColor, radius: 0, x: outlineWidth, y: 0)
-            .shadow(color: outlineColor, radius: 0, x: -outlineWidth, y: 0)
-            .shadow(color: outlineColor, radius: 0, x: 0, y: outlineWidth)
-            .shadow(color: outlineColor, radius: 0, x: 0, y: -outlineWidth)
-            .shadow(color: textShadowColor, radius: textShadowRadius, x: textShadowX, y: textShadowY)
+    private func styledText(_ value: String, context: DynamicTextContext? = nil, expands: Bool = true) -> some View {
+        Group {
+            #if os(macOS)
+            if LiveQuoteDisplayRouting.usesTokenDisplayTemplate(object),
+               let context,
+               let liveQuote = LiveQuoteTemplateRenderer.makeAttributedString(
+                   object: object,
+                   scale: scale,
+                   context: context,
+                   colorConfig: TickerConfigStore.shared.colorConfig
+               ) {
+                CanvasStaticAttributedTextView(object: object, attributed: liveQuote, scale: scale)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: object.canvasTextFrameAlignment)
+            } else {
+            Text(AttributedString(TextAttributeConverter.makeAttributedString(
+                object: object,
+                text: value,
+                scale: scale
+            )))
             .multilineTextAlignment(textAlignment)
-            .lineSpacing(max(0, (object.textLayout.lineHeight - 1) * object.typography.fontSize * scale))
-            .kerning(object.textLayout.characterSpacing * scale)
-            .modifier(LoopingTextFit(layout: object.textLayout, maxLines: 20))
-            .frame(
-                maxWidth: expands ? .infinity : nil,
-                maxHeight: expands ? .infinity : nil,
-                alignment: textFrameAlignment
-            )
+            }
+            #else
+            Text(value)
+                .font(canvasFont)
+                .italic(object.typography.isItalic)
+                .underline(object.typography.isUnderline)
+                .strikethrough(object.typography.isStrikethrough)
+                .baselineOffset(object.typography.isSuperscript ? object.typography.fontSize * scale * 0.35 : (object.typography.isSubscript ? -object.typography.fontSize * scale * 0.25 : 0))
+                .foregroundStyle(Color(hex: object.typography.color) ?? .white)
+                .shadow(color: outlineColor, radius: 0, x: outlineWidth, y: 0)
+                .shadow(color: outlineColor, radius: 0, x: -outlineWidth, y: 0)
+                .shadow(color: outlineColor, radius: 0, x: 0, y: outlineWidth)
+                .shadow(color: outlineColor, radius: 0, x: 0, y: -outlineWidth)
+                .shadow(color: textShadowColor, radius: textShadowRadius, x: textShadowX, y: textShadowY)
+                .multilineTextAlignment(textAlignment)
+                .lineSpacing(max(0, (object.textLayout.lineHeight - 1) * object.typography.fontSize * scale))
+                .kerning(object.textLayout.characterSpacing * scale)
+            #endif
+        }
+        .modifier(LoopingTextFit(layout: object.textLayout, maxLines: CanvasTextBoxLayout.autoFitMaxLines))
+        .frame(
+            maxWidth: expands ? .infinity : nil,
+            maxHeight: expands ? .infinity : nil,
+            alignment: object.canvasTextFrameAlignment
+        )
     }
 
     private var canvasFont: Font {
@@ -1794,22 +2267,15 @@ private struct CanvasObjectView: View {
         }
     }
 
-    private var textFrameAlignment: Alignment {
-        switch object.textLayout.verticalAlign {
-        case .top:
-            object.textLayout.horizontalAlign == .right ? .topTrailing : (object.textLayout.horizontalAlign == .center ? .top : .topLeading)
-        case .middle:
-            object.textLayout.horizontalAlign == .right ? .trailing : (object.textLayout.horizontalAlign == .center ? .center : .leading)
-        case .bottom, .baseline:
-            object.textLayout.horizontalAlign == .right ? .bottomTrailing : (object.textLayout.horizontalAlign == .center ? .bottom : .bottomLeading)
-        }
-    }
 }
 
 private struct CheckerboardFill: View {
+    /// Scaled layout-grid cell size in canvas points (one document grid unit).
+    var cellSize: CGFloat = 8
+
     var body: some View {
         Canvas { context, size in
-            let cell: CGFloat = 10
+            let cell = max(1, cellSize)
             var y: CGFloat = 0
             var row = 0
             while y < size.height {
@@ -1817,7 +2283,10 @@ private struct CheckerboardFill: View {
                 var col = 0
                 while x < size.width {
                     if (row + col).isMultiple(of: 2) {
-                        context.fill(Path(CGRect(x: x, y: y, width: cell, height: cell)), with: .color(Color.white.opacity(0.18)))
+                        context.fill(
+                            Path(CGRect(x: x, y: y, width: cell, height: cell)),
+                            with: .color(Color.white.opacity(0.2))
+                        )
                     }
                     x += cell
                     col += 1
@@ -1832,6 +2301,8 @@ private struct CheckerboardFill: View {
 private struct EditorSlideThumbnail: View {
     let document: EditorDocument
     var selected: Bool
+    var mediaProjectRoot: URL?
+    var linkedMedia: MediaAction?
 
     var body: some View {
         let ratio = CGFloat(document.canvasWidth / max(document.canvasHeight, 1))
@@ -1841,12 +2312,23 @@ private struct EditorSlideThumbnail: View {
             } else {
                 CheckerboardFill()
             }
-            ProgramSlideCanvas(
-                objects: document.objects,
-                canvasWidth: document.canvasWidth,
-                canvasHeight: document.canvasHeight,
-                evaluationMode: .thumbnailPreview
-            )
+            if let linkedMedia, !document.backgroundEnabled {
+                MediaPreviewFrame(
+                    filePath: linkedMedia.filePath,
+                    artworkURL: linkedMedia.resolvedFileURL(projectRoot: mediaProjectRoot),
+                    kind: linkedMedia.isImage ? .image : .video(duration: linkedMedia.duration ?? ""),
+                    tintHex: linkedMedia.tintHex,
+                    cornerRadius: 0
+                )
+            }
+            if !document.objects.isEmpty {
+                ProgramSlideCanvas(
+                    objects: document.objects,
+                    canvasWidth: document.canvasWidth,
+                    canvasHeight: document.canvasHeight,
+                    evaluationMode: .thumbnailPreview
+                )
+            }
         }
         .frame(maxWidth: .infinity)
         .aspectRatio(ratio, contentMode: .fit)
@@ -1861,105 +2343,153 @@ private struct EditorSlideThumbnail: View {
 }
 
 #if os(macOS)
-/// Invisible input layer. Visible glyphs always come from SwiftUI `Text` so edit-in-place
-/// cannot change family, weight, italic, or size.
-private struct TransparentCanvasTextInput: NSViewRepresentable {
+/// Canvas edit-in-place using the same CoreText attributes as program/audience text (caret aligns with glyphs).
+private struct CanvasAttributedTextInput: NSViewRepresentable {
+    var object: CanvasObject
+    var scale: CGFloat
     var text: String
-    var fontName: String
-    var fontSize: CGFloat
-    var weightToken: FontWeightToken
-    var bold: Bool
-    var italic: Bool
-    var caret: Color
-    var alignment: TextAlignment
     var onChange: (String) -> Void
     var onCommit: (String) -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onChange: onChange, onCommit: onCommit)
+        Coordinator(parent: self, onChange: onChange, onCommit: onCommit)
     }
 
     func makeNSView(context: Context) -> CanvasInputTextView {
         let textView = CanvasInputTextView()
+        textView.canvasVerticalAlign = object.textLayout.verticalAlign
         textView.delegate = context.coordinator
-        textView.drawsBackground = false
-        textView.backgroundColor = .clear
-        textView.isRichText = false
-        textView.importsGraphics = false
-        textView.isAutomaticQuoteSubstitutionEnabled = false
-        textView.focusRingType = .none
-        textView.textContainerInset = .zero
-        textView.textContainer?.lineFragmentPadding = 0
-        textView.textContainer?.widthTracksTextView = true
-        textView.isHorizontallyResizable = false
-        textView.isVerticallyResizable = true
-        textView.autoresizingMask = [.width]
-        textView.string = text
-        applyChrome(to: textView)
+        configureChrome(textView)
+        textView.textStorage?.setAttributedString(attributedString(for: text))
         context.coordinator.textView = textView
+        context.coordinator.styleSignature = styleSignature
         DispatchQueue.main.async {
             textView.window?.makeFirstResponder(textView)
+            textView.syncVerticalAlignmentInset()
         }
         return textView
     }
 
     func updateNSView(_ textView: CanvasInputTextView, context: Context) {
-        if textView.string != text {
-            textView.string = text
-        }
-        applyChrome(to: textView)
+        textView.canvasVerticalAlign = object.textLayout.verticalAlign
+        context.coordinator.parent = self
         context.coordinator.onChange = onChange
         context.coordinator.onCommit = onCommit
+
+        let signature = styleSignature
+        if signature != context.coordinator.styleSignature {
+            context.coordinator.styleSignature = signature
+            configureChrome(textView)
+        }
+
+        if textView.string != text, !context.coordinator.isApplyingLocalEdit {
+            let selection = textView.selectedRange()
+            textView.textStorage?.setAttributedString(attributedString(for: text))
+            let length = (textView.string as NSString).length
+            let location = min(selection.location, length)
+            let selLength = min(selection.length, max(0, length - location))
+            textView.setSelectedRange(NSRange(location: location, length: selLength))
+        }
+
+        textView.syncVerticalAlignmentInset()
     }
 
-    private func applyChrome(to textView: CanvasInputTextView) {
-        let font = CanvasTypeface.nsFont(
-            family: fontName,
-            size: fontSize,
-            weight: weightToken,
-            bold: bold,
-            italic: italic
-        )
-        let style = NSMutableParagraphStyle()
-        style.alignment = nsAlignment
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: font,
-            .foregroundColor: NSColor.clear,
-            .paragraphStyle: style,
-        ]
-        textView.font = font
-        textView.alignment = nsAlignment
-        textView.textColor = .clear
-        textView.insertionPointColor = NSColor(caret)
-        textView.typingAttributes = attrs
+    private func configureChrome(_ textView: CanvasInputTextView) {
+        textView.drawsBackground = false
+        textView.backgroundColor = .clear
+        textView.isRichText = false
+        textView.importsGraphics = false
+        textView.isAutomaticQuoteSubstitutionEnabled = false
+        textView.isAutomaticDashSubstitutionEnabled = false
+        textView.isAutomaticTextReplacementEnabled = false
+        textView.isAutomaticSpellingCorrectionEnabled = false
+        textView.focusRingType = .none
+        textView.textContainerInset = .zero
+        textView.textContainer?.lineFragmentPadding = 0
+        textView.textContainer?.widthTracksTextView = true
+        textView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
+        textView.isHorizontallyResizable = false
+        textView.isVerticallyResizable = true
+        textView.autoresizingMask = [.width]
+        textView.insertionPointColor = NSColor(Color(hex: object.typography.color) ?? .white)
+        textView.typingAttributes = typingAttributes(for: text.isEmpty ? " " : text)
         textView.selectedTextAttributes = [
             .backgroundColor: NSColor.white.withAlphaComponent(0.22),
-            .foregroundColor: NSColor.clear,
+            .foregroundColor: NSColor(Color(hex: object.typography.color) ?? .white),
         ]
-        let range = NSRange(location: 0, length: textView.string.utf16.count)
-        textView.textStorage?.setAttributes(attrs, range: range)
     }
 
-    private var nsAlignment: NSTextAlignment {
-        switch alignment {
-        case .leading: .left
-        case .trailing: .right
-        default: .center
+    private func attributedString(for value: String) -> NSAttributedString {
+        let body = value.isEmpty ? " " : value
+        let base = TextAttributeConverter.makeAttributedString(object: object, text: body, scale: scale)
+        guard object.typography.isSuperscript || object.typography.isSubscript else { return base }
+        let mutable = NSMutableAttributedString(attributedString: base)
+        let offset = object.typography.isSuperscript
+            ? object.typography.fontSize * scale * 0.35
+            : -object.typography.fontSize * scale * 0.25
+        if mutable.length > 0 {
+            mutable.addAttribute(.baselineOffset, value: offset, range: NSRange(location: 0, length: mutable.length))
         }
+        return mutable
+    }
+
+    private func typingAttributes(for sample: String) -> [NSAttributedString.Key: Any] {
+        let attributed = attributedString(for: sample)
+        guard attributed.length > 0 else { return [:] }
+        var attrs = attributed.attributes(at: 0, effectiveRange: nil)
+        attrs[.foregroundColor] = NSColor(Color(hex: object.typography.color) ?? .white)
+        return attrs
+    }
+
+    private var styleSignature: String {
+        let t = object.typography
+        let l = object.textLayout
+        return [
+            t.fontFamily,
+            "\(t.fontSize)",
+            "\(t.fontWeight.rawValue)",
+            "\(t.isBold)",
+            "\(t.isItalic)",
+            t.color,
+            "\(l.characterSpacing)",
+            "\(l.lineHeight)",
+            "\(l.wordSpacing)",
+            l.horizontalAlign.rawValue,
+            l.verticalAlign.rawValue,
+            "\(object.textOutline.enabled)",
+            "\(object.textShadow.enabled)",
+            "\(scale)",
+        ].joined(separator: "|")
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate {
+        var parent: CanvasAttributedTextInput
         var onChange: (String) -> Void
         var onCommit: (String) -> Void
         weak var textView: NSTextView?
+        var styleSignature = ""
+        var isApplyingLocalEdit = false
 
-        init(onChange: @escaping (String) -> Void, onCommit: @escaping (String) -> Void) {
+        init(parent: CanvasAttributedTextInput, onChange: @escaping (String) -> Void, onCommit: @escaping (String) -> Void) {
+            self.parent = parent
             self.onChange = onChange
             self.onCommit = onCommit
         }
 
         func textDidChange(_ notification: Notification) {
-            onChange(textView?.string ?? "")
+            guard let textView else { return }
+            let plain = textView.string
+            let selection = textView.selectedRange()
+            isApplyingLocalEdit = true
+            onChange(plain)
+            isApplyingLocalEdit = false
+            textView.textStorage?.setAttributedString(parent.attributedString(for: plain))
+            let length = (textView.string as NSString).length
+            let location = min(selection.location, length)
+            let selLength = min(selection.length, max(0, length - location))
+            textView.setSelectedRange(NSRange(location: location, length: selLength))
+            textView.typingAttributes = parent.typingAttributes(for: plain.isEmpty ? " " : plain)
+            (textView as? CanvasInputTextView)?.syncVerticalAlignmentInset()
         }
 
         func textDidEndEditing(_ notification: Notification) {
@@ -1969,6 +2499,8 @@ private struct TransparentCanvasTextInput: NSViewRepresentable {
 }
 
 private final class CanvasInputTextView: NSTextView {
+    var canvasVerticalAlign: TextVerticalAlign = .middle
+
     override var acceptsFirstResponder: Bool { true }
 
     override func becomeFirstResponder() -> Bool {
@@ -1976,27 +2508,50 @@ private final class CanvasInputTextView: NSTextView {
         focusRingType = .none
         return accepted
     }
+
+    override func layout() {
+        super.layout()
+        syncVerticalAlignmentInset()
+    }
+
+    override func resize(withOldSuperviewSize oldSize: NSSize) {
+        super.resize(withOldSuperviewSize: oldSize)
+        syncVerticalAlignmentInset()
+    }
+
+    func syncVerticalAlignmentInset() {
+        guard let layoutManager, let textContainer else { return }
+        textContainer.size = NSSize(width: max(1, bounds.width), height: CGFloat.greatestFiniteMagnitude)
+        layoutManager.ensureLayout(for: textContainer)
+        let used = layoutManager.usedRect(for: textContainer)
+        let contentHeight = max(1, ceil(used.height))
+        let extra = max(0, bounds.height - contentHeight)
+        let topInset: CGFloat
+        switch canvasVerticalAlign {
+        case .top: topInset = 0
+        case .middle: topInset = extra / 2
+        case .bottom, .baseline: topInset = extra
+        }
+        let target = NSSize(width: 0, height: topInset)
+        if abs(textContainerInset.width - target.width) > 0.5 || abs(textContainerInset.height - target.height) > 0.5 {
+            textContainerInset = target
+            layoutManager.ensureLayout(for: textContainer)
+        }
+    }
 }
 #else
-private struct TransparentCanvasTextInput: View {
+private struct CanvasAttributedTextInput: View {
+    var object: CanvasObject
+    var scale: CGFloat
     var text: String
-    var fontName: String
-    var fontSize: CGFloat
-    var weightToken: FontWeightToken
-    var bold: Bool
-    var italic: Bool
-    var caret: Color
-    var alignment: TextAlignment
     var onChange: (String) -> Void
     var onCommit: (String) -> Void
 
     var body: some View {
         TextField("", text: Binding(get: { text }, set: onChange), axis: .vertical)
             .textFieldStyle(.plain)
-            .font(.custom(fontName.isEmpty ? "Helvetica" : fontName, size: fontSize))
-            .foregroundStyle(.clear)
-            .tint(caret)
-            .multilineTextAlignment(alignment)
+            .font(.custom(object.typography.fontFamily.isEmpty ? "Helvetica" : object.typography.fontFamily, size: max(1, object.typography.fontSize * scale)))
+            .tint(Color(hex: object.typography.color) ?? .white)
             .onSubmit { onCommit(text) }
     }
 }
@@ -2013,68 +2568,3 @@ struct LoopingTextFit: ViewModifier {
     }
 }
 
-struct TextLoopMarquee<Copy: View>: View {
-    var object: CanvasObject
-    var text: String
-    var scale: CGFloat
-    var reduceMotion: Bool
-    @ViewBuilder var copy: () -> Copy
-
-    private var direction: TextLoopDirection { object.textLayout.resolvedLoopDirection }
-    private var gap: Double { object.textLayout.resolvedLoopGap }
-
-    /// AppKit measurement stays stable; SwiftUI geometry was retuning the scroll cycle mid-flight.
-    private var cycleLength: Double {
-        if direction.isVertical {
-            return BuildAnimationEngine.measuredTextHeight(for: object, text: text)
-        }
-        return BuildAnimationEngine.measuredTextWidth(for: object, text: text)
-    }
-
-    private var stripAlignment: Alignment {
-        switch direction {
-        case .left: .leading
-        case .right: .trailing
-        case .up: .top
-        case .down: .bottom
-        }
-    }
-
-    var body: some View {
-        TimelineView(.animation(minimumInterval: reduceMotion ? 1 : 1.0 / 60.0, paused: reduceMotion)) { timeline in
-            let offset = reduceMotion
-                ? 0
-                : BuildAnimationEngine.marqueeOffset(
-                    elapsed: timeline.date.timeIntervalSinceReferenceDate,
-                    contentWidth: cycleLength,
-                    gap: gap,
-                    speed: object.textLayout.resolvedLoopSpeed,
-                    left: direction == .left || direction == .up
-                )
-            Group {
-                if direction.isVertical {
-                    VStack(spacing: max(0, gap * scale)) {
-                        loopCopy(horizontal: false)
-                        loopCopy(horizontal: false)
-                    }
-                    .offset(y: offset * scale)
-                } else {
-                    HStack(spacing: max(0, gap * scale)) {
-                        loopCopy(horizontal: true)
-                        loopCopy(horizontal: true)
-                    }
-                    .offset(x: offset * scale)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: stripAlignment)
-            .clipped()
-            .transaction { $0.animation = nil }
-        }
-        .accessibilityLabel(text)
-    }
-
-    private func loopCopy(horizontal: Bool) -> some View {
-        copy()
-            .fixedSize(horizontal: horizontal, vertical: !horizontal)
-    }
-}
