@@ -126,6 +126,7 @@ enum ProgramRecordingAudioPump {
         source.schedule(deadline: .now() + ProgramStreamAudioClock.pumpTimerInterval, repeating: ProgramStreamAudioClock.pumpTimerInterval)
         source.setEventHandler {
             guard let recorder = retainedRecorder else { return }
+            ProgramEncoderAudioPump.noteTick()
             _ = ProgramAACEncoder.nextAccessUnit(recording: recorder)
         }
         source.resume()

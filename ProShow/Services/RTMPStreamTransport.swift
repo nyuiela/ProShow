@@ -718,6 +718,7 @@ final class RTMPStreamTransport: StreamTransport, @unchecked Sendable {
         timer.schedule(deadline: .now() + ProgramStreamAudioClock.pumpTimerInterval, repeating: ProgramStreamAudioClock.pumpTimerInterval)
         timer.setEventHandler { [weak self] in
             guard let self, self.isReady else { return }
+            ProgramEncoderAudioPump.noteTick()
             guard MediaClockAnchor.shared.isAudioBlockDue() else { return }
             let unit = ProgramAACEncoder.nextTimedAccessUnit(recording: ProgramRecordingAudioBridge.activeProgramRecorder)
             self.sendAudioFrame(unit)
@@ -925,6 +926,7 @@ final class MultiRTMPTransport: StreamTransport, @unchecked Sendable {
         timer.schedule(deadline: .now() + ProgramStreamAudioClock.pumpTimerInterval, repeating: ProgramStreamAudioClock.pumpTimerInterval)
         timer.setEventHandler { [weak self] in
             guard let self, self.isReady else { return }
+            ProgramEncoderAudioPump.noteTick()
             guard MediaClockAnchor.shared.isAudioBlockDue() else { return }
             let unit = ProgramAACEncoder.nextTimedAccessUnit(recording: ProgramRecordingAudioBridge.activeProgramRecorder)
             ProgramAudioAccessTap.publish(unit)
@@ -1248,6 +1250,9 @@ enum ProgramStreamAudioGates {
     /// One mixed access unit for operator headphones (no AAC).
     static func pullPreviewAudioFrame(sampleRate: Double = 48_000, channelCount: Int = 2) {
         guard channelCount >= 2, abs(sampleRate - 48_000) < 1 else { return }
+        // The stream or recording encoder already drains the mix and feeds the room.
+        // A second consumer split every source between two pullers (thin, gappy audio).
+        guard !ProgramEncoderAudioPump.isActive else { return }
         ProgramAACEncoder.pumpPreviewMonitorMix()
     }
 }
@@ -1923,5 +1928,24 @@ private extension AudioChannelRole {
         case .slide: "slide"
         case .soundboard: "pad"
         }
+    }
+}
+
+/// Tracks whether a stream or recording encoder timer is draining the program mix.
+enum ProgramEncoderAudioPump {
+    private static let lock = NSLock()
+    private static var lastTick: CFAbsoluteTime = 0
+
+    static func noteTick() {
+        let now = CFAbsoluteTimeGetCurrent()
+        lock.lock()
+        lastTick = now
+        lock.unlock()
+    }
+
+    static var isActive: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return CFAbsoluteTimeGetCurrent() - lastTick < 0.15
     }
 }
