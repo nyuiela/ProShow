@@ -2099,6 +2099,7 @@ final class ShowController {
         guard compositor.stack.media != nil else { return }
         ProgramStreamAudioGates.setHardwareCaptureOpen(.slide, open: true)
         ProgramStreamAudioGates.sync(from: audioMatrix)
+        AudioMatrixReconciler.enforceProgramAudioGates(controller: self)
         publishProgramMediaAudioPuller()
         tickProgram()
     }
@@ -3854,7 +3855,7 @@ final class ShowController {
 
     func activateDedicatedMicrophone(_ item: DiscoveredSourceItem) {
         enableLiveIO()
-        ProgramStreamAudioGates.setHardwareCaptureOpen(.microphone, open: true)
+        AudioMatrixReconciler.enforceProgramAudioGates(controller: self)
         let endpoint = item.connectionString?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if endpoint.isEmpty {
             audioIO.startCaptureIfNeeded()

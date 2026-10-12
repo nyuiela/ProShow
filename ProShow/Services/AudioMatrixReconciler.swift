@@ -1,5 +1,33 @@
 import Foundation
 
+/// Which hardware audio roles may reach the program mix, derived only from what is live now.
+/// Privacy rule: the microphone is heard only while a live layer shot is an explicit,
+/// unmuted microphone source. A camera is picture only; it never opens the mic.
+struct ProgramAudioGatePolicy: Equatable, Sendable {
+    var microphone: Bool
+    var desktop: Bool
+
+    static func derive(from layers: [MasterLayer]) -> ProgramAudioGatePolicy {
+        var mic = false
+        var desktop = false
+        for layer in layers {
+            guard let liveID = layer.liveShotID,
+                  let shot = layer.shots.first(where: { $0.id == liveID }),
+                  !shot.isAudioMuted
+            else { continue }
+            switch shot.source.sourceType {
+            case .systemMicrophone:
+                mic = true
+            case .systemDisplay, .systemWindow, .systemAudioCapture:
+                desktop = true
+            default:
+                break
+            }
+        }
+        return ProgramAudioGatePolicy(microphone: mic, desktop: desktop)
+    }
+}
+
 /// Tears down hardware PCM taps that no longer map to a visible / live layer binding.
 @MainActor
 enum AudioMatrixReconciler {
@@ -12,17 +40,9 @@ enum AudioMatrixReconciler {
             videoLaneKeys: videoKeys,
             preserveLiveAudio: keepCaptureGraph
         )
-        if !keepCaptureGraph {
-            flushUnusedCaptureRoles(controller: controller, audioKeys: audioKeys)
-        }
-        let micLive = audioKeys.contains { $0.hasPrefix("avf://") || $0.hasPrefix("audio:") }
-        let desktopLive = audioKeys.contains { $0.hasPrefix("sck://") }
-        if micLive {
-            ProgramStreamAudioGates.setHardwareCaptureOpen(.microphone, open: true)
-        }
-        if desktopLive {
-            ProgramStreamAudioGates.setHardwareCaptureOpen(.desktop, open: true)
-        }
+        let gates = enforceProgramAudioGates(controller: controller)
+        let micLive = gates.microphone
+        let desktopLive = gates.desktop
         ProgramStreamAudioGates.setHardwareCaptureOpen(.slide, open: true)
         ProgramStreamAudioGates.setHardwareCaptureOpen(.soundboard, open: true)
         ProgramStreamAudioGates.setHardwareCaptureOpen(.guest, open: true)
@@ -30,6 +50,29 @@ enum AudioMatrixReconciler {
         AudioMonitoringEngine.shared.resetPeaks()
         controller.audioIO.injectPeak(role: .microphone, db: micLive ? controller.audioIO.lastPeaks[.microphone] ?? -120 : -120)
         controller.audioIO.injectPeak(role: .desktop, db: desktopLive ? controller.audioIO.lastPeaks[.desktop] ?? -120 : -120)
+    }
+
+    private static var lastGates: ProgramAudioGatePolicy?
+
+    /// Hard gate from the live program layers. Runs on every reconcile and every program tick,
+    /// so a stale open gate (streaming, lifetime mic session, missed layer event) cannot leak audio.
+    @discardableResult
+    static func enforceProgramAudioGates(controller: ShowController) -> ProgramAudioGatePolicy {
+        let gates = ProgramAudioGatePolicy.derive(from: controller.masterLayers)
+        let previous = lastGates
+        lastGates = gates
+        // Always re-assert: other paths open these gates directly, so a cached
+        // "nothing changed" would let a stale open gate survive.
+        ProgramStreamAudioGates.setHardwareCaptureOpen(.microphone, open: gates.microphone)
+        ProgramStreamAudioGates.setHardwareCaptureOpen(.desktop, open: gates.desktop)
+        if previous?.microphone != false, !gates.microphone {
+            ProgramStreamAudioGates.flushCaptureRole(.microphone)
+            controller.audioIO.injectPeak(role: .microphone, db: -120)
+        }
+        if previous?.desktop != false, !gates.desktop {
+            ProgramStreamAudioGates.flushCaptureRole(.desktop)
+        }
+        return gates
     }
 
     static func purgeAllPCMQueues() {

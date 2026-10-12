@@ -63,7 +63,7 @@ struct AudioMatrixTests {
         #expect(abs(level - AudioMatrixEngine.linearGain(db: desktop.gainDb)) < 0.02)
     }
 
-    @Test
+    @MainActor @Test
     func strip_gateSilencesQuietAudioAndCompTamesPeaks() {
         var runtime = ChannelStripRuntime()
         let gate = ChannelStripSettings(filters: [], gateEnabled: true, compEnabled: false)
@@ -80,5 +80,44 @@ struct AudioMatrixTests {
         fader.install([channel])
         let level = fader.outputLevel(for: channel, bus: .stream)
         #expect(level > 1.5)
+    }
+}
+
+@Suite struct ProgramAudioGatePolicyTests {
+    private func shot(_ type: SourceType, muted: Bool = false) -> LayerShot {
+        LayerShot(
+            name: "s",
+            source: DiscoveredSourceItem(name: "s", category: .all, groupName: "g", sourceType: type, connectionString: "x"),
+            isCopy: false,
+            audioMuted: muted
+        )
+    }
+
+    private func layer(_ shots: [LayerShot], live: Int?) -> MasterLayer {
+        var l = MasterLayer.defaults[0]
+        l.shots = shots
+        l.liveShotID = live.map { shots[$0].id }
+        return l
+    }
+
+    @Test func cameraNeverOpensMicrophone() {
+        let g = ProgramAudioGatePolicy.derive(from: [layer([shot(.systemCamera)], live: 0)])
+        #expect(g.microphone == false)
+    }
+
+    @Test func liveMicOpensAndRemovingItCloses() {
+        let mic = shot(.systemMicrophone)
+        #expect(ProgramAudioGatePolicy.derive(from: [layer([mic], live: 0)]).microphone)
+        #expect(ProgramAudioGatePolicy.derive(from: [layer([mic], live: nil)]).microphone == false)
+        #expect(ProgramAudioGatePolicy.derive(from: [layer([], live: nil)]).microphone == false)
+    }
+
+    @Test func mutedMicStaysClosed() {
+        #expect(ProgramAudioGatePolicy.derive(from: [layer([shot(.systemMicrophone, muted: true)], live: 0)]).microphone == false)
+    }
+
+    @Test func nonLiveMicShotOnLayerIsClosed() {
+        let g = ProgramAudioGatePolicy.derive(from: [layer([shot(.systemCamera), shot(.systemMicrophone)], live: 0)])
+        #expect(g.microphone == false)
     }
 }
