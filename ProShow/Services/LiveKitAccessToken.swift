@@ -13,6 +13,7 @@ enum LiveKitAccessToken {
         canPublish: Bool = true,
         canSubscribe: Bool = true,
         canPublishData: Bool = true,
+        canUpdateOwnMetadata: Bool = false,
         attributes: [String: String] = [:],
         ttl: TimeInterval = 6 * 60 * 60,
         now: Date = Date()
@@ -28,6 +29,9 @@ enum LiveKitAccessToken {
         ]
         if roomAdmin {
             video["roomAdmin"] = true
+        }
+        if canUpdateOwnMetadata {
+            video["canUpdateOwnMetadata"] = true
         }
         var payload: [String: Any] = [
             "exp": issued + Int(ttl),

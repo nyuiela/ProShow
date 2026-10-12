@@ -126,6 +126,7 @@ final class LiveKitDeskSession: NSObject, RoomDelegate {
             canPublish: true,
             canSubscribe: true,
             canPublishData: true,
+            canUpdateOwnMetadata: true,
             attributes: ["ps.role": "desk", "ps.session": "idle"]
         )
         let room = Room(delegate: self)
@@ -168,10 +169,12 @@ final class LiveKitDeskSession: NSObject, RoomDelegate {
         }
         programTrack = track
         AudioManager.shared.isVoiceProcessingBypassed = true
-        let mix = ProgramMixInjector.shared
-        AudioManager.shared.capturePostProcessingDelegate = mix
+        // Program mix enters LiveKit through the mixer's app-audio input.
+        // The capture post-processing hook never reached the encoder (subscribers got silence).
+        AudioManager.shared.capturePostProcessingDelegate = nil
+        let feeder = ProgramAppAudioFeeder.shared
         ProgramPCMBridge.programMixListener = { samples in
-            mix.pushInterleavedStereo(samples)
+            feeder.pushInterleavedStereo(samples)
         }
         let audio = await LocalAudioTrack.createTrack(
             name: "program-audio",
@@ -196,7 +199,7 @@ final class LiveKitDeskSession: NSObject, RoomDelegate {
             )
             let mixer = AudioManager.shared.mixer
             mixer.micVolume = 0
-            mixer.appVolume = 0
+            mixer.appVolume = 1
             mixer.outputVolume = 1
             programPump.resume()
             try? await room.localParticipant.set(attributes: [
@@ -807,6 +810,72 @@ enum LiveKitRoomAdmin {
         let body: [String: Any] = ["room": room, "identity": identity]
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
         _ = try? await URLSession.shared.data(for: request)
+    }
+}
+#endif
+
+#if canImport(LiveKit)
+/// Packs 48 kHz interleaved stereo program PCM into a fixed ring of
+/// deinterleaved float buffers and hands each full one to LiveKit's app-audio input.
+final class ProgramAppAudioFeeder: @unchecked Sendable {
+    static let shared = ProgramAppAudioFeeder()
+
+    private let lock = NSLock()
+    private let framesPerBuffer: AVAudioFrameCount = 480
+    private let ringSize = 32
+    private var ring: [AVAudioPCMBuffer] = []
+    private var ringIndex = 0
+    private var fill: Int = 0
+    private(set) var deliveredBuffers = 0
+
+    private init() {
+        guard let format = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 48_000,
+            channels: 2,
+            interleaved: false
+        ) else { return }
+        for _ in 0..<ringSize {
+            if let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: framesPerBuffer) {
+                ring.append(buffer)
+            }
+        }
+    }
+
+    func pushInterleavedStereo(_ samples: [Float]) {
+        guard !ring.isEmpty, samples.count >= 2 else { return }
+        let capacity = Int(framesPerBuffer)
+        var ready: [AVAudioPCMBuffer] = []
+        lock.lock()
+        var frame = 0
+        let total = samples.count / 2
+        samples.withUnsafeBufferPointer { src in
+            while frame < total {
+                let buffer = ring[ringIndex]
+                guard let channels = buffer.floatChannelData else { break }
+                let left = channels[0]
+                let right = channels[1]
+                let count = min(capacity - fill, total - frame)
+                for i in 0..<count {
+                    left[fill + i] = src[(frame + i) * 2]
+                    right[fill + i] = src[(frame + i) * 2 + 1]
+                }
+                fill += count
+                frame += count
+                if fill == capacity {
+                    buffer.frameLength = framesPerBuffer
+                    ready.append(buffer)
+                    ringIndex = (ringIndex + 1) % ring.count
+                    fill = 0
+                }
+            }
+        }
+        deliveredBuffers &+= ready.count
+        lock.unlock()
+        let mixer = AudioManager.shared.mixer
+        for buffer in ready {
+            mixer.capture(appAudio: buffer)
+        }
     }
 }
 #endif
