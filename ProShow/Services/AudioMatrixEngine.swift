@@ -152,11 +152,16 @@ final class AudioMatrixEngine {
         }
     }
 
+    /// Program mute is a master gate only. It must not rewrite per-channel mutes:
+    /// those persist with the project while this flag does not, so a reload left
+    /// Slide and Soundboard muted with no visible way back.
     func muteProgram(_ muted: Bool) {
         programMuted = muted
         master.muted = muted
-        for channel in channels where channel.role != .microphone {
-            setMute(id: channel.id, muted: muted)
+        if muted {
+            for channel in channels where channel.role != .microphone {
+                ProgramAACEncoder.flush(role: channel.role)
+            }
         }
     }
 

@@ -65,6 +65,10 @@ enum AudioMatrixReconciler {
         // "nothing changed" would let a stale open gate survive.
         ProgramStreamAudioGates.setHardwareCaptureOpen(.microphone, open: gates.microphone)
         ProgramStreamAudioGates.setHardwareCaptureOpen(.desktop, open: gates.desktop)
+        if gates.microphone, previous?.microphone != true {
+            // Reopened (unmute, new take, relaunch): restart capture that a close or reconcile stopped.
+            controller.resumeLiveMicrophoneCapture()
+        }
         if previous?.microphone != false, !gates.microphone {
             ProgramStreamAudioGates.flushCaptureRole(.microphone)
             controller.audioIO.injectPeak(role: .microphone, db: -120)
@@ -102,7 +106,8 @@ enum AudioMatrixReconciler {
                   let shot = layer.shots.first(where: { $0.id == liveID })
             else { continue }
             switch shot.source.sourceType {
-            case .systemCamera, .systemDisplay, .systemWindow, .ndiSource, .srtStream, .webPage:
+            case .systemCamera, .systemDisplay, .systemWindow, .ndiSource, .srtStream, .webPage,
+                 .systemMicrophone, .systemAudioCapture:
                 adoptDiscoveredSource(shot.source, into: &keys)
             default:
                 break

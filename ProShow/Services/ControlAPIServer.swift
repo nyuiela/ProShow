@@ -80,6 +80,8 @@ enum ControlHTTP {
             || parts == ["v1", "slide", "prev"]
             || parts == ["v1", "slides", "prev"]
             || parts == ["v1", "audio", "mute"]
+            || parts == ["v1", "layers", "mute"]
+            || parts == ["v1", "layers", "mic"]
             || parts == ["v1", "camera", "switch"]
             || parts == ["v1", "market", "ticker"]
             || parts == ["v1", "project", "open"]

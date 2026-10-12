@@ -763,6 +763,7 @@ private struct LayersActionPane: View {
     private var programHeader: some View {
         HStack(spacing: 6) {
             DeskSectionTitle(title: "Program")
+            MicTallyPill(live: controller.isProgramMicLive)
             if controller.soloedProgramLayer != nil {
                 Button("Exit Solo") {
                     controller.endProgramSolo(restoring: true)
@@ -1861,3 +1862,21 @@ fileprivate struct ProgramPreviewExpandButton: View {
 }
 #endif
 
+
+/// Program mic tally. Red when a mic reaches program, room and stream.
+private struct MicTallyPill: View {
+    let live: Bool
+
+    var body: some View {
+        Label(live ? "Mic live" : "Mic off", systemImage: live ? "mic.fill" : "mic.slash")
+            .font(DeskType.micro)
+            .foregroundStyle(live ? Color.white : Color(red: 0x6B / 255, green: 0x9F / 255, blue: 0xE0 / 255))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(
+                Capsule().fill(live ? Color.red : Color(red: 0x6B / 255, green: 0x9F / 255, blue: 0xE0 / 255).opacity(0.15))
+            )
+            .accessibilityLabel(live ? "Microphone live on program" : "Microphone off")
+            .help(live ? "Mic is on air" : "No mic on air")
+    }
+}

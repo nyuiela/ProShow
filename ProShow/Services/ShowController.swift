@@ -4141,13 +4141,44 @@ final class ShowController {
     }
 
     private func syncLiveAudioCapture() {
-        let needsDeviceAudio = audioIO.hardwareEnabled && (streaming.isLive || isoRecorder.isRecording)
-        guard needsDeviceAudio else {
-            audioIO.stopCapture()
+        // Only an explicit, unmuted, live mic shot without a device endpoint uses the system input tap.
+        if audioIO.hardwareEnabled, liveMicrophoneShots().contains(where: { micEndpoint($0).isEmpty }) {
+            audioIO.startCaptureIfNeeded()
             return
         }
-        // Never spin up a hidden system input tap here — only explicit mic shots / AVF lanes.
         audioIO.stopCapture()
+    }
+
+    private func micEndpoint(_ shot: LayerShot) -> String {
+        shot.source.connectionString?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    /// Live, unmuted microphone shots on the program layers.
+    func liveMicrophoneShots() -> [LayerShot] {
+        masterLayers.compactMap { layer in
+            guard let liveID = layer.liveShotID,
+                  let shot = layer.shots.first(where: { $0.id == liveID }),
+                  shot.source.sourceType == .systemMicrophone,
+                  !shot.isAudioMuted
+            else { return nil }
+            return shot
+        }
+    }
+
+    /// True when a mic is reaching program, room and stream. Drives the tally pill.
+    var isProgramMicLive: Bool {
+        ProgramAudioGatePolicy.derive(from: masterLayers).microphone && !audioIO.programMuted
+    }
+
+    func resumeLiveMicrophoneCapture() {
+        for shot in liveMicrophoneShots() {
+            let endpoint = micEndpoint(shot)
+            if endpoint.isEmpty {
+                audioIO.startCaptureIfNeeded()
+            } else {
+                videoInputs.startDedicatedMicrophone(endpoint: endpoint, label: shot.source.name)
+            }
+        }
     }
 
     func reconcileAudioCaptureGraph() {
@@ -7632,6 +7663,52 @@ final class ShowController {
         if method == "POST", parts.count == 4, parts[0] == "v1", parts[1] == "backstage", parts[3] == "signal" {
             let roomSlug = parts[2]
             return backstageSignaling.handleREST(body, roomSlug: roomSlug)
+        }
+        if method == "GET", parts == ["v1", "layers"] {
+            let rows: [[String: Any]] = masterLayers.enumerated().map { index, layer in
+                let live = layer.liveShotID.flatMap { id in layer.shots.first(where: { $0.id == id }) }
+                return [
+                    "index": index,
+                    "live_type": live.map { $0.source.sourceType.rawValue } ?? NSNull(),
+                    "audio_muted": live?.isAudioMuted ?? false,
+                ]
+            }
+            return (200, ControlJSON.encode(["ok": true, "mic_live": isProgramMicLive, "layers": rows]))
+        }
+        if method == "POST", parts == ["v1", "layers", "mic"] {
+            // Test hook: take the system mic live on a layer, or clear that layer.
+            let parsed = ControlHTTP.jsonObject(body)
+            guard let index = parsed["index"].flatMap(Int.init), masterLayers.indices.contains(index) else {
+                return (400, #"{"ok":false,"error":"missing_index"}"#)
+            }
+            if parsed["live"] == "false" || parsed["live"] == "0" {
+                var layers = masterLayers
+                layers[index].liveShotID = nil
+                masterLayers = layers
+                reconcileAudioCaptureGraph()
+            } else {
+                let item = DiscoveredSourceItem(
+                    name: "Microphone", category: .all, groupName: "Audio",
+                    sourceType: .systemMicrophone, connectionString: parsed["endpoint"] ?? ""
+                )
+                let shot = LayerShot(name: "Microphone", source: item)
+                var layers = masterLayers
+                layers[index].shots.append(shot)
+                masterLayers = layers
+                takeShotLive(shot, layerIndex: index)
+            }
+            return (200, ControlJSON.encode(["ok": true, "mic_live": isProgramMicLive]))
+        }
+        if method == "POST", parts == ["v1", "layers", "mute"] {
+            let parsed = ControlHTTP.jsonObject(body)
+            guard let index = parsed["index"].flatMap(Int.init), masterLayers.indices.contains(index) else {
+                return (400, #"{"ok":false,"error":"missing_index"}"#)
+            }
+            let want = parsed["muted"].map { $0 == "true" || $0 == "1" } ?? !isLiveShotAudioMuted(layerIndex: index)
+            if isLiveShotAudioMuted(layerIndex: index) != want {
+                toggleLiveShotAudio(layerIndex: index)
+            }
+            return (200, ControlJSON.encode(["ok": true, "index": index, "muted": isLiveShotAudioMuted(layerIndex: index), "mic_live": isProgramMicLive]))
         }
         if method == "GET", parts == ["v1", "audio", "meters"] {
             return (200, audioMatrix.metersJSON())
