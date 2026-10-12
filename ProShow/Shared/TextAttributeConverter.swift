@@ -247,33 +247,84 @@ enum TextAttributeConverter {
 struct CanvasStaticAttributedTextView: NSViewRepresentable {
     var object: CanvasObject
     var attributed: NSAttributedString
-    var scale: CGFloat
+    var layoutScale: CGFloat
 
     func makeNSView(context: Context) -> CanvasStaticAttributedTextNSView {
         let view = CanvasStaticAttributedTextNSView()
         view.autoresizingMask = [.width, .height]
         view.object = object
         view.attributed = attributed
-        view.scale = scale
+        view.layoutScale = layoutScale
         return view
     }
 
     func updateNSView(_ nsView: CanvasStaticAttributedTextNSView, context: Context) {
         nsView.object = object
         nsView.attributed = attributed
-        nsView.scale = scale
+        nsView.layoutScale = layoutScale
         nsView.needsDisplay = true
+    }
+}
+
+/// Plain canvas text — same Core Text path as RTMP / ISO encode (`drawCanvasText`).
+struct CanvasRasterizedTextView: NSViewRepresentable {
+    var object: CanvasObject
+    var text: String
+    var layoutScale: CGFloat
+
+    func makeNSView(context: Context) -> CanvasRasterizedTextNSView {
+        let view = CanvasRasterizedTextNSView()
+        view.autoresizingMask = [.width, .height]
+        view.object = object
+        view.text = text
+        view.layoutScale = layoutScale
+        return view
+    }
+
+    func updateNSView(_ nsView: CanvasRasterizedTextNSView, context: Context) {
+        nsView.object = object
+        nsView.text = text
+        nsView.layoutScale = layoutScale
+        nsView.needsDisplay = true
+    }
+}
+
+final class CanvasRasterizedTextNSView: NSView {
+    var object: CanvasObject?
+    var text: String = ""
+    var layoutScale: CGFloat = 1
+
+    override var isFlipped: Bool { true }
+    override var isOpaque: Bool { false }
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: NSView.noIntrinsicMetric, height: NSView.noIntrinsicMetric)
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let object,
+              !text.isEmpty,
+              bounds.width > 0,
+              bounds.height > 0,
+              let context = NSGraphicsContext.current?.cgContext
+        else { return }
+        CoreTextRasterizer.drawCanvasText(
+            object: object,
+            text: text,
+            in: bounds,
+            layoutScale: layoutScale,
+            context: context
+        )
     }
 }
 
 final class CanvasStaticAttributedTextNSView: NSView {
     var object: CanvasObject?
     var attributed: NSAttributedString = NSAttributedString()
-    var scale: CGFloat = 1
+    var layoutScale: CGFloat = 1
 
-    /// Match SwiftUI canvas layout + `CoreTextRasterizer` (top-left origin, same as encode flip).
     override var isFlipped: Bool { true }
-
     override var isOpaque: Bool { false }
 
     override var intrinsicContentSize: NSSize {
@@ -293,6 +344,7 @@ final class CanvasStaticAttributedTextNSView: NSView {
             object: object,
             attributed: attributed,
             in: bounds,
+            layoutScale: layoutScale,
             context: context
         )
     }

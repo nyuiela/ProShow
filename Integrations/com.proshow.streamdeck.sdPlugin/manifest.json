@@ -1,0 +1,32 @@
+{
+  "SDKVersion": 2,
+  "Author": "ProShow",
+  "CodePath": "plugin.html",
+  "Description": "Map Stream Deck keys to the ProShow Control API on 127.0.0.1:55076.",
+  "Name": "ProShow",
+  "Icon": "images/plugin",
+  "Category": "ProShow",
+  "CategoryIcon": "images/category",
+  "UUID": "com.proshow.streamdeck",
+  "Version": "1.0.0",
+  "OS": [
+    { "Platform": "mac", "MinimumVersion": "14.0" }
+  ],
+  "Software": {
+    "MinimumVersion": "6.4"
+  },
+  "Actions": [
+    { "UUID": "com.proshow.streamdeck.clear.slide", "Name": "Clear Slide", "Icon": "images/clear-slide", "Tooltip": "Clear the slide layer", "States": [{ "Image": "images/clear-slide" }] },
+    { "UUID": "com.proshow.streamdeck.clear.media", "Name": "Clear Media", "Icon": "images/clear-media", "Tooltip": "Clear the media layer", "States": [{ "Image": "images/clear-media" }] },
+    { "UUID": "com.proshow.streamdeck.clear.props", "Name": "Clear Props", "Icon": "images/clear-props", "Tooltip": "Clear props", "States": [{ "Image": "images/clear-props" }] },
+    { "UUID": "com.proshow.streamdeck.clear.all", "Name": "Clear All", "Icon": "images/clear-all", "Tooltip": "Master clear", "States": [{ "Image": "images/clear-all" }] },
+    { "UUID": "com.proshow.streamdeck.scene.1", "Name": "Scene 1", "Icon": "images/scene", "Tooltip": "Trigger scene by UUID", "PropertyInspectorPath": "inspector.html", "States": [{ "Image": "images/scene" }] },
+    { "UUID": "com.proshow.streamdeck.macro.1", "Name": "Macro", "Icon": "images/macro", "Tooltip": "Trigger a macro", "PropertyInspectorPath": "inspector.html", "States": [{ "Image": "images/macro" }] },
+    { "UUID": "com.proshow.streamdeck.slide.prev", "Name": "Previous Slide", "Icon": "images/prev", "Tooltip": "Go to previous slide", "States": [{ "Image": "images/prev" }] },
+    { "UUID": "com.proshow.streamdeck.slide.next", "Name": "Next Slide", "Icon": "images/next", "Tooltip": "Go to next slide", "States": [{ "Image": "images/next" }] },
+    { "UUID": "com.proshow.streamdeck.stream.toggle", "Name": "Stream", "Icon": "images/stream", "Tooltip": "Start or stop streaming", "States": [{ "Image": "images/stream" }] },
+    { "UUID": "com.proshow.streamdeck.record.toggle", "Name": "Record ISO", "Icon": "images/record", "Tooltip": "Start or stop ISO recording", "States": [{ "Image": "images/record" }] },
+    { "UUID": "com.proshow.streamdeck.audio.mute", "Name": "Mute Audio", "Icon": "images/clear-all", "Tooltip": "Mute program audio", "States": [{ "Image": "images/clear-all" }] },
+    { "UUID": "com.proshow.streamdeck.camera.switch", "Name": "Switch Camera", "Icon": "images/scene", "Tooltip": "Take a camera source live", "PropertyInspectorPath": "inspector.html", "States": [{ "Image": "images/scene" }] }
+  ]
+}

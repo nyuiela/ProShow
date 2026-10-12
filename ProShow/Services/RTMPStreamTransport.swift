@@ -533,6 +533,10 @@ final class RTMPStreamTransport: StreamTransport, @unchecked Sendable {
         queue.sync { mediaQueue?.droppedTagCount ?? 0 }
     }
 
+    var networkAudioDropCount: Int {
+        queue.sync { mediaQueue?.droppedAudioTagCount ?? 0 }
+    }
+
     func connect(config: RtmpStreamConfig) throws {
         guard let dest = RTMPClient.resolve(config), !dest.stream.isEmpty else {
             throw NSError(
@@ -553,7 +557,7 @@ final class RTMPStreamTransport: StreamTransport, @unchecked Sendable {
         )
         let socket = NWConnection(to: endpoint, using: parameters)
         connection = socket
-        mediaQueue = RTMPEndpointQueue(endpointId: "\(dest.host):\(dest.port)/\(dest.stream)") { [weak self] data, done in
+        let outbound = RTMPEndpointQueue(endpointId: "\(dest.host):\(dest.port)/\(dest.stream)") { [weak self] data, done in
             guard let self else {
                 done()
                 return
@@ -567,6 +571,7 @@ final class RTMPStreamTransport: StreamTransport, @unchecked Sendable {
                 done()
             })
         }
+        mediaQueue = outbound
         socket.start(queue: queue)
         #endif
     }
@@ -713,8 +718,10 @@ final class RTMPStreamTransport: StreamTransport, @unchecked Sendable {
         timer.schedule(deadline: .now() + ProgramStreamAudioClock.pumpTimerInterval, repeating: ProgramStreamAudioClock.pumpTimerInterval)
         timer.setEventHandler { [weak self] in
             guard let self, self.isReady else { return }
+            guard MediaClockAnchor.shared.isAudioBlockDue() else { return }
             let unit = ProgramAACEncoder.nextTimedAccessUnit(recording: ProgramRecordingAudioBridge.activeProgramRecorder)
             self.sendAudioFrame(unit)
+            ProgramAudioAccessTap.publish(unit)
         }
         timer.resume()
         audioTimer = timer
@@ -737,7 +744,12 @@ final class RTMPStreamTransport: StreamTransport, @unchecked Sendable {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 4096) { [weak self] data, _, isComplete, error in
             guard let self, self.receiveLoopRunning else { return }
             if error != nil {
-                self.markDropped()
+                // Ingest read errors are often transient; keep publishing until the socket is dead.
+                if connection.state == .ready, self.isReady, self.receiveLoopRunning {
+                    self.drain(on: connection)
+                } else {
+                    self.markDropped()
+                }
                 return
             }
             if let data, !data.isEmpty {
@@ -838,16 +850,44 @@ final class MultiRTMPTransport: StreamTransport, @unchecked Sendable {
     var aggregateNetworkDropCount: Int {
         clients.reduce(0) { $0 + $1.networkDropCount }
     }
+
+    var aggregateNetworkAudioDropCount: Int {
+        clients.reduce(0) { $0 + $1.networkAudioDropCount }
+    }
     private(set) var bytesWritten = 0
     private(set) var connectCount = 0
     private(set) var disconnectCount = 0
+    /// Phone lane sets this so the Stream pump stays the only AAC encode.
+    var suppressSharedAudioPump = false
+    private let gate = NSLock()
+    private var videoSequenceHeader: Data?
+    private var primedVideoConfig: Set<ObjectIdentifier> = []
     var isReady: Bool {
         !clients.isEmpty && clients.contains(where: \.isReady)
     }
 
     private var audioTimer: DispatchSourceTimer?
 
+    func rememberVideoSequenceHeader(_ message: Data) {
+        gate.lock()
+        videoSequenceHeader = message
+        primedVideoConfig.removeAll()
+        gate.unlock()
+    }
+
+    /// A destination that connected after the first keyframe still needs SPS/PPS, then an IDR.
+    func clientNeedsVideoConfig() -> Bool {
+        gate.lock()
+        defer { gate.unlock() }
+        guard videoSequenceHeader != nil else { return false }
+        return clients.contains { $0.isReady && !primedVideoConfig.contains(ObjectIdentifier($0)) }
+    }
+
     func connect(config: RtmpStreamConfig) throws {
+        gate.lock()
+        videoSequenceHeader = nil
+        primedVideoConfig.removeAll()
+        gate.unlock()
         let configs = RTMPClient.fanoutConfigs(from: config)
         guard !configs.isEmpty else {
             throw NSError(
@@ -873,7 +913,7 @@ final class MultiRTMPTransport: StreamTransport, @unchecked Sendable {
                 ready += 1
             }
         }
-        if ready > 0 {
+        if ready > 0, !suppressSharedAudioPump {
             startSharedAudioPump()
         }
         return isReady
@@ -885,7 +925,9 @@ final class MultiRTMPTransport: StreamTransport, @unchecked Sendable {
         timer.schedule(deadline: .now() + ProgramStreamAudioClock.pumpTimerInterval, repeating: ProgramStreamAudioClock.pumpTimerInterval)
         timer.setEventHandler { [weak self] in
             guard let self, self.isReady else { return }
+            guard MediaClockAnchor.shared.isAudioBlockDue() else { return }
             let unit = ProgramAACEncoder.nextTimedAccessUnit(recording: ProgramRecordingAudioBridge.activeProgramRecorder)
+            ProgramAudioAccessTap.publish(unit)
             for client in self.clients where client.isReady {
                 client.sendAudioFrame(unit)
             }
@@ -904,7 +946,33 @@ final class MultiRTMPTransport: StreamTransport, @unchecked Sendable {
 
     func send(_ payload: Data, kind: RTMPOutboundTag) {
         guard !payload.isEmpty else { return }
-        for client in clients where client.isReady {
+        let keyframe: Bool
+        if case .video(let isKeyframe) = kind {
+            keyframe = isKeyframe
+        } else {
+            keyframe = false
+        }
+        gate.lock()
+        let header = videoSequenceHeader
+        let ready = clients.filter(\.isReady)
+        var prime: [RTMPStreamTransport] = []
+        if let header, payload != header {
+            for client in ready where !primedVideoConfig.contains(ObjectIdentifier(client)) {
+                prime.append(client)
+            }
+        }
+        if keyframe, payload != header {
+            for client in ready {
+                primedVideoConfig.insert(ObjectIdentifier(client))
+            }
+        }
+        gate.unlock()
+        if let header {
+            for client in prime {
+                client.send(header, kind: .video(keyframe: true))
+            }
+        }
+        for client in ready {
             client.send(payload, kind: kind)
         }
         bytesWritten += payload.count
@@ -921,15 +989,104 @@ final class MultiRTMPTransport: StreamTransport, @unchecked Sendable {
     }
 }
 
+/// Sums each LiveKit guest microphone into the program mix used by the room return,
+/// RTMP destinations, and the recording. Per-guest faders are applied here.
+enum GuestProgramMixBus {
+    private static let lock = NSLock()
+    private static var mono: [UUID: [Float]] = [:]
+    private static var streamGain: [UUID: Float] = [:]
+    private static var monitorGain: [UUID: Float] = [:]
+
+    static func setGain(id: UUID, stream: Double, monitor: Double) {
+        lock.lock()
+        streamGain[id] = Float(stream)
+        monitorGain[id] = Float(monitor)
+        lock.unlock()
+    }
+
+    static func remove(id: UUID) {
+        lock.lock()
+        mono[id] = nil
+        streamGain[id] = nil
+        monitorGain[id] = nil
+        lock.unlock()
+    }
+
+    static func push(id: UUID, mono samples: [Float], sampleRate: Double) {
+        guard !samples.isEmpty else { return }
+        let converted = resample(samples, from: sampleRate)
+        lock.lock()
+        var ring = mono[id] ?? []
+        ring.append(contentsOf: converted)
+        let cap = 48_000 / 4
+        if ring.count > cap {
+            ring.removeFirst(ring.count - cap)
+        }
+        mono[id] = ring
+        lock.unlock()
+    }
+
+    static func mix(interleavedCount: Int) -> (stream: [Float], monitor: [Float], active: Bool) {
+        let frames = interleavedCount / 2
+        guard frames > 0 else { return ([], [], false) }
+        lock.lock()
+        defer { lock.unlock() }
+        var stream = [Float](repeating: 0, count: frames * 2)
+        var monitor = [Float](repeating: 0, count: frames * 2)
+        var active = false
+        for (id, var ring) in mono {
+            let streamLevel = streamGain[id] ?? 1
+            let monitorLevel = monitorGain[id] ?? 1
+            let take = min(frames, ring.count)
+            if take > 0 { active = true }
+            for index in 0..<take {
+                let sample = ring[index]
+                stream[index * 2] += sample * streamLevel
+                stream[index * 2 + 1] += sample * streamLevel
+                monitor[index * 2] += sample * monitorLevel
+                monitor[index * 2 + 1] += sample * monitorLevel
+            }
+            if take > 0 {
+                ring.removeFirst(take)
+            }
+            mono[id] = ring
+        }
+        return (stream, monitor, active)
+    }
+
+    private static func resample(_ samples: [Float], from sampleRate: Double) -> [Float] {
+        guard abs(sampleRate - 48_000) >= 1, sampleRate > 1 else { return samples }
+        let step = sampleRate / 48_000
+        var out: [Float] = []
+        out.reserveCapacity(Int(Double(samples.count) / step))
+        var position = 0.0
+        while Int(position) < samples.count {
+            out.append(samples[Int(position)])
+            position += step
+        }
+        return out
+    }
+}
+
 /// Stream mix gains for capture threads (updated on the program clock, read on ingest).
 enum ProgramStreamAudioGates {
     private static let lock = NSLock()
     private static var streamGain: [AudioChannelRole: Double] = [:]
+    private static var monitorGain: [AudioChannelRole: Double] = [:]
+    private static var strips: [AudioChannelRole: ChannelStripSettings] = [:]
+    private static var runtimes: [AudioChannelRole: ChannelStripRuntime] = [:]
     private static var programMuted = false
     private static var masterLinear: Double = 1
     private static var hardwareCaptureOpen: Set<AudioChannelRole> = [
         .microphone, .desktop, .guest, .slide, .soundboard,
     ]
+    /// While the assigned mic is still delivering, screen-share device audio stays out of the mix.
+    private static var lastMicrophonePCM = Date.distantPast
+    private static var lastDesktopPCM = Date.distantPast
+    private static var lastSlidePCM = Date.distantPast
+    private static var systemInputTapOpen = false
+    private static var desktopHeldForMicrophone = false
+    private static let microphoneOwnsMixWindow: TimeInterval = 0.35
     /// Hardware capture is often well below 0 dBFS; lift before AAC so the stream isn't whisper-quiet.
     private static let captureBoostDb: [AudioChannelRole: Double] = [
         .microphone: 18,
@@ -943,10 +1100,28 @@ enum ProgramStreamAudioGates {
         programMuted = matrix.programMuted || matrix.master.muted
         if programMuted {
             streamGain.removeAll()
+            monitorGain.removeAll()
+            strips.removeAll()
             masterLinear = 0
         } else {
+            streamGain.removeAll()
+            monitorGain.removeAll()
+            strips.removeAll()
             for channel in matrix.channels {
                 streamGain[channel.role] = matrix.outputLevel(for: channel, bus: .stream)
+                monitorGain[channel.role] = matrix.outputLevel(for: channel, bus: .monitor)
+                strips[channel.role] = ChannelStripSettings.make(
+                    channel: channel,
+                    gate: matrix.isNoiseGateOn(channel.id),
+                    comp: matrix.isChannelLimited(channel.id)
+                )
+                if channel.role == .guest, let guestID = channel.linkedGuestID {
+                    GuestProgramMixBus.setGain(
+                        id: guestID,
+                        stream: matrix.outputLevel(for: channel, bus: .stream),
+                        monitor: matrix.outputLevel(for: channel, bus: .monitor)
+                    )
+                }
             }
             masterLinear = AudioDSP.applyLimiter(
                 AudioDSP.linear(fromDb: matrix.master.gainDb),
@@ -961,6 +1136,24 @@ enum ProgramStreamAudioGates {
         lock.lock()
         defer { lock.unlock() }
         return masterLinear
+    }
+
+    static func destinationGains(_ role: AudioChannelRole) -> (stream: Double, monitor: Double) {
+        lock.lock()
+        defer { lock.unlock() }
+        return (streamGain[role] ?? 0, monitorGain[role] ?? 0)
+    }
+
+    static func gainSnapshot() -> (stream: [AudioChannelRole: Double], monitor: [AudioChannelRole: Double], master: Double) {
+        lock.lock()
+        defer { lock.unlock() }
+        return (streamGain, monitorGain, masterLinear)
+    }
+    static func streamGainLinear(_ role: AudioChannelRole) -> Double {
+        lock.lock()
+        defer { lock.unlock() }
+        let gain = streamGain[role] ?? 0
+        return gain * masterLinear
     }
 
     static func setHardwareCaptureOpen(_ role: AudioChannelRole, open: Bool) {
@@ -979,33 +1172,77 @@ enum ProgramStreamAudioGates {
         ProgramPCMBridge.clearMonitorRing()
     }
 
+    static func setSystemInputTapOpen(_ open: Bool) {
+        lock.lock()
+        systemInputTapOpen = open
+        lock.unlock()
+    }
+
+    /// True when slide, desktop, or the system-input tap is already the program voice.
+    /// A camera added for picture must not open a second microphone on top of that.
+    static func programVoiceBlocksExtraMicrophone() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if systemInputTapOpen { return true }
+        let now = Date()
+        if now.timeIntervalSince(lastDesktopPCM) < 0.75 { return true }
+        if now.timeIntervalSince(lastSlidePCM) < 0.75 { return true }
+        return false
+    }
+
     static func enqueueCapture(role: AudioChannelRole, mono: [Float], sampleRate: Double) {
         guard !mono.isEmpty else { return }
         lock.lock()
         guard hardwareCaptureOpen.contains(role) else {
             lock.unlock()
+            StreamAudioPipelineDiagnostics.recordGateReject()
             return
         }
         let muted = programMuted
-        let gain = resolvedStreamGain(role: role, muted: muted)
+        let known = streamGain[role] != nil || monitorGain[role] != nil
+        let stream = known ? (streamGain[role] ?? 0) : 1
+        let monitor = known ? (monitorGain[role] ?? 0) : 1
+        let settings = strips[role] ?? ChannelStripSettings()
+        var runtime = runtimes[role] ?? ChannelStripRuntime()
         let boost = AudioDSP.linear(fromDb: captureBoostDb[role] ?? 0)
+        let micStillOwnsMix = role == .desktop
+            && Date().timeIntervalSince(lastMicrophonePCM) < microphoneOwnsMixWindow
+        if role == .microphone, muted || (stream <= 0.0001 && monitor <= 0.0001) {
+            lastMicrophonePCM = .distantPast
+            desktopHeldForMicrophone = false
+        }
+        if micStillOwnsMix {
+            let flushDesktop = !desktopHeldForMicrophone
+            desktopHeldForMicrophone = true
+            lock.unlock()
+            if flushDesktop {
+                ProgramAACEncoder.flush(role: .desktop)
+            }
+            StreamAudioPipelineDiagnostics.recordGateReject()
+            return
+        }
+        if role == .desktop {
+            desktopHeldForMicrophone = false
+            if !muted, stream > 0.0001 || monitor > 0.0001 {
+                lastDesktopPCM = Date()
+            }
+        }
+        if role == .slide, !muted, stream > 0.0001 || monitor > 0.0001 {
+            lastSlidePCM = Date()
+        }
+        if role == .microphone, !muted, stream > 0.0001 || monitor > 0.0001 {
+            lastMicrophonePCM = Date()
+        }
         lock.unlock()
-        guard gain > 0.0001 else { return }
-        let linear = gain * boost
-        let scaled = mono.map { sample in
-            let value = Double(sample) * linear
-            return Float(max(-1, min(1, value)))
+        guard !muted, stream > 0.0001 || monitor > 0.0001 else { return }
+        let processed = runtime.process(mono, settings: settings, sampleRate: sampleRate)
+        lock.lock()
+        runtimes[role] = runtime
+        lock.unlock()
+        let scaled = processed.map { sample in
+            Float(max(-1, min(1, Double(sample) * boost)))
         }
         ProgramPCMBridge.enqueueMono(scaled, sampleRate: sampleRate, role: role)
-    }
-
-    private static func resolvedStreamGain(role: AudioChannelRole, muted: Bool) -> Double {
-        if muted { return 0 }
-        if let cached = streamGain[role] { return cached }
-        switch role {
-        case .microphone, .desktop, .guest, .slide, .soundboard:
-            return 1
-        }
     }
 
     /// One mixed access unit for operator headphones (no AAC).
@@ -1020,11 +1257,19 @@ enum PreviewProgramAudioPump {
     private static let lock = NSLock()
     private static var timer: DispatchSourceTimer?
     private static var monitorWantsPump = false
+    private static var guestReturnWantsPump = false
     private static var encodingSuppressed = false
 
     static func setMonitorWantsPump(_ wants: Bool) {
         lock.lock()
         monitorWantsPump = wants
+        lock.unlock()
+        reconcile()
+    }
+
+    static func setGuestReturnWantsPump(_ wants: Bool) {
+        lock.lock()
+        guestReturnWantsPump = wants
         lock.unlock()
         reconcile()
     }
@@ -1038,7 +1283,7 @@ enum PreviewProgramAudioPump {
 
     private static func reconcile() {
         lock.lock()
-        let shouldRun = monitorWantsPump && !encodingSuppressed
+        let shouldRun = (monitorWantsPump || guestReturnWantsPump) && !encodingSuppressed
         lock.unlock()
         if shouldRun {
             startIfNeeded()
@@ -1086,15 +1331,19 @@ enum ProgramPCMBridge {
         if abs(sampleRate - 48_000) < 1 {
             stereo = samples.flatMap { [$0, $0] }
         } else {
-            let step = sampleRate / 48_000
+            let outCount = max(1, Int((Double(samples.count) * 48_000 / sampleRate).rounded()))
             var out: [Float] = []
-            out.reserveCapacity(Int(Double(samples.count) * 48_000 / max(sampleRate, 1)) * 2)
-            var position = 0.0
-            while Int(position) < samples.count {
-                let sample = samples[Int(position)]
+            out.reserveCapacity(outCount * 2)
+            let scale = sampleRate / 48_000
+            let last = samples.count - 1
+            for index in 0..<outCount {
+                let position = Double(index) * scale
+                let base = min(Int(position), last)
+                let next = min(base + 1, last)
+                let fraction = Float(position - Double(base))
+                let sample = samples[base] + (samples[next] - samples[base]) * fraction
                 out.append(sample)
                 out.append(sample)
-                position += step
             }
             stereo = out
         }
@@ -1131,10 +1380,18 @@ enum ProgramPCMBridge {
         lock.unlock()
     }
 
-    /// Post-mix program bus (same PCM as AAC encoder input).
+    /// Headphone program bus. Does not feed the guest return.
     static func appendProgramMixMonitor(_ interleavedStereo: [Float]) {
         appendMonitor(interleavedStereo)
     }
+
+    /// Same PCM the RTMP and recording encoders send. Guests hear this, not the monitor bus.
+    static func publishStreamMix(_ interleavedStereo: [Float]) {
+        programMixListener?(interleavedStereo)
+    }
+
+    /// Extra consumer for the guest return. Does not drain the headphone ring.
+    static var programMixListener: (([Float]) -> Void)?
 
     static func clearMonitorRing() {
         lock.lock()
@@ -1158,8 +1415,8 @@ enum ProgramAudioBus {
         guard !frame.isEmpty else { return }
         lock.lock()
         frames.append(Entry(frame: frame, presentationTime: presentationTime, timestampMs: timestampMs))
-        if frames.count > 48 {
-            frames.removeFirst(frames.count - 32)
+        if frames.count > 64 {
+            frames.removeFirst(frames.count - 48)
         }
         lock.unlock()
     }
@@ -1228,6 +1485,29 @@ enum ProgramAACEncoder {
         lock.unlock()
     }
 
+    /// Pulls up to one stereo block from a lane. Missing samples are zeros. Does not starve other lanes.
+    static func drainLane(_ role: AudioChannelRole, stereoFrames: Int) -> [Float] {
+        let need = max(0, stereoFrames) * 2
+        guard need > 0 else { return [] }
+        lock.lock()
+        defer { lock.unlock() }
+        var lane = lanes[role] ?? []
+        var out = [Float](repeating: 0, count: need)
+        let take = min(lane.count, need)
+        if take > 0 {
+            for index in 0..<take {
+                out[index] = lane[index]
+            }
+            lane.removeFirst(take)
+            lanes[role] = lane
+        }
+        return out
+    }
+
+    static func encodeStereoBlock(_ samples: [Float]) -> Data? {
+        encodeQueue.sync { encode(samples) }
+    }
+
     static func nextAccessUnit(recording: ProgramVideoFileRecorder? = nil) -> Data {
         nextTimedAccessUnit(recording: recording).aac
     }
@@ -1238,12 +1518,14 @@ enum ProgramAACEncoder {
             advanceMixedProgramAudio(recording: recording)
         }
         if let entry = ProgramAudioBus.popEntry() {
+            StreamAudioPipelineDiagnostics.recordRealAU()
             return ProgramAudioAccessUnit(
                 aac: entry.frame,
                 presentationTime: entry.presentationTime,
                 timestampMs: entry.timestampMs
             )
         }
+        StreamAudioPipelineDiagnostics.recordSyntheticSilenceAU()
         let pts = MediaClockAnchor.shared.nextAudioPresentationTime()
         return ProgramAudioAccessUnit(
             aac: AACSilenceEncoder.frame(),
@@ -1271,6 +1553,13 @@ enum ProgramAACEncoder {
             peak = max(peak, Double(lane.count) / Double(max(1, limits.max)))
         }
         return peak
+    }
+
+    /// Interleaved stereo sample counts per stream role (for live diagnostics).
+    static func laneDepthSummary() -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        return laneDepthSummaryUnlocked()
     }
 
     static func flush(role: AudioChannelRole) {
@@ -1321,16 +1610,22 @@ enum ProgramAACEncoder {
     }
 
     private static func deliverMixedProgramAudio(shouldEncode: Bool, recording: ProgramVideoFileRecorder?) {
-        let frame = dequeueMixedFrame() ?? [Float](repeating: 0, count: accessUnitSamples)
-        ProgramPCMBridge.appendProgramMixMonitor(frame)
+        let frame = dequeueMixedFrame()
+        let stream = frame?.stream ?? [Float](repeating: 0, count: accessUnitSamples)
+        let monitor = frame?.monitor ?? stream
+        ProgramPCMBridge.appendProgramMixMonitor(monitor)
+        ProgramPCMBridge.publishStreamMix(stream)
         Task { @MainActor in
-            AudioMonitoringEngine.shared.noteProgramMixFrame(frame)
+            AudioMonitoringEngine.shared.noteProgramMixFrame(monitor)
         }
         let passthrough = recording?.isPassthrough == true
         if let recording, !passthrough {
-            recording.appendAudioPCM(frame)
+            recording.appendAudioPCM(stream)
         }
-        guard shouldEncode, let encoded = encode(frame) else { return }
+        guard shouldEncode, let encoded = encode(stream) else {
+            if shouldEncode { StreamAudioPipelineDiagnostics.recordEncodeFailure() }
+            return
+        }
         let pts = MediaClockAnchor.shared.nextAudioPresentationTime()
         let timestampMs = MediaClockAnchor.shared.timestampMs(pts)
         if passthrough {
@@ -1339,36 +1634,73 @@ enum ProgramAACEncoder {
         ProgramAudioBus.push(encoded, presentationTime: pts, timestampMs: timestampMs)
     }
 
-    private static func dequeueMixedFrame() -> [Float]? {
-        lock.lock()
-        let take = accessUnitSamples
-        var hasAnySamples = false
-        var alignedConsume = take
+    /// Drop stale PCM so a slow slide (low video bitrate, deep capture buffer) cannot play sound late.
+    private static func trimLanesToLiveHorizonLocked() {
+        let ceiling = 48_000 * 2 * 120 / 1000
+        let keep = 48_000 * 2 * 80 / 1000
         for role in streamRoles {
-            guard let lane = lanes[role], !lane.isEmpty else { continue }
-            hasAnySamples = true
-            alignedConsume = min(alignedConsume, lane.count)
+            guard var lane = lanes[role], lane.count > ceiling else { continue }
+            lane.removeFirst(lane.count - keep)
+            lanes[role] = lane
         }
-        guard hasAnySamples, alignedConsume > 0 else {
+    }
+
+    private static func dequeueMixedFrame() -> (stream: [Float], monitor: [Float])? {
+        let gains = ProgramStreamAudioGates.gainSnapshot()
+        lock.lock()
+        trimLanesToLiveHorizonLocked()
+        let take = accessUnitSamples
+        var stream = [Float](repeating: 0, count: take)
+        var monitor = [Float](repeating: 0, count: take)
+        var contributed = false
+        for role in streamRoles where role != .guest {
+            guard var lane = lanes[role], !lane.isEmpty else { continue }
+            contributed = true
+            let consume = min(lane.count, take)
+            let known = gains.stream[role] != nil || gains.monitor[role] != nil
+            let streamGain = known ? (gains.stream[role] ?? 0) : 1
+            let monitorGain = known ? (gains.monitor[role] ?? 0) : 1
+            for index in 0..<consume {
+                let sample = Double(lane[index])
+                stream[index] += Float(sample * streamGain)
+                monitor[index] += Float(sample * monitorGain)
+            }
+            lane.removeFirst(consume)
+            lanes[role] = lane
+        }
+        let guest = GuestProgramMixBus.mix(interleavedCount: take)
+        if guest.active {
+            contributed = true
+            for index in 0..<take {
+                stream[index] += guest.stream[index]
+                monitor[index] += guest.monitor[index]
+            }
+        }
+        guard contributed else {
             lock.unlock()
             return nil
         }
-        var mix = [Float](repeating: 0, count: take)
-        for role in streamRoles {
-            guard var lane = lanes[role], lane.count >= alignedConsume else { continue }
-            for index in 0..<alignedConsume {
-                mix[index] += lane[index]
-            }
-            lane.removeFirst(alignedConsume)
-            lanes[role] = lane
+        let master = gains.master
+        let streamOut = stream.map { sample in
+            Float(max(-1, min(1, Double(sample) * master)))
         }
-        let master = ProgramStreamAudioGates.masterMixLinear()
-        let frame = mix.map { sample in
-            let clamped = max(-1, min(1, Double(sample) * master))
-            return Float(clamped)
+        let monitorOut = monitor.map { sample in
+            Float(max(-1, min(1, Double(sample) * master)))
         }
+        let depthLine = laneDepthSummaryUnlocked()
         lock.unlock()
-        return frame
+        StreamAudioPipelineDiagnostics.updateLaneDepths(depthLine)
+        return (streamOut, monitorOut)
+    }
+
+    private static func laneDepthSummaryUnlocked() -> String {
+        let stereoFrames = ProgramStreamAudioClock.framesPerAccessUnit
+        let parts = streamRoles.compactMap { role -> String? in
+            guard let lane = lanes[role], !lane.isEmpty else { return nil }
+            let frames = lane.count / 2
+            return "\(role.shortDiagnosticLabel) \(frames)/\(stereoFrames)"
+        }
+        return parts.isEmpty ? "lanes empty" : parts.joined(separator: " ")
     }
 
     private static func encode(_ samples: [Float]) -> Data? {
@@ -1395,10 +1727,24 @@ enum ProgramAACEncoder {
                 &packet
             )
         }
-        guard status == noErr, packets > 0, packet.mDataByteSize > 0 else { return nil }
+        guard status == noErr, packets > 0, packet.mDataByteSize > 0 else {
+            if status != noErr {
+                disposeConverter()
+            }
+            return nil
+        }
         return Data(bytes.prefix(Int(packet.mDataByteSize)))
         #else
         return nil
+        #endif
+    }
+
+    private static func disposeConverter() {
+        #if canImport(AudioToolbox)
+        if let converter {
+            AudioConverterDispose(converter)
+            self.converter = nil
+        }
         #endif
     }
 
@@ -1567,3 +1913,15 @@ private extension AudioBufferList {
     }
 }
 #endif
+
+private extension AudioChannelRole {
+    var shortDiagnosticLabel: String {
+        switch self {
+        case .microphone: "mic"
+        case .desktop: "desk"
+        case .guest: "guest"
+        case .slide: "slide"
+        case .soundboard: "pad"
+        }
+    }
+}

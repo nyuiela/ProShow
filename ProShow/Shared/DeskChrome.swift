@@ -1,3 +1,4 @@
+import ImageIO
 import SwiftUI
 #if canImport(AVFoundation)
 import AVFoundation
@@ -38,6 +39,14 @@ private struct ProgramRenderPausedKey: EnvironmentKey {
     static let defaultValue = false
 }
 
+private struct ProShowProgramVideoInputKey: EnvironmentKey {
+    static let defaultValue: VideoInputSource? = nil
+}
+
+private struct ProShowShowsProgramVideoLayerKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
 extension EnvironmentValues {
     var proShowVideoInputs: VideoInputEngine? {
         get { self[ProShowVideoInputsKey.self] }
@@ -67,6 +76,16 @@ extension EnvironmentValues {
     var programRenderPaused: Bool {
         get { self[ProgramRenderPausedKey.self] }
         set { self[ProgramRenderPausedKey.self] = newValue }
+    }
+
+    var proShowProgramVideoInput: VideoInputSource? {
+        get { self[ProShowProgramVideoInputKey.self] }
+        set { self[ProShowProgramVideoInputKey.self] = newValue }
+    }
+
+    var proShowShowsProgramVideoLayer: Bool {
+        get { self[ProShowShowsProgramVideoLayerKey.self] }
+        set { self[ProShowShowsProgramVideoLayerKey.self] = newValue }
     }
 }
 
@@ -331,6 +350,154 @@ enum DeskWindowChrome {
     }
 }
 
+/// Traffic lights stay. The system title bar, its title, and its bottom separator do not.
+enum DeskMergedTitlebar {
+    static var titleVisibility: NSWindow.TitleVisibility = .hidden
+
+    @discardableResult
+    static func restore(_ window: NSWindow?) -> Bool {
+        guard let window, window.sheetParent == nil else { return false }
+        var changed = false
+        if !window.styleMask.contains(.fullSizeContentView) {
+            window.styleMask.insert(.fullSizeContentView)
+            changed = true
+        }
+        if window.titleVisibility != .hidden {
+            window.titleVisibility = .hidden
+            changed = true
+        }
+        if window.titlebarAppearsTransparent != true {
+            window.titlebarAppearsTransparent = true
+            changed = true
+        }
+        if window.titlebarSeparatorStyle != .none {
+            window.titlebarSeparatorStyle = .none
+            changed = true
+        }
+        if window.toolbar?.items.isEmpty == true {
+            window.toolbar = nil
+            changed = true
+        }
+        if stripChrome(window) {
+            changed = true
+        }
+        #if os(macOS)
+        if ProShowStreamCapturePrivacy.deskConcealmentActive,
+           !ProShowStreamCapturePrivacy.isSuspendingConcealment {
+            window.sharingType = .none
+        }
+        #endif
+        return changed
+    }
+
+    /// AppKit keeps a separator view after the title bar is hidden. That view is the black line.
+    @discardableResult
+    private static func stripChrome(_ window: NSWindow) -> Bool {
+        guard let close = window.standardWindowButton(.closeButton) else { return false }
+        var changed = false
+        var view: NSView? = close
+        var depth = 0
+        while let current = view, depth < 6 {
+            for subview in current.subviews {
+                let name = NSStringFromClass(type(of: subview))
+                let isSeparator = name.contains("Separator") || name.contains("TitlebarDecoration")
+                let isLeftoverTitle = subview is NSTextField && current !== window.contentView
+                if isSeparator || isLeftoverTitle {
+                    if !subview.isHidden || subview.alphaValue > 0 {
+                        subview.isHidden = true
+                        subview.alphaValue = 0
+                        changed = true
+                    }
+                }
+            }
+            view = current.superview
+            depth += 1
+        }
+        return changed
+    }
+}
+
+/// Re-applies the merged title bar on the desk window that owns this view, including while a sheet is up.
+struct DeskTitlebarMergeGuard: NSViewRepresentable {
+    func makeNSView(context: Context) -> DeskTitlebarMergeGuardView {
+        DeskTitlebarMergeGuardView()
+    }
+
+    func updateNSView(_ view: DeskTitlebarMergeGuardView, context: Context) {
+        view.restore()
+    }
+}
+
+final class DeskTitlebarMergeGuardView: NSView {
+    private var observers: [NSObjectProtocol] = []
+    private weak var observed: NSWindow?
+    private var sheetTimer: Timer?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        install()
+        restore()
+        if deskWindow?.attachedSheet != nil {
+            watchSheet()
+        }
+    }
+
+    override func layout() {
+        super.layout()
+        restore()
+    }
+
+    func restore() {
+        _ = DeskMergedTitlebar.restore(deskWindow)
+    }
+
+    private var deskWindow: NSWindow? {
+        window?.sheetParent ?? window
+    }
+
+    private func install() {
+        guard let desk = deskWindow, desk !== observed else { return }
+        observers.forEach { NotificationCenter.default.removeObserver($0) }
+        observers.removeAll()
+        observed = desk
+        for name in [NSWindow.willBeginSheetNotification, NSWindow.didEndSheetNotification, NSWindow.didBecomeKeyNotification] {
+            observers.append(NotificationCenter.default.addObserver(forName: name, object: desk, queue: .main) { [weak self] note in
+                self?.restore()
+                if note.name == NSWindow.willBeginSheetNotification {
+                    self?.watchSheet()
+                } else if note.name == NSWindow.didEndSheetNotification {
+                    self?.sheetTimer?.invalidate()
+                    self?.sheetTimer = nil
+                    self?.restore()
+                }
+            })
+        }
+    }
+
+    private func watchSheet() {
+        sheetTimer?.invalidate()
+        let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] timer in
+            guard let self else {
+                timer.invalidate()
+                return
+            }
+            let desk = self.window?.sheetParent ?? self.window
+            _ = DeskMergedTitlebar.restore(desk)
+            if desk?.attachedSheet == nil {
+                timer.invalidate()
+                self.sheetTimer = nil
+            }
+        }
+        sheetTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    deinit {
+        sheetTimer?.invalidate()
+        observers.forEach { NotificationCenter.default.removeObserver($0) }
+    }
+}
+
 /// Solid dark host so AppKit never flashes window-white under AV/Metal layers.
 class ProShowLayerHostView: NSView {
     override var isOpaque: Bool { true }
@@ -425,6 +592,7 @@ struct DeskPressButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
+            .contentShape(Rectangle())
             .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
             .opacity(configuration.isPressed ? 0.88 : 1)
             .animation(reduceMotion ? nil : DeskMotion.easeOut, value: configuration.isPressed)
@@ -467,7 +635,7 @@ struct DeskIconButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: systemImage)
-                .font(.system(size: 13, weight: .semibold))
+                .font(DeskControlSize.regular.iconFont)
                 .foregroundStyle(tint ?? (isOn ? Color.white : ProShowTheme.toolbarIcon))
                 .frame(width: DeskLayout.hit, height: DeskLayout.hit)
                 .background(
@@ -483,14 +651,28 @@ struct DeskIconButton: View {
     }
 }
 
+/// Left accent mark for a selected inspector row. The row itself stays transparent.
+struct InspectorSelectionRibbon: View {
+    var selected: Bool
+    var color: Color = ProShowTheme.accent
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+            .fill(selected ? color : Color.clear)
+            .frame(width: 3)
+            .padding(.vertical, 6)
+            .accessibilityHidden(true)
+    }
+}
+
 /// Sentence-case pane title. Not tracked all-caps.
 struct DeskSectionTitle: View {
     let title: String
 
     var body: some View {
         Text(title)
-            .font(DeskType.meta)
-            .foregroundStyle(ProShowTheme.secondaryLabel)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(ShowSidebarPalette.subtitle)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -516,15 +698,51 @@ struct DeskEmptyState: View {
     var body: some View {
         VStack(alignment: .leading, spacing: DeskSpace.xs) {
             Text(title)
-                .font(DeskType.bodyEmph)
-                .foregroundStyle(ProShowTheme.primaryLabel)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(ShowSidebarPalette.title)
             Text(detail)
-                .font(DeskType.body)
-                .foregroundStyle(ProShowTheme.secondaryLabel)
+                .font(.system(size: 13))
+                .foregroundStyle(ShowSidebarPalette.subtitle)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: 360, alignment: .leading)
         .accessibilityElement(children: .combine)
+    }
+}
+
+enum SettingsModalLayout {
+    static let width: CGFloat = 900
+    static let height: CGFloat = 620
+    static let sidebarWidth: CGFloat = 220
+    static let labelWidth: CGFloat = 108
+}
+
+/// Label column + control, aligned like broadcast setup and the editor inspector.
+struct SettingsAlignedRow<Control: View>: View {
+    var label: String
+    var detail: String? = nil
+    var labelWidth: CGFloat = SettingsModalLayout.labelWidth
+    @ViewBuilder var control: () -> Control
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: DeskSpace.sm) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label)
+                    .font(DeskType.meta)
+                    .foregroundStyle(ProShowTheme.secondaryLabel)
+                if let detail {
+                    Text(detail)
+                        .font(DeskType.micro)
+                        .foregroundStyle(ProShowTheme.secondaryLabel.opacity(0.9))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(width: labelWidth, alignment: .leading)
+            control()
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(minHeight: InspectorTokens.rowHeight)
+        .accessibilityElement(children: .contain)
     }
 }
 
@@ -549,31 +767,70 @@ struct SettingsPageHeader: View {
     }
 }
 
+/// Settings and modal navigation row. Selected state is a left ribbon and accent icon, not a fill.
+struct DeskModalNavRow: View {
+    let title: String
+    let systemImage: String
+    var selected: Bool = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                    .fill(selected ? ProShowTheme.accent : Color.clear)
+                    .frame(width: 3)
+                    .padding(.vertical, 7)
+                    .accessibilityHidden(true)
+                Image(systemName: systemImage)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(selected ? ProShowTheme.accent : ShowSidebarPalette.symbol)
+                    .frame(width: 18)
+                    .accessibilityHidden(true)
+                Text(title)
+                    .font(.system(size: 13))
+                    .foregroundStyle(ShowSidebarPalette.title)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.trailing, 8)
+            .frame(minHeight: 32)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(DeskPressButtonStyle())
+        .padding(.horizontal, 8)
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
 struct SettingsGroup<Content: View>: View {
     var title: String? = nil
     var footnote: String? = nil
     @ViewBuilder var content: () -> Content
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DeskSpace.xs) {
+        VStack(alignment: .leading, spacing: 8) {
             if let title {
-                DeskSectionTitle(title: title)
-                    .padding(.horizontal, 2)
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(ShowSidebarPalette.title)
+                    .accessibilityAddTraits(.isHeader)
             }
-            VStack(spacing: 0) {
+            VStack(spacing: 2) {
                 content()
             }
-            .background(ProShowTheme.panel)
-            .clipShape(RoundedRectangle(cornerRadius: DeskRadius.card, style: .continuous))
-            .deskElevation(.sm)
             if let footnote {
                 Text(footnote)
-                    .font(DeskType.micro)
-                    .foregroundStyle(ProShowTheme.secondaryLabel)
+                    .font(.system(size: 12))
+                    .foregroundStyle(ShowSidebarPalette.subtitle)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 2)
             }
         }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(ShowSidebarPalette.selection(scheme), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }
 
@@ -586,20 +843,19 @@ struct SettingsRow<Control: View>: View {
         HStack(alignment: .center, spacing: DeskSpace.sm) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(DeskType.body)
-                    .foregroundStyle(ProShowTheme.primaryLabel)
+                    .font(.system(size: 13))
+                    .foregroundStyle(ShowSidebarPalette.title)
                 if let detail {
                     Text(detail)
-                        .font(DeskType.micro)
-                        .foregroundStyle(ProShowTheme.secondaryLabel)
+                        .font(.system(size: 12))
+                        .foregroundStyle(ShowSidebarPalette.subtitle)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             control()
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.vertical, 8)
         .frame(minHeight: 36)
         .accessibilityElement(children: .contain)
     }
@@ -607,11 +863,69 @@ struct SettingsRow<Control: View>: View {
 
 struct SettingsHairline: View {
     var body: some View {
-        Rectangle()
-            .fill(ProShowTheme.hairline)
-            .frame(height: 1)
-            .padding(.leading, 12)
+        Color.clear
+            .frame(height: 0)
             .accessibilityHidden(true)
+    }
+}
+
+/// Platform brand or connected account profile for stream destinations.
+struct StreamDestinationAvatar: View {
+    var account: StreamAccount
+    var size: CGFloat = 36
+
+    var body: some View {
+        ZStack(alignment: .bottomTrailing) {
+            avatarBody
+                .frame(width: size, height: size)
+                .clipShape(RoundedRectangle(cornerRadius: max(6, size * 0.22), style: .continuous))
+            if account.profileImageUrl != nil {
+                platformBadge
+                    .offset(x: 2, y: 2)
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private var avatarBody: some View {
+        if let urlString = account.profileImageUrl?.trimmingCharacters(in: .whitespacesAndNewlines),
+           let url = URL(string: urlString) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                case .failure:
+                    platformPlate
+                default:
+                    platformPlate.opacity(0.7)
+                }
+            }
+        } else {
+            platformPlate
+        }
+    }
+
+    @ViewBuilder
+    private var platformPlate: some View {
+        switch account.platform {
+        case .customRtmp, .srt:
+            ZStack {
+                (Color(hex: account.platform.tintHex) ?? ProShowTheme.accent)
+                StreamPlatformBrandIcon(platform: account.platform, size: size * 0.55)
+            }
+        default:
+            StreamPlatformBrandIcon(platform: account.platform, size: size)
+        }
+    }
+
+    private var platformBadge: some View {
+        Circle()
+            .fill(Color(hex: account.platform.tintHex) ?? ProShowTheme.accent)
+            .frame(width: max(12, size * 0.32), height: max(12, size * 0.32))
+            .overlay {
+                Circle().strokeBorder(ProShowTheme.canvas, lineWidth: 1.5)
+            }
     }
 }
 
@@ -653,17 +967,108 @@ struct DeskElevation: ViewModifier {
     }
 }
 
+enum DeskChromePlaneDividerEdge {
+    case leading
+    case trailing
+    case top
+    case bottom
+}
+
+/// Flat pane background with optional hairline edge (inspector rail, media bin, etc.).
+struct DeskChromePlaneModifier: ViewModifier {
+    var elevation: DeskPaneElevation = .window
+    var dividerEdge: DeskChromePlaneDividerEdge?
+
+    private var fill: Color {
+        switch elevation {
+        case .window, .workspace, .sidebar, .inspector:
+            ThemeTokens.bgWindow
+        }
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .background(fill)
+            .overlay {
+                if let dividerEdge {
+                    divider(for: dividerEdge)
+                }
+            }
+    }
+
+    @ViewBuilder
+    private func divider(for edge: DeskChromePlaneDividerEdge) -> some View {
+        switch edge {
+        case .leading:
+            HStack(spacing: 0) {
+                Rectangle().fill(ThemeTokens.dividerLine).frame(width: 1)
+                Spacer(minLength: 0)
+            }
+        case .trailing:
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                Rectangle().fill(ThemeTokens.dividerLine).frame(width: 1)
+            }
+        case .top:
+            VStack(spacing: 0) {
+                Rectangle().fill(ThemeTokens.dividerLine).frame(height: 1)
+                Spacer(minLength: 0)
+            }
+        case .bottom:
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+                Rectangle().fill(ThemeTokens.dividerLine).frame(height: 1)
+            }
+        }
+    }
+}
+
+/// Rounded group surface inside the right inspector stack.
+struct DeskInspectorGroupModifier: ViewModifier {
+    var padding: CGFloat = 10
+    @Environment(\.colorScheme) private var scheme
+
+    func body(content: Content) -> some View {
+        content
+            .padding(padding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(ShowSidebarPalette.selection(scheme), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
+/// Compact floating toolbar (canvas selection context bar).
+struct DeskFloatingToolbarCapsule: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .deskChromeGlass(in: Capsule(style: .continuous), interactive: true)
+    }
+}
+
 extension View {
+    func deskFloatingToolbarCapsule() -> some View {
+        modifier(DeskFloatingToolbarCapsule())
+    }
+
     func deskElevation(_ strength: DeskElevation.Strength = .sm) -> some View {
         modifier(DeskElevation(strength: strength))
     }
 
     func deskCard(radius: CGFloat = DeskRadius.card) -> some View {
         clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .strokeBorder(ProShowTheme.hairline, lineWidth: 1)
-            }
+    }
+
+    /// Flat desk background — same plane as split panes and sidebars.
+    func deskChromePlane(
+        elevation: DeskPaneElevation = .window,
+        dividerEdge: DeskChromePlaneDividerEdge? = nil
+    ) -> some View {
+        modifier(DeskChromePlaneModifier(elevation: elevation, dividerEdge: dividerEdge))
+    }
+
+    func deskInspectorGroup(padding: CGFloat = 10) -> some View {
+        modifier(DeskInspectorGroupModifier(padding: padding))
     }
 
     func deskFocusRing(isFocused: Bool) -> some View {
@@ -674,23 +1079,37 @@ extension View {
     }
 }
 
-/// Home / picker surfaces: true black rail, lemon CTAs, color row marks.
+/// Home / picker surfaces. Aliased onto `ProShowTheme` so the desk has one accent and one graphite stack.
 enum StartHome {
-    static let page = Color(red: 0.06, green: 0.06, blue: 0.06)
-    static let sidebar = Color(red: 0.04, green: 0.04, blue: 0.04)
-    static let dock = Color(red: 0.08, green: 0.08, blue: 0.08)
-    static let lemon = Color(red: 0.98, green: 0.84, blue: 0.18)
-    static let tangerine = Color(red: 1.0, green: 0.42, blue: 0.16)
-    static let blush = Color(red: 1.0, green: 0.55, blue: 0.72)
-    static let aqua = Color(red: 0.24, green: 0.88, blue: 0.82)
-    static let coral = Color(red: 1.0, green: 0.38, blue: 0.28)
-    static let butter = Color(red: 1.0, green: 0.88, blue: 0.28)
-    static let ink = Color(red: 0.10, green: 0.10, blue: 0.10)
+    static let page = ProShowTheme.canvas
+    static let sidebar = ProShowTheme.panel
+    static let dock = ProShowTheme.well
+    static let lemon = ProShowTheme.accent
+    static let tangerine = ProShowTheme.sandboxOrange
+    static let blush = ProShowTheme.liveRed
+    static let aqua = ProShowTheme.accent
+    static let coral = ProShowTheme.liveRed
+    static let butter = ProShowTheme.statusOn
+    static let ink = Color(red: 0.07, green: 0.07, blue: 0.08)
 
     static func rowTint(_ index: Int) -> Color {
         let tints = [blush, aqua, lemon, tangerine, coral, butter]
         let wrapped = ((index % tints.count) + tints.count) % tints.count
         return tints[wrapped]
+    }
+}
+
+/// Start-menu beam mark. Used for the home wordmark and any chrome that stands in for the app.
+struct ProShowMark: View {
+    var side: CGFloat = 28
+
+    var body: some View {
+        Image("ProShowLogo")
+            .resizable()
+            .interpolation(.high)
+            .frame(width: side, height: side)
+            .clipShape(RoundedRectangle(cornerRadius: side * 0.22, style: .continuous))
+            .accessibilityLabel("ProShow")
     }
 }
 
@@ -703,6 +1122,50 @@ enum ResolvedCanvasMedia {
             return image(atPath: resolved.path) ?? poster(for: resolved)
         }
         return image(atPath: trimmed) ?? poster(for: URL(fileURLWithPath: trimmed))
+    }
+
+    static func thumbnail(at uri: String) -> Image? {
+        let trimmed = uri.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if let resolved = MediaPath.resolve(trimmed) {
+            return thumbnail(atPath: resolved.path) ?? poster(for: resolved)
+        }
+        return thumbnail(atPath: trimmed) ?? poster(for: URL(fileURLWithPath: trimmed))
+    }
+
+    static let thumbnailMaxLongSide = 512
+
+    /// Bin and poster stills. A 4K file is stored at most 512 px on the long side.
+    static func thumbnail(atPath path: String) -> Image? {
+        let key = path + "#thumb512"
+        #if os(macOS)
+        if let cached = AssetCacheManager.shared.object(forKey: key) as? NSImage {
+            return Image(nsImage: cached)
+        }
+        guard let cg = downsampledCGImage(path: path, maxLongSide: thumbnailMaxLongSide) else { return nil }
+        let image = NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+        AssetCacheManager.shared.setObject(image, forKey: key, cost: imageCost(image.size))
+        return Image(nsImage: image)
+        #else
+        if let cached = AssetCacheManager.shared.object(forKey: key) as? UIImage {
+            return Image(uiImage: cached)
+        }
+        guard let cg = downsampledCGImage(path: path, maxLongSide: thumbnailMaxLongSide) else { return nil }
+        let image = UIImage(cgImage: cg)
+        AssetCacheManager.shared.setObject(image, forKey: key, cost: imageCost(image.size))
+        return Image(uiImage: image)
+        #endif
+    }
+
+    private static func downsampledCGImage(path: String, maxLongSide: Int) -> CGImage? {
+        let url = URL(fileURLWithPath: path) as CFURL
+        guard let source = CGImageSourceCreateWithURL(url, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxLongSide,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+        ]
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
     }
 
     static func image(atPath path: String) -> Image? {
@@ -732,7 +1195,7 @@ enum ResolvedCanvasMedia {
 
     static func poster(for mediaURL: URL) -> Image? {
         for thumb in posterCandidates(for: mediaURL) {
-            if let image = image(atPath: thumb.path) {
+            if let image = thumbnail(atPath: thumb.path) {
                 return image
             }
         }
@@ -744,7 +1207,7 @@ enum ResolvedCanvasMedia {
         } else {
             _ = try? AssetPreview.writeThumbnail(from: mediaURL, to: dest)
         }
-        return image(atPath: dest.path)
+        return thumbnail(atPath: dest.path)
     }
 
     static func posterCandidates(for mediaURL: URL) -> [URL] {
@@ -820,25 +1283,71 @@ struct MediaPreviewFrame: View {
     }
 
     private var previewImage: Image? {
-        if let artworkURL, let image = ResolvedCanvasMedia.image(atPath: artworkURL.path) ?? ResolvedCanvasMedia.image(at: artworkURL.path) {
+        if let artworkURL, let image = ResolvedCanvasMedia.thumbnail(at: artworkURL.path) {
             return image
         }
         guard let filePath, !filePath.isEmpty else { return nil }
-        return ResolvedCanvasMedia.image(at: filePath)
+        return ResolvedCanvasMedia.thumbnail(at: filePath)
     }
 
     private var fallbackSymbol: String {
         switch kind {
         case .video: "film"
+        case .audio: "waveform"
         case .camera: "video.fill"
+        case .microphone: "mic.fill"
         case .placeholder: "square.dashed"
         case .image: "photo"
         }
     }
 }
 
+#if os(macOS)
+private struct BrowserAssignedSourcePreview: View {
+    let urlString: String
+    let label: String
+    let style: MediaFrameStyle
+    let reduceMotion: Bool
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 15.0, paused: reduceMotion)) { _ in
+            let raster = ProgramPageRaster.shared
+            let _ = raster.refreshIfNeeded()
+            ZStack {
+                Color.black
+                if urlString.isEmpty {
+                    browserPlaceholder
+                } else {
+                    LivePixelPreview(
+                        pixelBuffer: raster.displayBuffer(for: urlString),
+                        stamp: raster.presentationStamp,
+                        style: style,
+                        isPaused: reduceMotion
+                    )
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: style.cornerRadius, style: style.continuous ? .continuous : .circular))
+        }
+    }
+
+    private var browserPlaceholder: some View {
+        VStack(spacing: 6) {
+            Image(systemName: "globe")
+                .font(.title2)
+            Text(label.isEmpty ? "Browser" : label)
+                .font(.system(size: 11, weight: .semibold))
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+        }
+        .foregroundStyle(.white.opacity(0.9))
+        .padding(8)
+    }
+}
+#endif
+
 struct AssignedSourcePreview: View {
     let source: AssignedMediaSource
+    var canvasObjectKind: CanvasObjectKind? = nil
     var cornerRadius: CGFloat = 0
     var playsVideo: Bool = false
     var mutesVideo: Bool = true
@@ -849,6 +1358,8 @@ struct AssignedSourcePreview: View {
     @Environment(\.proShowPlayback) private var playback
     @Environment(\.mirrorsProgramPlayer) private var mirrorsProgramPlayer
     @Environment(\.programRenderPaused) private var programRenderPaused
+    @Environment(\.proShowProgramVideoInput) private var programVideoInput
+    @Environment(\.proShowShowsProgramVideoLayer) private var showsProgramVideoLayer
 
     private var sharedPresentation: SharedProgramPresentation {
         mirrorsProgramPlayer ? .mirroredFrame : .playerLayer
@@ -895,21 +1406,14 @@ struct AssignedSourcePreview: View {
             .opacity(resolvedStyle.opacity)
             .accessibilityLabel(source.name)
         case .webPage:
-            ZStack {
-                Color.black.opacity(0.45)
-                VStack(spacing: 6) {
-                    Image(systemName: "globe")
-                        .font(.title2)
-                    Text(source.name)
-                        .font(.system(size: 11, weight: .semibold))
-                        .lineLimit(2)
-                        .multilineTextAlignment(.center)
-                }
-                .foregroundStyle(.white.opacity(0.9))
-                .padding(8)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: resolvedStyle.cornerRadius, style: resolvedStyle.continuous ? .continuous : .circular))
+            BrowserAssignedSourcePreview(
+                urlString: source.connectionString ?? "",
+                label: source.name,
+                style: resolvedStyle,
+                reduceMotion: reduceMotion
+            )
             .opacity(resolvedStyle.opacity)
+            .accessibilityLabel(source.name)
         default:
             EmptyView()
         }
@@ -952,13 +1456,30 @@ struct AssignedSourcePreview: View {
         .opacity(resolvedStyle.opacity)
     }
 
+    private var usesProgramVideoInput: Bool {
+        ProgramLiveVideoRouting.canvasUsesProgramInput(
+            assigned: source,
+            objectKind: canvasObjectKind,
+            programInput: programVideoInput,
+            showsProgramVideoLayer: showsProgramVideoLayer
+        )
+    }
+
+    private var livePreviewEndpoint: String? {
+        usesProgramVideoInput ? programVideoInput?.endpoint : source.connectionString
+    }
+
+    private var livePreviewSourceID: String? {
+        usesProgramVideoInput ? programVideoInput?.id.uuidString : source.sourceID
+    }
+
     @ViewBuilder
     private var liveDevicePreview: some View {
         ZStack {
             cameraFallback
             LivePixelPreview(
-                endpoint: source.connectionString,
-                sourceID: source.sourceID,
+                endpoint: livePreviewEndpoint,
+                sourceID: livePreviewSourceID,
                 style: resolvedStyle,
                 isPaused: programRenderPaused
             )
@@ -1057,9 +1578,21 @@ private struct LivePixelRepresentable: NSViewRepresentable {
             boundPaused = paused
             let hasLane = (endpoint?.isEmpty == false) || (sourceID?.isEmpty == false)
             guard !paused, hasLane else { return }
-            token = LivePixelHub.shared.add(endpoint: endpoint, sourceID: sourceID) { [weak self] buffer in
-                guard let self else { return }
-                self.view?.setPixelBuffer(buffer, style: self.style)
+            token = LivePixelHub.shared.add(
+                endpoint: endpoint,
+                sourceID: sourceID,
+                deliverOnCaptureQueue: true
+            ) { [weak self] buffer in
+                guard let self, let view = self.view else { return }
+                #if canImport(CoreVideo)
+                if let layer = view.layer {
+                    LowLatencyIngestPipeline.shared.presentIOSurface(buffer, on: layer)
+                } else {
+                    view.setPixelBuffer(buffer, style: self.style)
+                }
+                #else
+                view.setPixelBuffer(buffer, style: self.style)
+                #endif
             }
             if let current = LivePixelHub.shared.current(endpoint: endpoint, sourceID: sourceID) {
                 view?.setPixelBuffer(current, style: style)
@@ -1261,17 +1794,17 @@ struct SharedProgramPlayerView: View {
     }
 }
 
-/// Keeps the single AVPlayer attached so mirrored previews can copy the same frame
-/// and program audio keeps a live renderer.
+/// The program `AVPlayer` lives on `MediaPlaybackEngine`. A hidden `AVPlayerLayer` here
+/// competed with `AVPlayerItemVideoOutput` for the same decode pool and froze playback
+/// after a few seconds. Mirrored previews read `SharedTexturePublisher` instead.
 struct ProgramPlayerOwnerView: View {
     var playback: MediaPlaybackEngine
 
     var body: some View {
-        SharedProgramPlayerLayerView(playback: playback, style: .plain)
-            .frame(width: 16, height: 16)
-            .offset(x: -48, y: -48)
-            .allowsHitTesting(false)
+        Color.clear
+            .frame(width: 1, height: 1)
             .accessibilityHidden(true)
+            .onAppear { _ = playback.player }
     }
 }
 
@@ -1480,6 +2013,15 @@ struct SlotVideoPlayerView: View {
 }
 
 #if canImport(AVFoundation)
+private func applyLocalPreviewMaxResolution(to item: AVPlayerItem) {
+    let stored = UserDefaults.standard.object(forKey: "proshow.preview.localRenderPercent") as? Double ?? 50
+    let percent = min(100, max(25, stored.rounded()))
+    guard percent < 100 else { return }
+    let contract = ProgramRenderContract(width: 3840, height: 2160, frameRate: 30, colorSpace: "sRGB")
+        .scaledForLocalPreview(percent: percent)
+    item.preferredMaximumResolution = CGSize(width: contract.width, height: contract.height)
+}
+
 #if os(macOS)
 private final class SlotPlayerNSView: ProShowLayerHostView {
     let playerLayer = AVPlayerLayer()
@@ -1531,6 +2073,7 @@ private struct SlotAVPlayerLayerView: NSViewRepresentable {
     final class Coordinator {
         let player = AVPlayer()
         private var endObserver: NSObjectProtocol?
+        private var meterObserver: Any?
         private var currentURL: URL?
 
         func sync(url: URL, muted: Bool, startAt: TimeInterval, priority: Int, visible: Bool) {
@@ -1559,6 +2102,7 @@ private struct SlotAVPlayerLayerView: NSViewRepresentable {
             }
             currentURL = url
             let item = AVPlayerItem(url: url)
+            applyLocalPreviewMaxResolution(to: item)
             player.replaceCurrentItem(with: item)
             if let endObserver {
                 NotificationCenter.default.removeObserver(endObserver)
@@ -1575,10 +2119,34 @@ private struct SlotAVPlayerLayerView: NSViewRepresentable {
                 player.seek(to: CMTime(seconds: startAt, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
             }
             player.play()
+            installMeter()
+        }
+
+        private func installMeter() {
+            guard meterObserver == nil else { return }
+            let interval = CMTime(seconds: 0.1, preferredTimescale: 600)
+            meterObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
+                guard let self else { return }
+                let seconds = CMTimeGetSeconds(time)
+                let audible = !self.player.isMuted
+                    && self.player.volume > 0.01
+                    && self.player.timeControlStatus == .playing
+                AudibleVideoClock.note(
+                    id: ObjectIdentifier(self),
+                    url: self.currentURL,
+                    playhead: seconds.isFinite ? seconds : 0,
+                    audible: audible
+                )
+            }
         }
 
         func stop() {
             player.pause()
+            AudibleVideoClock.note(id: ObjectIdentifier(self), url: nil, playhead: 0, audible: false)
+            if let meterObserver {
+                player.removeTimeObserver(meterObserver)
+            }
+            meterObserver = nil
             player.replaceCurrentItem(with: nil)
             if let endObserver {
                 NotificationCenter.default.removeObserver(endObserver)
@@ -1644,6 +2212,7 @@ private struct SlotAVPlayerLayerView: UIViewRepresentable {
             }
             currentURL = url
             let item = AVPlayerItem(url: url)
+            applyLocalPreviewMaxResolution(to: item)
             player.replaceCurrentItem(with: item)
             if let endObserver {
                 NotificationCenter.default.removeObserver(endObserver)

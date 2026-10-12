@@ -14,19 +14,6 @@ struct OperatorView: View {
         let _ = controller.programFrameRevisionStamp
         VStack(spacing: 0) {
             #if os(macOS)
-            TopToolbarView(
-                controller: controller,
-                projectName: controller.projectDisplayName,
-                projectIsDirty: {
-                    let _ = controller.projectSaveRevision
-                    let _ = controller.documentState.tracker.activeRevision
-                    return controller.projectHasUnsavedChanges
-                }(),
-                onOpenAudience: { onOpenAudienceWindow?() },
-                onOpenStage: { onOpenStageWindow?() },
-                onOpenStream: { onOpenStreamWindow?() },
-                onOpenMultiViewer: { onOpenMultiViewerWindow?() }
-            )
             AppWorkspaceRouter(controller: controller)
             #else
             TopToolbarView(
@@ -40,7 +27,13 @@ struct OperatorView: View {
             }
             #endif
         }
-        .background(ProShowTheme.canvas)
+        .environment(\.deskWindowActions, DeskWindowActions(
+            openAudience: { onOpenAudienceWindow?() },
+            openStage: { onOpenStageWindow?() },
+            openStream: { onOpenStreamWindow?() },
+            openMultiViewer: { onOpenMultiViewerWindow?() }
+        ))
+        .background(ProShowTheme.canvas.ignoresSafeArea())
         .lockFlickerFreeBackground()
         .preferredColorScheme(.dark)
         .focusEffectDisabled()
@@ -59,10 +52,6 @@ struct OperatorView: View {
                 .id("proshow.program-player-owner")
             #endif
         }
-        .overlay(alignment: controller.isCanvasEditorPresented ? .bottomTrailing : .bottomLeading) {
-            DeskSignalProbeView(controller: controller)
-                .padding(8)
-        }
         .onAppear {
             controller.evaluateProgramClockState()
         }
@@ -70,7 +59,9 @@ struct OperatorView: View {
             controller.bumpProjectSaveRevision()
         }
         .sheet(isPresented: Binding(
-            get: { controller.isAddShotOpen },
+            get: {
+                controller.isAddShotOpen && controller.addShotPurpose != .assignRundownProgramSlide
+            },
             set: { if $0 { controller.isAddShotOpen = true } else { controller.closeAddShot() } }
         )) {
             AddShotModalView(controller: controller)
@@ -85,6 +76,11 @@ struct OperatorView: View {
         }
         .sheet(isPresented: $controller.isGoLiveSetupPresented) {
             GoLiveSetupSheet(controller: controller)
+                .frame(
+                    maxWidth: GoLiveSetupSheet.modalMaxWidth,
+                    maxHeight: GoLiveSetupSheet.modalMaxHeight
+                )
+                .frame(width: GoLiveSetupSheet.modalWidth, height: GoLiveSetupSheet.modalHeight)
         }
     }
 
@@ -95,80 +91,75 @@ struct OperatorView: View {
     }
 }
 
-/// Slide/media transport + layout controls sitting between the cue grid and the media pane.
-struct WorkspaceControlBar: View {
+/// Bottom center pane: shots and media on one sidebar-style surface.
+struct StudioMediaDrawerStack: View {
     @Bindable var controller: ShowController
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        HStack(spacing: DeskSpace.xs) {
-            DeskIconButton(systemImage: "plus", label: "New presentation") {
-                _ = controller.addPresentationToActivePlaylist(named: "Untitled \(controller.playlist.items.count + 1)")
-            }
-            DeskIconButton(systemImage: "plus.rectangle.on.folder", label: "Add shot") {
-                controller.openAddShot(layerIndex: controller.addShotLayerIndex)
-            }
-            Menu {
-                ForEach(Array(controller.masterLayers.enumerated()), id: \.element.id) { index, layer in
-                    Button(layer.title) { controller.openAddShot(layerIndex: index) }
-                }
-            } label: {
-                Text(controller.masterLayers.indices.contains(controller.addShotLayerIndex)
-                     ? controller.masterLayers[controller.addShotLayerIndex].title
-                     : "Main Layer 1")
-                    .font(DeskType.meta)
-                    .foregroundStyle(ProShowTheme.secondaryLabel)
-            }
-            .frame(width: 110)
-            .accessibilityLabel("Target master layer")
-            DeskIconButton(systemImage: "pause.fill", label: "Pause") {
-                controller.inspector.pauseTransport()
-                controller.tickProgram()
-            }
-            DeskIconButton(systemImage: "shuffle", label: "Play or pause transport") {
-                controller.transportPlayPause()
-            }
-            DeskIconButton(systemImage: "play.fill", label: "Go live") {
-                controller.inspector.playTransport()
-                controller.requestGoLive()
-                controller.tickProgram()
-            }
-
-            Text(String(format: "%.1fs", controller.slideTransitionSeconds))
-                .font(DeskType.mono)
-                .foregroundStyle(ProShowTheme.secondaryLabel)
-                .frame(width: 40, alignment: .trailing)
-                .accessibilityLabel("Transition \(String(format: "%.1f seconds", controller.slideTransitionSeconds))")
-            Slider(value: $controller.slideTransitionSeconds, in: 0...2, step: 0.1)
-                .tint(ProShowTheme.accent)
-                .frame(maxWidth: 150)
-                .accessibilityLabel("Slide transition")
-
-            Spacer(minLength: DeskSpace.md)
-
-            DeskIconButton(systemImage: "square.grid.2x2", label: "Grid view", isOn: controller.slideLayoutMode == .grid) {
-                controller.slideLayoutMode = .grid
-            }
-            DeskIconButton(systemImage: "textformat", label: "Outline view", isOn: controller.slideLayoutMode == .outline) {
-                controller.slideLayoutMode = .outline
-            }
-            DeskIconButton(systemImage: "list.bullet", label: "List view", isOn: controller.slideLayoutMode == .list) {
-                controller.slideLayoutMode = .list
-            }
-
-            Slider(value: $controller.slideThumbZoom, in: 0.25...1)
-                .tint(ProShowTheme.accent)
-                .frame(maxWidth: 96)
-                .accessibilityLabel("Thumbnail size")
+        VStack(spacing: 0) {
+            LayerShotStrip(controller: controller)
+            MediaBinView(controller: controller)
         }
-        .padding(.horizontal, DeskSpace.sm)
-        .padding(.vertical, 6)
-        .frame(minHeight: 40)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(ShowDrawerPalette.background(scheme))
+        .modifier(ShowSidebarSystemScheme())
+    }
+}
+
+/// List and grid as one control, icon color only for the active mode.
+struct PaneLayoutToggle: View {
+    var gridOn: Bool
+    var listOn: Bool
+    var onGrid: () -> Void
+    var onList: () -> Void
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        HStack(spacing: 0) {
+            modeButton("square.grid.2x2", label: "Grid view", isOn: gridOn, action: onGrid)
+            modeButton("list.bullet", label: "List view", isOn: listOn, action: onList)
+        }
+        .padding(1)
+        .background {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(ShowSidebarPalette.field(scheme))
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private func modeButton(_ systemImage: String, label: String, isOn: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(isOn ? ProShowTheme.accent : ShowSidebarPalette.symbol)
+                .frame(width: 28, height: 24)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(DeskPressButtonStyle())
+        .help(label)
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
+    }
+}
+
+struct BorderlessMenuChrome: ViewModifier {
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        content
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+        #else
+        content
+        #endif
     }
 }
 
 /// Shots on the selected master layer — adding from the modal lands here and can go live.
 struct LayerShotStrip: View {
     @Bindable var controller: ShowController
+    @Environment(\.colorScheme) private var scheme
     @State private var renameShotID: UUID?
     @State private var renameShotTitle = ""
 
@@ -181,27 +172,24 @@ struct LayerShotStrip: View {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(layer?.title ?? "Main Layer 1")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(ProShowTheme.primaryLabel)
-                Text(layer?.shots.isEmpty == false ? "\(layer?.shots.count ?? 0) shots" : "Empty")
-                    .font(.system(size: 10))
-                    .foregroundStyle(ProShowTheme.secondaryLabel)
-            }
-            .frame(width: 88, alignment: .leading)
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    if let layer {
+        Group {
+            if let layer, !layer.shots.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
                         ForEach(layer.shots) { shot in
-                            shotThumb(shot, isLive: layer.liveShotID == shot.id)
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    controller.takeShotLive(shot, layerIndex: layerIndex)
-                                }
-                                .contextMenu {
+                            VStack(alignment: .leading, spacing: 4) {
+                                shotThumb(shot, isLive: layer.liveShotID == shot.id)
+                                Text(shot.name)
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(ShowSidebarPalette.title)
+                                    .lineLimit(1)
+                                    .frame(width: 72, alignment: .leading)
+                            }
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                controller.takeShotLive(shot, layerIndex: layerIndex)
+                            }
+                            .contextMenu {
                                     LayerShotContextMenu(
                                         controller: controller,
                                         shot: shot,
@@ -219,29 +207,14 @@ struct LayerShotStrip: View {
                                 .accessibilityHint("Drag onto the slide pane to insert. Control-click or right-click for more actions.")
                         }
                     }
-                    Button {
-                        controller.openAddShot(layerIndex: layerIndex)
-                    } label: {
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(ProShowTheme.well)
-                            .overlay {
-                                Image(systemName: "plus")
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundStyle(ProShowTheme.primaryLabel)
-                            }
-                            .frame(width: 72, height: 44)
-                    }
-                    .buttonStyle(DeskPressButtonStyle())
-                    .accessibilityLabel("Add shot")
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
                 }
+                .focusEffectDisabled()
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel("Layer shots")
             }
-            .focusEffectDisabled()
         }
-        .padding(.horizontal, DeskSpace.sm)
-        .padding(.vertical, 8)
-        .frame(minHeight: 60)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Layer shots")
         .alert("Rename Shot", isPresented: Binding(
             get: { renameShotID != nil },
             set: { if !$0 { renameShotID = nil } }
@@ -267,16 +240,17 @@ struct LayerShotStrip: View {
                 PlaceholderLetterCard(letter: letter, tintHex: source.tintHex ?? "#D8F5D0", cornerRadius: 8)
             } else if source.sourceType == .solidColor, let hex = source.tintHex ?? source.connectionString {
                 SolidColorCard(hex: hex, cornerRadius: 8)
+            } else if let tint = Color(hex: source.tintHex ?? "") {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(tint)
             } else {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color(hex: source.tintHex ?? "") ?? ProShowTheme.well)
+                    .fill(ShowSidebarPalette.field(scheme))
                     .overlay {
-                        Text(shot.name)
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .lineLimit(2)
-                            .multilineTextAlignment(.center)
-                            .padding(6)
+                        Image(systemName: "video.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(ShowSidebarPalette.symbol)
+                            .accessibilityHidden(true)
                     }
             }
         }
@@ -318,106 +292,17 @@ struct LayerShotContextMenu: View {
         }
         if isLive {
             Button("Clear Live", systemImage: "record.circle") {
-                controller.clearLiveShot(layerIndex: layerIndex)
+                let name = controller.masterLayers.indices.contains(layerIndex)
+                    ? controller.masterLayers[layerIndex].title
+                    : "Layer \(layerIndex + 1)"
+                controller.requestDeskDestructiveConfirm(
+                    .clearLiveShot(layerName: name, layerIndex: layerIndex)
+                )
             }
         }
         Divider()
         Button("Delete", systemImage: "trash", role: .destructive) {
             controller.removeShot(shot.id, layerIndex: layerIndex)
         }
-    }
-}
-
-private struct DeskSignalProbeView: View {
-    var controller: ShowController
-    @State private var displayed = DeskSignalProbeSnapshot.hidden
-    @State private var lastMetricsCommit = Date.distantPast
-
-    private static let metricsRefreshInterval: TimeInterval = 2.0
-    private static let pollInterval: TimeInterval = 0.5
-
-    var body: some View {
-        Group {
-            if displayed.isVisible {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(displayed.headline)
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
-                        .foregroundStyle(displayed.severity.color)
-                    Text(displayed.metrics)
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .foregroundStyle(ProShowTheme.primaryLabel.opacity(0.94))
-                        .fixedSize(horizontal: false, vertical: true)
-                        .animation(nil, value: displayed.metrics)
-                    if let advisory = displayed.advisory {
-                        Text(advisory)
-                            .font(.system(size: 9, weight: .medium))
-                            .foregroundStyle(displayed.severity.color.opacity(0.95))
-                            .fixedSize(horizontal: false, vertical: true)
-                            .animation(nil, value: advisory)
-                    }
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 5)
-                .frame(maxWidth: 420, alignment: .leading)
-                .background(ProShowTheme.panel.opacity(0.94), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel(deskProbeAccessibilityLabel(displayed))
-            }
-        }
-        .task {
-            while !Task.isCancelled {
-                let fresh = DeskSignalProbeBuilder.make(controller: controller)
-                commitDisplay(fresh)
-                try? await Task.sleep(for: .seconds(Self.pollInterval))
-            }
-        }
-    }
-
-    private func commitDisplay(_ fresh: DeskSignalProbeSnapshot) {
-        if fresh.isVisible != displayed.isVisible {
-            displayed = fresh
-            lastMetricsCommit = Date()
-            return
-        }
-        if !fresh.isVisible { return }
-
-        if deskProbeSeverityRank(fresh.severity) > deskProbeSeverityRank(displayed.severity) {
-            displayed = fresh
-            lastMetricsCommit = Date()
-            return
-        }
-        if fresh.headline != displayed.headline || fresh.advisory != displayed.advisory {
-            displayed = fresh
-            lastMetricsCommit = Date()
-            return
-        }
-
-        let elapsed = Date().timeIntervalSince(lastMetricsCommit)
-        guard elapsed >= Self.metricsRefreshInterval else { return }
-        guard fresh != displayed else { return }
-        displayed = fresh
-        lastMetricsCommit = Date()
-    }
-
-    private func deskProbeSeverityRank(_ severity: DeskSignalSeverity) -> Int {
-        switch severity {
-        case .hidden: 0
-        case .ok: 1
-        case .caution: 2
-        case .critical: 3
-        }
-    }
-
-    private func deskProbeAccessibilityLabel(_ snapshot: DeskSignalProbeSnapshot) -> String {
-        [snapshot.headline, snapshot.metrics, snapshot.advisory]
-            .compactMap { $0 }
-            .filter { !$0.isEmpty }
-            .joined(separator: ". ")
-    }
-}
-
-private extension Comparable {
-    func clamped(to range: ClosedRange<Self>) -> Self {
-        min(range.upperBound, max(range.lowerBound, self))
     }
 }

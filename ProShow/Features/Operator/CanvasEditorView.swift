@@ -73,6 +73,7 @@ struct CanvasEditorView: View {
         let _ = editor.documents
         let _ = editor.selectedObjectIDs
         let _ = editor.selectedDocumentID
+        let _ = editor.activeCanvasID
         let _ = editor.liveHandleBounds
         let _ = editor.guideLines.isInteracting
         let _ = editor.guideLines.draggingGuideLivePosition
@@ -80,7 +81,7 @@ struct CanvasEditorView: View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
                 sidebar
-                    .frame(width: DeskLayout.sidebar)
+                    .frame(width: max(DeskLayout.sidebar, DeskLayout.sidebarMin))
                     .background(ProShowTheme.panel)
                 canvasStage
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -97,6 +98,8 @@ struct CanvasEditorView: View {
         }
         .environment(\.dynamicText, controller.dynamicTextContext())
         .environment(\.liveQuoteEngine, controller.liveQuotes)
+        .environment(\.proShowVideoInputs, controller.videoInputs)
+        .environment(\.proShowProgramVideoInput, editorCameraPreviewInput)
         .environment(\.buildClock, controller.editorBuildClock())
         .environment(\.animationEvaluationMode, controller.isCanvasEditorPresented ? controller.editorAnimationMode() : .thumbnailPreview)
         .environment(\.buildPhaseFilter, controller.editorBuildPhaseFilter())
@@ -106,6 +109,10 @@ struct CanvasEditorView: View {
         .focusEffectDisabled()
         .onAppear {
             if controller.isCanvasEditorPresented { mouseTracker.attach() }
+            warmEditorCameraPreview()
+        }
+        .onChange(of: editor.selectedDocumentID) { _, _ in
+            warmEditorCameraPreview()
         }
         .onDisappear { mouseTracker.detach() }
         .onChange(of: controller.isCanvasEditorPresented, initial: true) { _, visible in
@@ -121,6 +128,9 @@ struct CanvasEditorView: View {
 
     private var sidebar: some View {
         VStack(spacing: 0) {
+            SidebarTitleGroupSlot {
+                WorkspaceTitleGroup(controller: controller)
+            }
             header
             itemList
                 .frame(maxHeight: .infinity)
@@ -169,7 +179,7 @@ struct CanvasEditorView: View {
                         get: { editor.themeCollection },
                         set: { editor.themeCollection = $0 }
                     )) {
-                        ForEach(EditorCatalog.themeCollections, id: \.self) { name in
+                        ForEach(Array(Set(controller.themePacksStorage.map(\.collectionName))).sorted(), id: \.self) { name in
                             Text(name).tag(name)
                         }
                     }
@@ -193,7 +203,9 @@ struct CanvasEditorView: View {
                                     mediaProjectRoot: controller.mediaProjectRoot,
                                     linkedMedia: slide?.showsLinkedProgramMediaUnderCanvas == true
                                     ? slide.flatMap { controller.resolvedAssociatedMedia(for: $0) }
-                                    : nil
+                                    : nil,
+                                    controller: controller,
+                                    slide: slide
                                 )
                             }
                             Text(editor.kind == .presentation ? "\(index + 1). \(document.name)" : document.name)
@@ -215,6 +227,27 @@ struct CanvasEditorView: View {
 
     private var objectsTree: some View {
         EditorObjectsTree(editor: editor, controller: controller)
+    }
+
+    /// Same camera the slide thumbnail paints, so the artboard is not an empty video well.
+    private var editorCameraPreviewInput: VideoInputSource? {
+        guard editor.kind == .presentation, let document = editor.selectedDocument else { return nil }
+        let hostsCamera = document.objects.contains {
+            $0.kind == .videoInput || $0.rendersLiveVideoInputOnCanvas
+        }
+        guard hostsCamera, let slideID = document.slideID, let slide = controller.show.slide(id: slideID) else {
+            return nil
+        }
+        return controller.previewVideoInput(for: slide, forThumbnail: true)
+    }
+
+    private func warmEditorCameraPreview() {
+        guard let slideID = editor.selectedDocument?.slideID,
+              let slide = controller.show.slide(id: slideID),
+              slide.needsProgramLiveCameraPreview
+                || editor.selectedDocument?.objects.contains(where: { $0.kind == .videoInput }) == true
+        else { return }
+        controller.prepareSlidePreviewCapture(for: slide)
     }
 
     private var canvasStage: some View {
@@ -354,8 +387,6 @@ struct CanvasEditorView: View {
                         canvasHeight: height,
                         gridStep: metrics.gridStep,
                         scale: scale,
-                        canvasW: canvasW,
-                        canvasH: canvasH,
                         originX: originX,
                         originY: originY,
                         workspace: workspace
@@ -434,12 +465,7 @@ struct CanvasEditorView: View {
                 }
             }
             .onDeleteCommand {
-                let ids = editor.selectedObjectIDs
-                guard !ids.isEmpty else { return }
-                for id in ids {
-                    controller.deleteElement(id: id)
-                }
-                editor.selectedObjectIDs = []
+                editor.deleteSelected()
             }
             #endif
         }
@@ -451,8 +477,6 @@ struct CanvasEditorView: View {
         canvasHeight: Double,
         gridStep: Double,
         scale: Double,
-        canvasW: Double,
-        canvasH: Double,
         originX: Double,
         originY: Double,
         workspace: CGSize
@@ -461,12 +485,15 @@ struct CanvasEditorView: View {
             x: CanvasEditorScreenAlign.screenPoint(originX + liveDrag.pan.width),
             y: CanvasEditorScreenAlign.screenPoint(originY + liveDrag.pan.height)
         )
+        let primaryShowsGrid = document.flatMap { editor.canvasBoards(in: $0).first(where: \.isPrimary)?.showsGrid } ?? true
+        var pasteboardGrid = editor.gridConfig
+        pasteboardGrid.isGridVisible = primaryShowsGrid
         let viewport = workspace
         return ZStack(alignment: .topLeading) {
             Color(red: 0.31, green: 0.31, blue: 0.33)
                 .frame(width: viewport.width, height: viewport.height)
             CanvasWorkbenchGuideOverlay(
-                gridConfig: editor.gridConfig,
+                gridConfig: pasteboardGrid,
                 snapState: editor.layoutSnapState,
                 canvasWidth: canvasWidth,
                 canvasHeight: canvasHeight,
@@ -481,18 +508,16 @@ struct CanvasEditorView: View {
                     .onTapGesture { editor.clearObjectSelection() }
                     .gesture(workspacePan)
                     .contextMenu { CanvasBlankContextMenu(editor: editor, controller: controller) }
-                canvasSurface(
+                canvasBoards(
+                    document: document,
                     canvasWidth: canvasWidth,
                     canvasHeight: canvasHeight,
                     gridStep: gridStep,
                     scale: scale,
-                    canvasW: canvasW,
-                    canvasH: canvasH,
                     originX: originX,
                     originY: originY
                 )
-                .frame(width: canvasW, height: canvasH, alignment: .topLeading)
-                .offset(x: canvasOrigin.x, y: canvasOrigin.y)
+                .frame(width: viewport.width, height: viewport.height, alignment: .topLeading)
             }
             .frame(width: viewport.width, height: viewport.height, alignment: .topLeading)
             .clipped()
@@ -510,7 +535,10 @@ struct CanvasEditorView: View {
             CanvasFloatingContextBarLayer(
                 editor: editor,
                 scale: scale,
-                canvasOrigin: CGPoint(x: originX, y: originY),
+                canvasOrigin: CGPoint(
+                    x: originX + editor.selectionFrameOrigin().x * scale,
+                    y: originY + editor.selectionFrameOrigin().y * scale
+                ),
                 panOffset: liveDrag.pan,
                 viewportSize: viewport
             )
@@ -592,6 +620,113 @@ struct CanvasEditorView: View {
         )
     }
 
+    private func canvasBoards(
+        document: EditorDocument?,
+        canvasWidth: Double,
+        canvasHeight: Double,
+        gridStep: Double,
+        scale: Double,
+        originX: Double,
+        originY: Double
+    ) -> some View {
+        let boards = document.map { editor.canvasBoards(in: $0) } ?? [
+            EditorCanvasFrame(
+                id: UUID(),
+                name: "Desktop",
+                width: canvasWidth,
+                height: canvasHeight,
+                originX: 0,
+                originY: 0,
+                isPrimary: true
+            )
+        ]
+        return ZStack(alignment: .topLeading) {
+            ForEach(boards) { board in
+                let drag = draggingCanvasID == board.id ? canvasDragTranslation : .zero
+                let screenX = originX + board.originX * scale + liveDrag.pan.width + drag.width
+                let screenY = originY + board.originY * scale + liveDrag.pan.height + drag.height
+                let boardW = board.width * scale
+                let boardH = board.height * scale
+                let selected = document.map { editor.isCanvasActive(board, in: $0) } ?? board.isPrimary
+                let objects = board.isPrimary ? (document?.objects ?? []) : board.objects
+                canvasSurface(
+                    canvasWidth: board.width,
+                    canvasHeight: board.height,
+                    gridStep: gridStep,
+                    scale: scale,
+                    canvasW: boardW,
+                    canvasH: boardH,
+                    originX: originX + board.originX * scale,
+                    originY: originY + board.originY * scale,
+                    board: board,
+                    objects: objects
+                )
+                .frame(width: boardW, height: boardH, alignment: .topLeading)
+                .overlay {
+                    Rectangle()
+                        .strokeBorder(selected ? ProShowTheme.accent : Color.white.opacity(0.35), lineWidth: selected ? 2 : 1)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+                .overlay(alignment: .topLeading) {
+                    canvasFrameLabel(board, selected: selected, scale: scale)
+                        .offset(y: -28)
+                        .fixedSize()
+                }
+                .offset(x: CanvasEditorScreenAlign.screenPoint(screenX), y: CanvasEditorScreenAlign.screenPoint(screenY))
+            }
+        }
+    }
+
+    private func canvasFrameLabel(_ board: EditorCanvasFrame, selected: Bool, scale: Double) -> some View {
+        let pixels = "\(Int(board.width.rounded())) × \(Int(board.height.rounded()))"
+        return HStack(spacing: 6) {
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 9, weight: .semibold))
+                .accessibilityHidden(true)
+            Text("\(board.name)  \(pixels)")
+                .font(DeskType.micro)
+                .lineLimit(1)
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background {
+            Capsule(style: .continuous)
+                .fill(Color.black.opacity(0.78))
+                .overlay {
+                    Capsule(style: .continuous)
+                        .strokeBorder(selected ? ProShowTheme.accent : Color.white.opacity(0.28), lineWidth: 1)
+                }
+        }
+        .contentShape(Capsule())
+        .onTapGesture { editor.selectCanvas(board.id) }
+        .highPriorityGesture(canvasMoveGesture(board, scale: scale))
+        .help("Drag \(board.name)")
+        .accessibilityLabel("\(board.name) canvas")
+        .accessibilityValue("\(pixels). Drag to move.")
+        .accessibilityAddTraits(.isButton)
+    }
+
+    private func canvasMoveGesture(_ board: EditorCanvasFrame, scale: Double) -> some Gesture {
+        DragGesture(minimumDistance: 2, coordinateSpace: .named("editorWorkspace"))
+            .onChanged { value in
+                draggingCanvasID = board.id
+                canvasDragTranslation = value.translation
+            }
+            .onEnded { value in
+                let dx = Double(value.translation.width) / max(scale, 0.0001)
+                let dy = Double(value.translation.height) / max(scale, 0.0001)
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    editor.moveCanvas(id: board.id, dx: dx, dy: dy)
+                    canvasDragTranslation = .zero
+                    draggingCanvasID = nil
+                }
+            }
+    }
+
     private func canvasSurface(
         canvasWidth: Double,
         canvasHeight: Double,
@@ -600,9 +735,13 @@ struct CanvasEditorView: View {
         canvasW: Double,
         canvasH: Double,
         originX: CGFloat,
-        originY: CGFloat
+        originY: CGFloat,
+        board: EditorCanvasFrame,
+        objects: [CanvasObject]
     ) -> some View {
-        canvasBackdrop(scale: scale)
+        let sorted = objects.sorted { $0.zIndex > $1.zIndex }
+        let showsTransparency = board.showsCheckerboard || !board.backgroundEnabled
+        return canvasBackdrop(scale: scale, showsTransparency: showsTransparency, backgroundEnabled: board.backgroundEnabled, backgroundHex: board.backgroundHex, hostsProgramMedia: board.isPrimary)
             .frame(width: canvasW, height: canvasH)
             .contextMenu { CanvasBlankContextMenu(editor: editor, controller: controller) }
             .overlay(alignment: .topLeading) {
@@ -619,11 +758,12 @@ struct CanvasEditorView: View {
                                 canvasWidth: canvasWidth,
                                 canvasHeight: canvasHeight,
                                 originX: originX,
-                                originY: originY
+                                originY: originY,
+                                canvasID: board.id
                             )
                         )
                         .contextMenu { CanvasBlankContextMenu(editor: editor, controller: controller) }
-                    if editor.gridConfig.isGridVisible {
+                    if board.showsGrid {
                         CanvasArtboardGridView(
                             gridConfig: editor.gridConfig,
                             canvasWidth: canvasWidth,
@@ -631,12 +771,16 @@ struct CanvasEditorView: View {
                             scale: CGFloat(scale)
                         )
                     }
-                    ForEach(editor.selectedDocument?.sortedObjects.reversed() ?? []) { object in
+                    CanvasCenterOriginMark()
+                        .frame(width: canvasW, height: canvasH)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                    ForEach(sorted.reversed()) { object in
                         CanvasObjectView(
                             editor: editor,
                             object: object,
-                            canvasObjects: editor.selectedDocument?.sortedObjects ?? [],
-                            slideSteps: editor.selectedDocument?.objects.flatMap(\.resolvedBuildSteps) ?? [],
+                            canvasObjects: sorted,
+                            slideSteps: objects.flatMap(\.resolvedBuildSteps),
                             scale: scale,
                             selected: editor.selectedObjectIDs.contains(object.id),
                             editing: editor.inlineEditID == object.id,
@@ -657,25 +801,27 @@ struct CanvasEditorView: View {
                             }
                         }
                         .onTapGesture {
+                            editor.activeCanvasID = board.id
                             editor.selectObject(
                                 object.id,
                                 additive: EditorObjectTreeModifiers.shiftHeld || EditorObjectTreeModifiers.commandHeld
                             )
                         }
                     }
-                    if editor.showsCompoundChrome, let box = editor.selectionBounds {
+                    let isEditingBoard = editor.activeCanvasID == board.id || (editor.activeCanvasID == nil && board.isPrimary)
+                    if isEditingBoard, editor.showsCompoundChrome, let box = editor.selectionBounds {
                         CompoundSelectionChromeView(editor: editor, bounds: box, scale: scale)
                             .modifier(CanvasLiveOffsetModifier(session: liveDrag, applies: true))
-                    } else {
+                    } else if isEditingBoard {
                         ForEach(editor.selectedObjects) { object in
                             SelectionChromeView(editor: editor, object: object, scale: scale)
                                 .modifier(CanvasLiveOffsetModifier(session: liveDrag, applies: true))
                         }
                     }
-                    if let parent = editor.isolatedParentBounds {
+                    if isEditingBoard, let parent = editor.isolatedParentBounds {
                         GroupIsolationOutline(bounds: parent, scale: scale)
                     }
-                    if let marquee = canvasMarqueeRect {
+                    if isEditingBoard, let marquee = canvasMarqueeRect {
                         RoundedRectangle(cornerRadius: 1, style: .continuous)
                             .fill(ProShowTheme.accent.opacity(0.14))
                             .overlay {
@@ -690,9 +836,9 @@ struct CanvasEditorView: View {
                     BroadcastFrameGuideView(
                         documentSize: CGSize(width: canvasWidth, height: canvasHeight),
                         scale: CGFloat(scale),
-                        showSafeAreas: editor.gridConfig.showBroadcastSafeAreas,
-                        showHeaderFooterGuides: editor.gridConfig.showHeaderFooterGuides,
-                        showColumnGrid: editor.gridConfig.showColumnLayoutGrid
+                        showSafeAreas: board.showsSafeAreas,
+                        showHeaderFooterGuides: board.showsHeaderFooter,
+                        showColumnGrid: board.showsColumnGrid
                     )
                     .frame(width: canvasW, height: canvasH)
                     CanvasGuideOverlayView(
@@ -715,6 +861,7 @@ struct CanvasEditorView: View {
                 }
                 }
                 .onContinuousHover { phase in
+                    guard board.isPrimary || editor.activeCanvasID == board.id else { return }
                     if isPanning || !editor.dragOrigins.isEmpty { return }
                     switch phase {
                     case .active(let location):
@@ -727,26 +874,33 @@ struct CanvasEditorView: View {
                         mouseTracker.hoverEnded(editor: editor)
                     }
                 }
-                .coordinateSpace(name: "editorCanvas")
+                .coordinateSpace(name: editor.activeCanvasID == board.id || (editor.activeCanvasID == nil && board.isPrimary) ? "editorCanvas" : "editorCanvasInactive")
                 .frame(width: canvasW, height: canvasH, alignment: .topLeading)
             }
     }
 
-    private func canvasBackdrop(scale: Double) -> some View {
+    private func canvasBackdrop(
+        scale: Double,
+        showsTransparency: Bool,
+        backgroundEnabled: Bool,
+        backgroundHex: String,
+        hostsProgramMedia: Bool
+    ) -> some View {
         let gridUnit = editor.gridConfig.gridSizePoints
         let cellSize = CanvasGridDisplay.checkerboardCellSize(documentUnit: gridUnit, scale: CGFloat(scale))
+        let fill = backgroundEnabled ? (Color(hex: backgroundHex) ?? ProShowTheme.stageBlack) : Color.clear
         return ZStack {
-            if showsCanvasTransparencyGrid {
+            if showsTransparency {
                 CheckerboardFill(cellSize: cellSize)
             }
             Rectangle()
-                .fill(canvasFill)
-            if let media = programMediaCueBackdrop {
+                .fill(fill)
+            if hostsProgramMedia, let media = programMediaCueBackdrop {
                 programMediaCuePreview(media)
                     .allowsHitTesting(false)
             }
         }
-        .accessibilityLabel(showsCanvasTransparencyGrid ? "Transparent canvas" : "Canvas background")
+        .accessibilityLabel(showsTransparency ? "Transparent canvas" : "Canvas background")
     }
 
     /// Linked Layer 3 media under transparent canvas (stays visible after adding text/shapes).
@@ -781,17 +935,6 @@ struct CanvasEditorView: View {
         }
     }
 
-    private var showsCanvasTransparencyGrid: Bool {
-        editor.checkerboard || !(editor.selectedDocument?.backgroundEnabled ?? true)
-    }
-
-    private var canvasFill: Color {
-        guard let document = editor.selectedDocument, document.backgroundEnabled else {
-            return .clear
-        }
-        return Color(hex: document.backgroundHex) ?? ProShowTheme.stageBlack
-    }
-
     private func objectDrag(_ id: UUID, scale: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 3, coordinateSpace: .named("editorWorkspace"))
             .onChanged { value in
@@ -805,9 +948,9 @@ struct CanvasEditorView: View {
                     return
                 }
                 if editor.dragOrigins.isEmpty {
-                    guard let object = editor.selectedDocument?.objects.first(where: { $0.id == id }),
-                          !object.isCanvasLocked
-                    else { return }
+        guard let object = editor.canvasObject(id: id),
+              !object.isCanvasLocked
+        else { return }
                     editor.beginDrag(id: id)
                 }
                 editor.bypassSnapping = EditorObjectTreeModifiers.commandHeld
@@ -831,10 +974,12 @@ struct CanvasEditorView: View {
         canvasWidth: Double,
         canvasHeight: Double,
         originX: CGFloat,
-        originY: CGFloat
+        originY: CGFloat,
+        canvasID: UUID
     ) -> some Gesture {
         DragGesture(minimumDistance: 0, coordinateSpace: .named("editorWorkspace"))
             .onChanged { value in
+                editor.activeCanvasID = canvasID
                 if editor.activeTool.pansCanvas || editor.spaceHeld {
                     marqueeStart = nil
                     marqueeCurrent = nil
@@ -1002,14 +1147,16 @@ struct CanvasEditorView: View {
         }
     }
 
+    @State private var showsQRCodeTool = false
+    @State private var qrCodePayload = "https://"
+    @State private var draggingCanvasID: UUID?
+    @State private var canvasDragTranslation: CGSize = .zero
+
     private var floatingToolbar: some View {
         HStack(spacing: 14) {
             ForEach(toolbarItems, id: \.self) { kind in
                 Button {
                     _ = editor.addObject(kind)
-                    if kind == .image || kind == .videoInput || kind == .prop {
-                        controller.openAddShotToAssign()
-                    }
                 } label: {
                     Image(systemName: toolbarSymbol(kind))
                         .font(.system(size: 13, weight: .semibold))
@@ -1023,12 +1170,28 @@ struct CanvasEditorView: View {
                     ForEach(EditorCatalog.shapes, id: \.self) { shape in
                         Button(shape.title) { _ = editor.addObject(shape) }
                     }
+                    Divider()
+                    Section("Tools") {
+                        Button {
+                            qrCodePayload = "https://"
+                            showsQRCodeTool = true
+                        } label: {
+                            Label("QR Code…", systemImage: "qrcode")
+                        }
+                    }
                 } label: {
                     Image(systemName: "square.on.circle")
                         .font(.system(size: 13, weight: .semibold))
                 }
                 .help("Add Shape")
                 .accessibilityLabel("Add Shape")
+                .popover(isPresented: $showsQRCodeTool, arrowEdge: .bottom) {
+                    QRCodeToolPopover(
+                        payload: $qrCodePayload,
+                        onInsert: insertQRCodeObject,
+                        onCancel: { showsQRCodeTool = false }
+                    )
+                }
             }
             if EditorCatalog.showsLiveMenu(editor.kind) {
                 Menu {
@@ -1042,6 +1205,11 @@ struct CanvasEditorView: View {
                 .help("Add Live Element")
                 .accessibilityLabel("Add Live Element")
             }
+            Rectangle()
+                .fill(Color.white.opacity(0.28))
+                .frame(width: 1, height: 16)
+                .accessibilityHidden(true)
+            CanvasAddMenu(editor: editor)
         }
         .foregroundStyle(ProShowTheme.toolbarIcon)
         .padding(.horizontal, 16)
@@ -1077,14 +1245,14 @@ struct CanvasEditorView: View {
             statusMetric("W", box?.width ?? 0)
             statusMetric("H", box?.height ?? 0)
             Spacer()
-            if editor.selectedDocument?.backgroundEnabled == false {
+            if editor.activeCanvasFrame()?.backgroundEnabled == false {
                 Text("Transparent")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(ProShowTheme.secondaryLabel)
                     .accessibilityLabel("Transparent canvas. Program media stays on output.")
             }
-            toggleIcon("square.split.2x2", isOn: editorFlag(\.checkerboard))
-            precisionToggle("eye", title: "Grid", isOn: gridBinding(\.isGridVisible))
+            toggleIcon("square.split.2x2", isOn: canvasFlag(\.showsCheckerboard), help: "Checkerboard")
+            precisionToggle("eye", title: "Grid", isOn: canvasFlag(\.showsGrid))
             precisionToggle("arrow.up.and.down.and.arrow.left.and.right", title: "Snap", isOn: gridBinding(\.isSnapToGridEnabled))
             precisionToggle("ruler", title: "Smart guides", isOn: gridBinding(\.isSmartGuidesEnabled))
             canvasOverlayMenu
@@ -1140,7 +1308,7 @@ struct CanvasEditorView: View {
             .foregroundStyle(ProShowTheme.secondaryLabel)
     }
 
-    private func toggleIcon(_ name: String, isOn: Binding<Bool>) -> some View {
+    private func toggleIcon(_ name: String, isOn: Binding<Bool>, help: String) -> some View {
         Button {
             isOn.wrappedValue.toggle()
         } label: {
@@ -1148,6 +1316,17 @@ struct CanvasEditorView: View {
                 .foregroundStyle(isOn.wrappedValue ? .white : ProShowTheme.secondaryLabel)
         }
         .buttonStyle(.plain)
+        .help(help)
+        .accessibilityLabel(help)
+    }
+
+    private func canvasFlag(_ keyPath: WritableKeyPath<EditorCanvasFrame, Bool>) -> Binding<Bool> {
+        Binding(
+            get: { editor.activeCanvasFrame()?[keyPath: keyPath] ?? false },
+            set: { value in
+                editor.updateActiveCanvas { $0[keyPath: keyPath] = value }
+            }
+        )
     }
 
     private func gridBinding(_ keyPath: WritableKeyPath<CanvasGridConfig, Bool>) -> Binding<Bool> {
@@ -1159,17 +1338,18 @@ struct CanvasEditorView: View {
 
     private var canvasOverlayMenu: some View {
         Menu {
-            Toggle("Action & title safe", isOn: gridBinding(\.showBroadcastSafeAreas))
-            Toggle("Header & footer zones", isOn: gridBinding(\.showHeaderFooterGuides))
-            Toggle("12-column grid", isOn: gridBinding(\.showColumnLayoutGrid))
+            Toggle("Action & title safe", isOn: canvasFlag(\.showsSafeAreas))
+            Toggle("Header & footer zones", isOn: canvasFlag(\.showsHeaderFooter))
+            Toggle("12-column grid", isOn: canvasFlag(\.showsColumnGrid))
             Toggle("Snap to user guides", isOn: gridBinding(\.snapToUserGuides))
             Toggle("Minimap navigator", isOn: gridBinding(\.showCanvasMinimap))
         } label: {
+            let frame = editor.activeCanvasFrame()
             Image(systemName: "rectangle.dashed")
                 .foregroundStyle(
-                    editor.gridConfig.showBroadcastSafeAreas
-                        || editor.gridConfig.showHeaderFooterGuides
-                        || editor.gridConfig.showColumnLayoutGrid
+                    (frame?.showsSafeAreas == true)
+                        || (frame?.showsHeaderFooter == true)
+                        || (frame?.showsColumnGrid == true)
                         ? ProShowTheme.accent
                         : ProShowTheme.secondaryLabel
                 )
@@ -1471,12 +1651,20 @@ struct CanvasEditorView: View {
         controller.finishAddingLiveObject(editor.addObject(kind))
     }
 
+    private func insertQRCodeObject() {
+        let trimmed = qrCodePayload.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        _ = editor.addObject(.qrCode)
+        editor.mutateSelectedObjects { $0.text = trimmed }
+        showsQRCodeTool = false
+    }
+
     private func addSidebarItem() {
         switch editor.kind {
         case .presentation:
             controller.addEditorSlide()
         case .theme:
-            editor.addThemeVariant("Custom \(editor.documents.count + 1)")
+            controller.addThemeVariant(named: "Custom \(editor.documents.count + 1)")
         case .props, .masks, .stage, .ccli, .overlays:
             _ = editor.addDocument(named: "\(editor.kind?.title ?? "Item") \(editor.documents.count + 1)")
         case nil:
@@ -1702,7 +1890,7 @@ func canvasObjectSymbol(_ kind: CanvasObjectKind) -> String {
     case .pen, .bezier: "pencil.tip"
     case .image: "photo"
     case .videoInput: "video"
-    case .webView: "globe"
+    case .webView, .browser: "globe"
     case .currentSlide: "text.justify.left"
     case .nextSlide: "text.justify.right"
     case .stageNotes: "note.text"
@@ -1721,6 +1909,47 @@ func canvasObjectSymbol(_ kind: CanvasObjectKind) -> String {
     case .prop: "rectangle.on.rectangle"
     case .cutout: "circle.slash"
     case .edgeBlend: "square.split.2x1"
+    case .qrCode: "qrcode"
+    }
+}
+
+private struct QRCodeToolPopover: View {
+    @Binding var payload: String
+    var onInsert: () -> Void
+    var onCancel: () -> Void
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("QR Code")
+                .font(.system(size: 13, weight: .semibold))
+            Text("Link, text, or tokens such as {segment.link} or {Speaker}.")
+                .font(.system(size: 11))
+                .foregroundStyle(ProShowTheme.secondaryLabel)
+                .fixedSize(horizontal: false, vertical: true)
+            TextField("Payload", text: $payload, axis: .vertical)
+                .textFieldStyle(.roundedBorder)
+                .lineLimit(1...4)
+                .focused($focused)
+            HStack {
+                QRCodeCanvasView(payload: payload)
+                    .frame(width: 72, height: 72)
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .strokeBorder(InspectorTokens.dividerColor, lineWidth: 1)
+                    }
+                Spacer(minLength: 8)
+                Button("Cancel", action: onCancel)
+                    .keyboardShortcut(.cancelAction)
+                Button("Insert", action: onInsert)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(payload.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(14)
+        .frame(width: 320)
+        .onAppear { focused = true }
     }
 }
 
@@ -1815,10 +2044,15 @@ struct CanvasBlankContextMenu: View {
             ForEach(EditorCatalog.shapes, id: \.self) { shape in
                 Button(shape.title) { _ = editor.addObject(shape) }
             }
+            Divider()
+            Section("Tools") {
+                Button("QR Code…") {
+                    _ = editor.addObject(.qrCode)
+                }
+            }
         }
         Button("Add Image") {
             _ = editor.addObject(.image)
-            controller.openAddShotToAssign()
         }
         Menu("Add Live Element") {
             ForEach(EditorCatalog.liveObjects, id: \.self) { kind in
@@ -2011,8 +2245,9 @@ private struct CanvasObjectView: View {
     private func overlayContent(_ state: TransformedRenderState) -> some View {
         if object.isTextLike {
             objectLabel(state)
-                .canvasTextBoxFrame(object: object, width: width, height: height, scale: scale)
-        } else if object.assignedSource == nil && object.fill.type != .image && (object.kind == .image || object.kind == .videoInput || object.kind == .webView) {
+                .frame(width: width, height: height)
+                .clipped()
+        } else if object.assignedSource == nil && object.fill.type != .image && (object.kind == .image || object.kind == .videoInput || object.kind.isBrowserLike) {
             mediaPlaceholder
         }
     }
@@ -2070,12 +2305,12 @@ private struct CanvasObjectView: View {
             if editing {
                 CanvasAttributedTextInput(
                     object: object,
-                    scale: scale,
+                    layoutScale: scale,
                     text: object.text,
                     onChange: { onEdit?($0) },
                     onCommit: { latest in onCommit?(latest) }
                 )
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: object.canvasTextFrameAlignment)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let liveQuoteEngine {
                 LiveQuoteRefreshScope(engine: liveQuoteEngine) {
                     objectLabelLiveText(state)
@@ -2174,15 +2409,9 @@ private struct CanvasObjectView: View {
                    context: context,
                    colorConfig: TickerConfigStore.shared.colorConfig
                ) {
-                CanvasStaticAttributedTextView(object: object, attributed: liveQuote, scale: scale)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: object.canvasTextFrameAlignment)
+                CanvasStaticAttributedTextView(object: object, attributed: liveQuote, layoutScale: scale)
             } else {
-            Text(AttributedString(TextAttributeConverter.makeAttributedString(
-                object: object,
-                text: value,
-                scale: scale
-            )))
-            .multilineTextAlignment(textAlignment)
+                CanvasRasterizedTextView(object: object, text: value, layoutScale: scale)
             }
             #else
             Text(value)
@@ -2202,12 +2431,7 @@ private struct CanvasObjectView: View {
                 .kerning(object.textLayout.characterSpacing * scale)
             #endif
         }
-        .modifier(LoopingTextFit(layout: object.textLayout, maxLines: CanvasTextBoxLayout.autoFitMaxLines))
-        .frame(
-            maxWidth: expands ? .infinity : nil,
-            maxHeight: expands ? .infinity : nil,
-            alignment: object.canvasTextFrameAlignment
-        )
+        .frame(maxWidth: expands ? .infinity : nil, maxHeight: expands ? .infinity : nil)
     }
 
     private var canvasFont: Font {
@@ -2303,12 +2527,16 @@ private struct EditorSlideThumbnail: View {
     var selected: Bool
     var mediaProjectRoot: URL?
     var linkedMedia: MediaAction?
+    var controller: ShowController? = nil
+    var slide: Slide? = nil
 
     var body: some View {
         let ratio = CGFloat(document.canvasWidth / max(document.canvasHeight, 1))
         ZStack {
             if document.backgroundEnabled {
                 Color(hex: document.backgroundHex) ?? ProShowTheme.stageBlack
+            } else if slide?.needsProgramLiveCameraPreview == true {
+                Color.black
             } else {
                 CheckerboardFill()
             }
@@ -2321,7 +2549,15 @@ private struct EditorSlideThumbnail: View {
                     cornerRadius: 0
                 )
             }
-            if !document.objects.isEmpty {
+            if !document.objects.isEmpty, let controller, let slide {
+                ProgramSlideThumbnailPreview(
+                    controller: controller,
+                    slide: slide,
+                    objects: document.objects,
+                    canvasWidth: document.canvasWidth,
+                    canvasHeight: document.canvasHeight
+                )
+            } else if !document.objects.isEmpty {
                 ProgramSlideCanvas(
                     objects: document.objects,
                     canvasWidth: document.canvasWidth,
@@ -2346,7 +2582,7 @@ private struct EditorSlideThumbnail: View {
 /// Canvas edit-in-place using the same CoreText attributes as program/audience text (caret aligns with glyphs).
 private struct CanvasAttributedTextInput: NSViewRepresentable {
     var object: CanvasObject
-    var scale: CGFloat
+    var layoutScale: CGFloat
     var text: String
     var onChange: (String) -> Void
     var onCommit: (String) -> Void
@@ -2358,9 +2594,11 @@ private struct CanvasAttributedTextInput: NSViewRepresentable {
     func makeNSView(context: Context) -> CanvasInputTextView {
         let textView = CanvasInputTextView()
         textView.canvasVerticalAlign = object.textLayout.verticalAlign
+        textView.canvasLayoutScale = layoutScale
+        textView.canvasObject = object
         textView.delegate = context.coordinator
         configureChrome(textView)
-        textView.textStorage?.setAttributedString(attributedString(for: text))
+        textView.textStorage?.setAttributedString(attributedString(for: text, elementBounds: textView.bounds))
         context.coordinator.textView = textView
         context.coordinator.styleSignature = styleSignature
         DispatchQueue.main.async {
@@ -2372,6 +2610,8 @@ private struct CanvasAttributedTextInput: NSViewRepresentable {
 
     func updateNSView(_ textView: CanvasInputTextView, context: Context) {
         textView.canvasVerticalAlign = object.textLayout.verticalAlign
+        textView.canvasLayoutScale = layoutScale
+        textView.canvasObject = object
         context.coordinator.parent = self
         context.coordinator.onChange = onChange
         context.coordinator.onCommit = onCommit
@@ -2384,7 +2624,7 @@ private struct CanvasAttributedTextInput: NSViewRepresentable {
 
         if textView.string != text, !context.coordinator.isApplyingLocalEdit {
             let selection = textView.selectedRange()
-            textView.textStorage?.setAttributedString(attributedString(for: text))
+            textView.textStorage?.setAttributedString(attributedString(for: text, elementBounds: textView.bounds))
             let length = (textView.string as NSString).length
             let location = min(selection.location, length)
             let selLength = min(selection.length, max(0, length - location))
@@ -2404,37 +2644,46 @@ private struct CanvasAttributedTextInput: NSViewRepresentable {
         textView.isAutomaticTextReplacementEnabled = false
         textView.isAutomaticSpellingCorrectionEnabled = false
         textView.focusRingType = .none
-        textView.textContainerInset = .zero
         textView.textContainer?.lineFragmentPadding = 0
-        textView.textContainer?.widthTracksTextView = true
-        textView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
+        textView.textContainer?.widthTracksTextView = false
+        textView.textContainer?.heightTracksTextView = false
         textView.isHorizontallyResizable = false
-        textView.isVerticallyResizable = true
+        textView.isVerticallyResizable = false
         textView.autoresizingMask = [.width]
         textView.insertionPointColor = NSColor(Color(hex: object.typography.color) ?? .white)
-        textView.typingAttributes = typingAttributes(for: text.isEmpty ? " " : text)
+        textView.typingAttributes = typingAttributes(for: text.isEmpty ? " " : text, elementBounds: textView.bounds)
         textView.selectedTextAttributes = [
             .backgroundColor: NSColor.white.withAlphaComponent(0.22),
             .foregroundColor: NSColor(Color(hex: object.typography.color) ?? .white),
         ]
     }
 
-    private func attributedString(for value: String) -> NSAttributedString {
+    private func attributedString(for value: String, elementBounds: CGRect) -> NSAttributedString {
         let body = value.isEmpty ? " " : value
-        let base = TextAttributeConverter.makeAttributedString(object: object, text: body, scale: scale)
+        let textRect = CoreTextRasterizer.textLayoutRectForDisplay(
+            object: object,
+            elementBounds: elementBounds,
+            layoutScale: layoutScale
+        )
+        let base = CoreTextRasterizer.displayAttributedString(
+            object: object,
+            text: body,
+            layoutScale: layoutScale,
+            textRect: textRect
+        )
         guard object.typography.isSuperscript || object.typography.isSubscript else { return base }
         let mutable = NSMutableAttributedString(attributedString: base)
         let offset = object.typography.isSuperscript
-            ? object.typography.fontSize * scale * 0.35
-            : -object.typography.fontSize * scale * 0.25
+            ? object.typography.fontSize * layoutScale * 0.35
+            : -object.typography.fontSize * layoutScale * 0.25
         if mutable.length > 0 {
             mutable.addAttribute(.baselineOffset, value: offset, range: NSRange(location: 0, length: mutable.length))
         }
         return mutable
     }
 
-    private func typingAttributes(for sample: String) -> [NSAttributedString.Key: Any] {
-        let attributed = attributedString(for: sample)
+    private func typingAttributes(for sample: String, elementBounds: CGRect) -> [NSAttributedString.Key: Any] {
+        let attributed = attributedString(for: sample, elementBounds: elementBounds)
         guard attributed.length > 0 else { return [:] }
         var attrs = attributed.attributes(at: 0, effectiveRange: nil)
         attrs[.foregroundColor] = NSColor(Color(hex: object.typography.color) ?? .white)
@@ -2458,7 +2707,7 @@ private struct CanvasAttributedTextInput: NSViewRepresentable {
             l.verticalAlign.rawValue,
             "\(object.textOutline.enabled)",
             "\(object.textShadow.enabled)",
-            "\(scale)",
+            "\(layoutScale)",
         ].joined(separator: "|")
     }
 
@@ -2483,12 +2732,17 @@ private struct CanvasAttributedTextInput: NSViewRepresentable {
             isApplyingLocalEdit = true
             onChange(plain)
             isApplyingLocalEdit = false
-            textView.textStorage?.setAttributedString(parent.attributedString(for: plain))
+            textView.textStorage?.setAttributedString(
+                parent.attributedString(for: plain, elementBounds: textView.bounds)
+            )
             let length = (textView.string as NSString).length
             let location = min(selection.location, length)
             let selLength = min(selection.length, max(0, length - location))
             textView.setSelectedRange(NSRange(location: location, length: selLength))
-            textView.typingAttributes = parent.typingAttributes(for: plain.isEmpty ? " " : plain)
+            textView.typingAttributes = parent.typingAttributes(
+                for: plain.isEmpty ? " " : plain,
+                elementBounds: textView.bounds
+            )
             (textView as? CanvasInputTextView)?.syncVerticalAlignmentInset()
         }
 
@@ -2500,8 +2754,18 @@ private struct CanvasAttributedTextInput: NSViewRepresentable {
 
 private final class CanvasInputTextView: NSTextView {
     var canvasVerticalAlign: TextVerticalAlign = .middle
+    var canvasLayoutScale: CGFloat = 1
+    var canvasObject: CanvasObject?
+    private var isSyncingInset = false
 
     override var acceptsFirstResponder: Bool { true }
+
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: NSView.noIntrinsicMetric, height: NSView.noIntrinsicMetric)
+    }
+
+    /// The text box is a fixed frame. Scrolling it on each key moves the glyphs down.
+    override func scrollRangeToVisible(_ range: NSRange) {}
 
     override func becomeFirstResponder() -> Bool {
         let accepted = super.becomeFirstResponder()
@@ -2520,22 +2784,45 @@ private final class CanvasInputTextView: NSTextView {
     }
 
     func syncVerticalAlignmentInset() {
-        guard let layoutManager, let textContainer else { return }
-        textContainer.size = NSSize(width: max(1, bounds.width), height: CGFloat.greatestFiniteMagnitude)
-        layoutManager.ensureLayout(for: textContainer)
-        let used = layoutManager.usedRect(for: textContainer)
-        let contentHeight = max(1, ceil(used.height))
-        let extra = max(0, bounds.height - contentHeight)
-        let topInset: CGFloat
-        switch canvasVerticalAlign {
-        case .top: topInset = 0
-        case .middle: topInset = extra / 2
-        case .bottom, .baseline: topInset = extra
+        guard !isSyncingInset else { return }
+        guard let layoutManager, let textContainer, let canvasObject else { return }
+        let size = bounds.size
+        guard size.width > 1, size.height > 1 else { return }
+
+        isSyncingInset = true
+        defer { isSyncingInset = false }
+
+        if bounds.origin != .zero {
+            setBoundsOrigin(.zero)
         }
-        let target = NSSize(width: 0, height: topInset)
+
+        let elementBounds = CGRect(origin: .zero, size: size)
+        let textRect = CoreTextRasterizer.textLayoutRectForDisplay(
+            object: canvasObject,
+            elementBounds: elementBounds,
+            layoutScale: canvasLayoutScale
+        )
+        textContainer.lineFragmentPadding = 0
+        textContainer.size = NSSize(width: max(1, textRect.width), height: CGFloat.greatestFiniteMagnitude)
+        layoutManager.ensureLayout(for: textContainer)
+
+        let used = layoutManager.usedRect(for: textContainer)
+        let contentHeight = max(used.height, 1)
+        let contentTop: CGFloat
+        switch CanvasTextBoxLayout.coreTextVerticalAlignment(for: canvasObject) {
+        case .top:
+            contentTop = textRect.minY
+        case .middle:
+            contentTop = textRect.minY + max(0, (textRect.height - contentHeight) / 2)
+        case .bottom, .baseline:
+            contentTop = textRect.maxY - contentHeight
+        }
+        let target = NSSize(
+            width: max(0, textRect.minX),
+            height: max(0, contentTop - used.minY)
+        )
         if abs(textContainerInset.width - target.width) > 0.5 || abs(textContainerInset.height - target.height) > 0.5 {
             textContainerInset = target
-            layoutManager.ensureLayout(for: textContainer)
         }
     }
 }
@@ -2556,6 +2843,142 @@ private struct CanvasAttributedTextInput: View {
     }
 }
 #endif
+
+/// Adds another canvas to the open slide. The label matches the tool island icons.
+private struct CanvasAddMenu: View {
+    var editor: EditorEngine
+    @State private var showsCustom = false
+    @State private var widthText = "1920"
+    @State private var heightText = "1080"
+
+    var body: some View {
+        Menu {
+            presetSection("Phone", presets: CanvasResolution.phonePresets)
+            presetSection("Tablet", presets: CanvasResolution.tabletPresets)
+            presetSection("Desktop", presets: CanvasResolution.desktopPresets)
+            Divider()
+            Button("Custom Size…") {
+                widthText = "1920"
+                heightText = "1080"
+                showsCustom = true
+            }
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 13, weight: .semibold))
+        }
+        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
+        .help("Add canvas")
+        .accessibilityLabel("Add canvas")
+        .popover(isPresented: $showsCustom, arrowEdge: .bottom) {
+            CustomCanvasSizePopover(
+                widthText: $widthText,
+                heightText: $heightText,
+                onApply: { width, height in
+                    editor.addCanvas(name: "Custom", width: width, height: height)
+                    showsCustom = false
+                },
+                onCancel: { showsCustom = false }
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func presetSection(_ title: String, presets: [CanvasResolution]) -> some View {
+        Section(title) {
+            ForEach(presets) { preset in
+                Button(preset.menuTitle) {
+                    editor.addCanvas(name: preset.family.title, width: preset.size.width, height: preset.size.height)
+                }
+                .accessibilityLabel("Add \(title), \(preset.menuTitle)")
+            }
+        }
+    }
+}
+
+private struct CustomCanvasSizePopover: View {
+    @Binding var widthText: String
+    @Binding var heightText: String
+    var onApply: (Double, Double) -> Void
+    var onCancel: () -> Void
+
+    private var width: Double? { Self.evenPixel(widthText) }
+    private var height: Double? { Self.evenPixel(heightText) }
+    private var canApply: Bool { width != nil && height != nil }
+    private var showsError: Bool {
+        let widthTrimmed = !widthText.trimmingCharacters(in: .whitespaces).isEmpty
+        let heightTrimmed = !heightText.trimmingCharacters(in: .whitespaces).isEmpty
+        return (widthTrimmed && width == nil) || (heightTrimmed && height == nil)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DeskSpace.sm) {
+            Text("Custom canvas")
+                .font(DeskType.bodyEmph)
+                .foregroundStyle(ProShowTheme.primaryLabel)
+            Text("Even pixels, from 16 to 7680.")
+                .font(DeskType.meta)
+                .foregroundStyle(ProShowTheme.secondaryLabel)
+            HStack(spacing: DeskSpace.sm) {
+                pixelField("Width", text: $widthText)
+                pixelField("Height", text: $heightText)
+            }
+            if showsError {
+                Text("Enter an even number from 16 to 7680.")
+                    .font(DeskType.meta)
+                    .foregroundStyle(ProShowTheme.liveRed)
+                    .accessibilityLabel("Enter an even number from 16 to 7680.")
+            }
+            HStack(spacing: DeskSpace.xs) {
+                Spacer(minLength: 0)
+                Button("Cancel", action: onCancel)
+                    .keyboardShortcut(.cancelAction)
+                Button("Apply") {
+                    guard let width, let height else { return }
+                    onApply(width, height)
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(!canApply)
+            }
+        }
+        .padding(DeskSpace.md)
+        .frame(width: 280)
+    }
+
+    private func pixelField(_ label: String, text: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(DeskType.meta)
+                .foregroundStyle(ProShowTheme.secondaryLabel)
+            TextField(label, text: text)
+                .textFieldStyle(.roundedBorder)
+                .font(DeskType.mono)
+                .accessibilityLabel(label)
+        }
+    }
+
+    private static func evenPixel(_ text: String) -> Double? {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        guard let value = Int(trimmed), (16...7680).contains(value), value.isMultiple(of: 2) else { return nil }
+        return Double(value)
+    }
+}
+
+/// Center of a canvas. New objects are placed on this point.
+private struct CanvasCenterOriginMark: View {
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(Color.white.opacity(0.55))
+                .frame(width: 1, height: 16)
+            Rectangle()
+                .fill(Color.white.opacity(0.55))
+                .frame(width: 16, height: 1)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityLabel("Canvas center")
+    }
+}
 
 struct LoopingTextFit: ViewModifier {
     var layout: TextLayout

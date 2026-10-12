@@ -1,0 +1,26 @@
+---
+description: Load ProShow UI skills before building or reviewing operator, audience, or settings surfaces.
+alwaysApply: true
+---
+
+# UI craft (ProShow)
+
+When the work is user-facing UI — new screens, restyles, components, motion, layout, or a design critique — read the matching skill from `.cursor/skills/<name>/SKILL.md` before writing or reviewing.
+
+Start with `better-interface` to pick 1–2 skills. Do not load all of them.
+
+| Work | Skill |
+| --- | --- |
+| Distinct look; avoid generic AI UI | `frontend-design` |
+| Apple / iOS / macOS feel, springs, sheets | `apple-design` |
+| Component polish, press, popovers, toasts | `emil-design-eng` |
+| Motion, hover, loaders, gestures | `interaction-design` |
+| Elevation, cards, panels | `beautiful-shadows` |
+| Responsive / device / input change | `adapt` |
+| Keyboard, contrast, labels, WCAG | `accessibility` |
+| Critique of a URL, screenshot, or component | `design-review` |
+| shadcn / `components.json` | `shadcn` only |
+
+Native SwiftUI / AppKit: same craft, platform materials, `DeskChrome` / `ProShowTheme`. Ignore `shadcn` unless asked.
+
+Hard rules: real content; visible focus; reduced motion; AA contrast; named icon-only controls; animate transform/opacity only; no `transition: all`; no enter from `scale(0)`; press states; native controls first; do not invent a second design system.

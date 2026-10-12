@@ -1,6 +1,8 @@
 # ProShow
 
-Native Apple church presentation app — **Swift / SwiftUI only** for macOS 14+ and iOS 17+.
+Native **macOS-first** live production desk — Swift / SwiftUI for macOS 14+.
+
+iOS is a secondary target and is not the supported operator surface.
 
 **GitHub:** https://github.com/nyuiela/ProShow
 
@@ -10,7 +12,7 @@ ProShow is an **original codebase**. [FreeShow](https://github.com/ChurchApps/Fr
 | --- | --- |
 | Display name | **ProShow** |
 | Bundle ID | `com.kaleel.proshow` |
-| Platforms | macOS 14+, iOS 17+ (multiplatform target) |
+| Platforms | **macOS 14+** (primary). iOS 17+ is compiled but not the operator desk. |
 | UI | SwiftUI operator desk (ProPresenter-class panes) |
 | Repo | https://github.com/nyuiela/ProShow |
 
@@ -18,25 +20,38 @@ ProShow is an **original codebase**. [FreeShow](https://github.com/ChurchApps/Fr
 
 Dark charcoal desk with blue selection accents and green Audience/Stage lamps:
 
-1. **Top toolbar** — Search, Text, Theme, Show, Edit, Reflow, Bible, More · Live · Audience/Stage status  
+1. **Top toolbar** — Search, Text, Theme, Show, Edit, Reflow, Widgets, More · Live · Audience/Stage status  
 2. **Left** — Library / Playlist / Items + Media sources  
 3. **Center** — Slide thumbnail grid + transport/zoom · Media bin strip  
 4. **Right** — Program preview, screen target, layer tabs (Props / Master clears, …)
 
+Each `OutputScreen` opens its own window. Stage uses the Stage editor document with live current/next/notes/clock tokens.
+
 ## Open & run on Mac
 
-**Intended checkout:** `~/Documents/tools/ProShow`  
-**Requires:** macOS with Xcode 15.4+ (Xcode 16 recommended).
+**Intended checkout:** `~/Documents/projects/tools/ProShow`  
+**Requires:** macOS with Xcode 15.4+ (Xcode 16 recommended) and [just](https://github.com/casey/just).
 
 ```bash
-git clone https://github.com/nyuiela/ProShow.git ~/Documents/tools/ProShow
-cd ~/Documents/tools/ProShow
-open ProShow.xcodeproj
+git clone https://github.com/nyuiela/ProShow.git ~/Documents/projects/tools/ProShow
+cd ~/Documents/projects/tools/ProShow
+just build
+just start
 ```
 
-1. Select scheme **ProShow** → **My Mac** (or iOS Simulator).  
-2. Run (⌘R).  
-3. Click a slide to select; double-click or **Live** / Return to go live; ←/→ to advance; **Show → Open Audience Window** (⇧⌘O).
+Every Debug build is copied to **`/Applications/ProShow.app`**. Grant Camera, Microphone, and Screen Recording to that one app. Xcode Run and `just start` both launch it, so permissions survive rebuilds. DerivedData is only a compile cache.
+
+```bash
+just              # list recipes
+just build        # Debug build → /Applications/ProShow.app
+just start        # build + launch that app
+just test         # unit tests
+just clean        # wipe DerivedData (keeps /Applications/ProShow.app)
+just xcode        # open ProShow.xcodeproj
+just app-path     # print the stable app path
+```
+
+Or open the project and Run (⌘R) with scheme **ProShow** → **My Mac**. Click a slide to select; double-click or **Live** / Return to go live; ←/→ to advance; **Show → Open Audience Window** (⇧⌘O). Stage is a separate window per stage output.
 
 ## Layout
 
@@ -44,14 +59,40 @@ open ProShow.xcodeproj
 ProShow.xcodeproj
 ProShow/
   App/
-  Models/                  Show + desk sidebar stubs
+  Models/
   Features/Operator/       toolbar, library, slides, media bin, output
-  Features/Output/         audience surface + Mac window
+  Features/Output/         one window per OutputScreen + live stage
   Services/
   Shared/                  ProShowTheme
   Resources/
 ```
 
+## Guest join (Showroom)
+
+Guests open the Next.js app at `~/Documents/projects/startups/foundry/showroom`. Media goes through **LiveKit**; ProShow stays the desk.
+
+```bash
+cd ~/Documents/projects/startups/foundry
+just dev showroom            # local: http://127.0.0.1:3461/j/demo
+# The desk copies https://room.xfoundrylab.com/j/<room>
+```
+
+The desk reads LiveKit credentials from that app’s `.env`.
+
+## Control API
+
+Localhost only: [http://127.0.0.1:55076/docs](http://127.0.0.1:55076/docs) · [openapi.json](http://127.0.0.1:55076/openapi.json)
+
+Stream Deck and Bitfocus Companion modules live in `Integrations/`.
+
+## Release packaging
+
+```bash
+./build_release.sh --skip-notarize
+```
+
+Produces `build/Release/ProShow.dmg` with hardened-runtime signing. Notarization runs when `AC_NOTARY_PROFILE` exists in the keychain.
+
 ## Licensing
 
-Original Swift work. FreeShow GPL must not be vendored into this tree.
+Original Swift work. FreeShow GPL must not be vendored into this tree. The NDI SDK is not vendored; ProShow `dlopen`s `libndi` only after live I/O is enabled.

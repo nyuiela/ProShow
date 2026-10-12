@@ -1,0 +1,21 @@
+{
+  "id": "proshow",
+  "name": "ProShow",
+  "shortname": "proshow",
+  "description": "Bitfocus Companion module for the ProShow localhost Control API.",
+  "version": "1.0.0",
+  "license": "MIT",
+  "repository": "https://github.com/nyuiela/ProShow",
+  "bugs": "https://github.com/nyuiela/ProShow/issues",
+  "maintainers": [],
+  "legacyIds": [],
+  "runtime": {
+    "type": "node18",
+    "api": "nodejs-ipc",
+    "apiVersion": "0.0.0",
+    "entrypoint": "../src/main.js"
+  },
+  "manufacturer": "ProShow",
+  "products": ["Control API"],
+  "keywords": ["presentation", "streaming", "iso", "ndi"]
+}

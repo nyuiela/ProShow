@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>ProShow Program Rundown</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.kaleel.proshow.program</string>
+			</array>
+		</dict>
+	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.kaleel.proshow.oauth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>proshow</string>
+			</array>
+		</dict>
+	</array>
+	<key>PROSHOW_LINKEDIN_CLIENT_ID</key>
+	<string>77rs1uq31c0vpl</string>
+	<key>PROSHOW_X_CLIENT_ID</key>
+	<string>eC1FcEU0QlRBejdiSW5WUVFrTHE6MTpjaQ</string>
+	<key>PROSHOW_YOUTUBE_CLIENT_ID</key>
+	<string>367456113544-786i705feq2vej462g9ka8plb257hlrs.apps.googleusercontent.com</string>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>com.apple.package</string>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>ProShow Program Rundown</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.kaleel.proshow.program</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>program</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
+</dict>
+</plist>

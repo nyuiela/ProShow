@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>ProShow Action</title>
+  <style>
+    body { font: 13px/1.4 system-ui; margin: 12px; color: #eee; background: #222; }
+    label { display: block; margin-bottom: 8px; }
+    input { width: 100%; }
+  </style>
+</head>
+<body>
+  <label>Scene or macro UUID
+    <input id="target" type="text" placeholder="UUID" />
+  </label>
+  <script>
+    let socket, uuid, action, context;
+    function connectElgatoStreamDeckSocket(port, inUUID, inRegister, inInfo, inActionInfo) {
+      uuid = inUUID;
+      const info = JSON.parse(inActionInfo || "{}");
+      action = info.action;
+      context = info.context;
+      const settings = (info.payload && info.payload.settings) || {};
+      document.getElementById("target").value = settings.scene_id || settings.macro_id || "";
+      socket = new WebSocket("ws://127.0.0.1:" + port);
+      socket.onopen = () => socket.send(JSON.stringify({ event: inRegister, uuid }));
+    }
+    document.getElementById("target").addEventListener("change", (event) => {
+      const value = event.target.value.trim();
+      const settings = action && action.includes("macro") ? { macro_id: value } : { scene_id: value };
+      socket.send(JSON.stringify({ event: "setSettings", context, payload: settings }));
+    });
+    window.connectElgatoStreamDeckSocket = connectElgatoStreamDeckSocket;
+  </script>
+</body>
+</html>

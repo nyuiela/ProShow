@@ -3,6 +3,7 @@ import SwiftUI
 /// Featured script / cue pane (right column) — Shoflo-style director view.
 struct RundownDetailPane: View {
     @Bindable var controller: ShowController
+    @AppStorage(ProShowFeatureFlags.multiDestinationRoutingV1Key) private var multiDestinationRouting = false
     var block: RundownBlock?
     var blockIndex: Int?
     @Binding var selectedTalentID: UUID?
@@ -21,6 +22,15 @@ struct RundownDetailPane: View {
             in: program,
             showLookup: { controller.show(matching: $0) }
         )
+    }
+
+    private var showsNoPhone: Bool {
+        guard multiDestinationRouting, let slide = focusedProgramSlide else { return false }
+        let phoneArmed = controller.deviceSettings.document.accounts.contains {
+            controller.streamMatrix.isActive($0.id) && $0.screenKind == .phone
+        }
+        guard phoneArmed else { return false }
+        return PhoneSlideRouting.state(boards: slide.editorCanvases) != .present
     }
 
     private var focusedProgramSlide: Slide? {
@@ -176,6 +186,12 @@ struct RundownDetailPane: View {
                                 .font(DeskType.micro)
                                 .foregroundStyle(ProShowTheme.lyricWhite)
                                 .lineLimit(2)
+                            if showsNoPhone {
+                                Text("No Phone")
+                                    .font(DeskType.micro)
+                                    .foregroundStyle(ProShowTheme.secondaryLabel)
+                                    .accessibilityLabel("No Phone")
+                            }
                         }
                         .accessibilityLabel("Program slide, \(slide.title)")
                     }
@@ -363,11 +379,16 @@ enum RundownTiming {
 #if os(macOS)
 /// Compact `.program` slide (canvas + browser) or legacy page raster for the rundown footer.
 struct RundownProgramSlidePreview: View {
+    @Bindable var controller: ShowController
     var slide: Slide?
     var canvasObjects: [CanvasObject] = []
     var pageURL: String?
     var showsCaption: Bool = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var showsCameraCanvas: Bool {
+        canvasObjects.contains { $0.kind == .videoInput || $0.assignedSource?.sourceType == .systemCamera }
+    }
 
     private var caption: String {
         if let slide, !slide.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -396,17 +417,18 @@ struct RundownProgramSlidePreview: View {
             ZStack {
                 if slide?.paintsOpaqueBackground == true {
                     Color(hex: slide?.backgroundHex ?? "#000000") ?? ProShowTheme.stageBlack
+                } else if showsCameraCanvas || pageURL != nil {
+                    Color.black
                 } else if !canvasObjects.isEmpty {
                     DeskTransparencyGrid(cell: 4)
                 } else {
                     Color.black
                 }
-                if !canvasObjects.isEmpty {
-                    ProgramSlideCanvas(
-                        objects: canvasObjects,
-                        canvasWidth: CanvasConfig.width,
-                        canvasHeight: CanvasConfig.height,
-                        evaluationMode: .thumbnailPreview
+                if let slide, !canvasObjects.isEmpty {
+                    ProgramSlideThumbnailPreview(
+                        controller: controller,
+                        slide: slide,
+                        objects: canvasObjects
                     )
                 } else if let pageURL {
                     RundownProgramPagePreview(pageURL: pageURL)
@@ -419,8 +441,12 @@ struct RundownProgramSlidePreview: View {
                     .strokeBorder(ProShowTheme.hairline, lineWidth: 1)
             )
         }
-        .onAppear { warmPageRasterIfNeeded() }
+        .onAppear {
+            warmPageRasterIfNeeded()
+            warmCameraPreviewIfNeeded()
+        }
         .onChange(of: pageURL) { _, _ in warmPageRasterIfNeeded() }
+        .onChange(of: slide?.id) { _, _ in warmCameraPreviewIfNeeded() }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Program slide preview")
         .accessibilityValue(caption)
@@ -429,6 +455,11 @@ struct RundownProgramSlidePreview: View {
     private func warmPageRasterIfNeeded() {
         guard let pageURL else { return }
         ProgramPageRaster.shared.prefetch([pageURL])
+    }
+
+    private func warmCameraPreviewIfNeeded() {
+        guard let slide, showsCameraCanvas else { return }
+        controller.prepareSlidePreviewCapture(for: slide)
     }
 }
 
@@ -451,14 +482,14 @@ private struct RundownProgramPagePreview: View {
 #endif
 
 enum RundownChrome {
-    static let listBackground = Color(red: 0.07, green: 0.075, blue: 0.09)
-    static let detailBackground = Color(red: 0.09, green: 0.095, blue: 0.11)
-    static let activeRow = Color(red: 0.12, green: 0.38, blue: 0.82)
-    static let gridLine = Color.white.opacity(0.08)
-    static let mutedLabel = Color.white.opacity(0.45)
-    static let secondaryInk = Color.white.opacity(0.72)
-    static let noteInk = Color(red: 0.78, green: 0.86, blue: 0.78)
-    static let noteBand = Color(red: 0.08, green: 0.11, blue: 0.09)
+    static let listBackground = ProShowTheme.panel
+    static let detailBackground = ProShowTheme.canvas
+    static let activeRow = ProShowTheme.accent.opacity(0.18)
+    static let gridLine = ProShowTheme.hairline
+    static let mutedLabel = ProShowTheme.secondaryLabel
+    static let secondaryInk = ProShowTheme.primaryLabel
+    static let noteInk = ProShowTheme.primaryLabel
+    static let noteBand = ProShowTheme.well
 }
 
 enum RundownFormat {
@@ -514,8 +545,8 @@ extension ScreenDirection {
 
 extension LinkCue {
     var operatorFlags: String {
-        let read = speakOnAir ? "Read on air" : "Do not read"
-        let take = autoTake ? "Takes on start" : "Do not take"
+        let read = speakOnAir ? "Read" : "Skip"
+        let take = autoTake ? "Auto" : "Manual"
         return "\(read) · \(take)"
     }
 }

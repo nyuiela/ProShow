@@ -9,6 +9,26 @@ import CoreVideo
 import VideoToolbox
 #endif
 
+enum EncodeStatusLog {
+    private static let path = "/tmp/proshow-vt.log"
+
+    static func reset() {
+        FileManager.default.createFile(atPath: path, contents: Data())
+    }
+
+    static func append(_ status: OSStatus) {
+        let text = "vt=\(status)\n"
+        guard let data = text.data(using: .utf8) else { return }
+        if let handle = FileHandle(forWritingAtPath: path) {
+            handle.seekToEndOfFile()
+            handle.write(data)
+            try? handle.close()
+        } else {
+            FileManager.default.createFile(atPath: path, contents: data)
+        }
+    }
+}
+
 enum EncodedVideoPacket: Sendable, Equatable {
     case sequenceHeader(Data)
     case accessUnit(timestampMs: UInt32, keyframe: Bool, avcc: Data)
@@ -39,9 +59,38 @@ final class HardwareVideoEncoder: @unchecked Sendable {
     private(set) var encodedFrameCount = 0
     private(set) var encodeFailureCount = 0
     private(set) var lastEncodeStatus: OSStatus = noErr
+    /// Blocks still waiting to enter VideoToolbox, and frames VideoToolbox has not returned.
+    private let depthLock = NSLock()
+    private var sessionBacklog = 0
+    private var encoderHeld = 0
+    var encodeOutcome: (failures: Int, status: OSStatus) {
+        depthLock.lock()
+        defer { depthLock.unlock() }
+        return (encodeFailureCount, lastEncodeStatus)
+    }
+
+    private func recordEncodeStatus(_ status: OSStatus) {
+        depthLock.lock()
+        lastEncodeStatus = status
+        if status != noErr {
+            encodeFailureCount += 1
+        }
+        depthLock.unlock()
+        EncodeStatusLog.append(status)
+    }
+
+    var queuedFrameDepth: (session: Int, encoder: Int) {
+        depthLock.lock()
+        defer { depthLock.unlock() }
+        return (sessionBacklog, encoderHeld)
+    }
     private(set) var width: Int32 = 0
     private(set) var height: Int32 = 0
+    /// Stream stays on the shared encoder queue. A Phone lane sets its own queue so it cannot block Stream.
+    var sessionQueue: DispatchQueue = ProShowQueues.encoderQueue
     var onEncoded: (@Sendable (EncodedVideoPacket) -> Void)?
+    /// When set, FLV timestamps follow the VideoToolbox PTS and do not chase the host clock.
+    var strictPresentationTimestamps = false
     var onEncodedSample: (@Sendable (CMSampleBuffer) -> Void)?
     var onAccessUnitBytes: (@Sendable (Int) -> Void)?
 
@@ -49,6 +98,7 @@ final class HardwareVideoEncoder: @unchecked Sendable {
     private var compressionSession: VTCompressionSession?
     private var frameCount: Int64 = 0
     private var targetFps: Int32 = 30
+    private var lastRTMPTimestampMs: UInt32 = 0
     #endif
     private var sentSequenceHeader = false
 
@@ -64,6 +114,7 @@ final class HardwareVideoEncoder: @unchecked Sendable {
 
     func setupStream(config: StreamEncoderConfig) {
         teardown()
+        EncodeStatusLog.reset()
         width = Int32(max(16, config.width))
         height = Int32(max(16, config.height))
         sentSequenceHeader = false
@@ -93,6 +144,7 @@ final class HardwareVideoEncoder: @unchecked Sendable {
         )
         guard status == noErr, let session else {
             lastEncodeStatus = status
+            EncodeStatusLog.append(status)
             return
         }
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_RealTime, value: kCFBooleanTrue)
@@ -125,12 +177,67 @@ final class HardwareVideoEncoder: @unchecked Sendable {
         #endif
     }
 
+    /// Advance CFR timeline when compositing skips a frame so video PTS does not lag audio.
+    func advanceScheduledFrames(_ count: Int = 1) {
+        guard count > 0 else { return }
+        sessionQueue.async { [weak self] in
+            self?.frameCount += Int64(count)
+        }
+    }
+
+    func encodeOnMasterClock(pixelBuffer: CVPixelBuffer, presentationTime: CMTime, forceKeyframe: Bool) {
+        #if canImport(VideoToolbox) && canImport(CoreVideo) && canImport(CoreMedia)
+        let forceKey = forceKeyframe || !sentSequenceHeader
+        depthLock.lock()
+        sessionBacklog += 1
+        depthLock.unlock()
+        sessionQueue.async { [weak self] in
+            guard let self else { return }
+            self.depthLock.lock()
+            self.sessionBacklog = max(0, self.sessionBacklog - 1)
+            self.depthLock.unlock()
+            guard let session = self.compressionSession else { return }
+            self.frameCount += 1
+            let duration = StreamVideoCFRClock.frameDuration(fps: self.targetFps)
+            var properties: CFDictionary?
+            if forceKey {
+                properties = [kVTEncodeFrameOptionKey_ForceKeyFrame: true] as CFDictionary
+            }
+            var flags = VTEncodeInfoFlags()
+            self.depthLock.lock()
+            self.encoderHeld += 1
+            self.depthLock.unlock()
+            let status = VTCompressionSessionEncodeFrame(
+                session,
+                imageBuffer: pixelBuffer,
+                presentationTimeStamp: presentationTime,
+                duration: duration,
+                frameProperties: properties,
+                infoFlagsOut: &flags,
+                outputHandler: { [weak self] status, _, sample in
+                    self?.depthLock.lock()
+                    self?.encoderHeld = max(0, (self?.encoderHeld ?? 1) - 1)
+                    self?.depthLock.unlock()
+                    self?.recordEncodeStatus(status)
+                    self?.handle(sample)
+                }
+            )
+            if status != noErr {
+                self.depthLock.lock()
+                self.encoderHeld = max(0, self.encoderHeld - 1)
+                self.depthLock.unlock()
+                self.recordEncodeStatus(status)
+            }
+        }
+        #endif
+    }
+
     func encode(pixelBuffer: CVPixelBuffer, presentationTime: TimeInterval, hostTime: CMTime = .invalid) {
         #if canImport(VideoToolbox) && canImport(CoreVideo) && canImport(CoreMedia)
         _ = presentationTime
         _ = hostTime
         let forceKey = !sentSequenceHeader
-        ProShowQueues.encoderQueue.async { [weak self] in
+        sessionQueue.async { [weak self] in
             guard let self, let session = self.compressionSession else { return }
             let index = self.frameCount
             self.frameCount += 1
@@ -149,23 +256,19 @@ final class HardwareVideoEncoder: @unchecked Sendable {
                 frameProperties: properties,
                 infoFlagsOut: &flags,
                 outputHandler: { [weak self] status, _, sample in
-                    if status != noErr {
-                        self?.encodeFailureCount += 1
-                        self?.lastEncodeStatus = status
-                    }
+                    self?.recordEncodeStatus(status)
                     self?.handle(sample)
                 }
             )
             if status != noErr {
-                encodeFailureCount += 1
-                lastEncodeStatus = status
+                self.recordEncodeStatus(status)
             }
         }
         #endif
     }
 
     func flushPendingEncodes() {
-        ProShowQueues.encoderQueue.sync {
+        sessionQueue.sync {
             #if canImport(VideoToolbox)
             if let session = compressionSession {
                 VTCompressionSessionCompleteFrames(session, untilPresentationTimeStamp: .invalid)
@@ -191,11 +294,12 @@ final class HardwareVideoEncoder: @unchecked Sendable {
             sentSequenceHeader = false
             frameCount = 0
             targetFps = 30
+            lastRTMPTimestampMs = 0
         }
-        if ProShowQueues.isOnEncoderQueue {
+        if sessionQueue === ProShowQueues.encoderQueue, ProShowQueues.isOnEncoderQueue {
             work()
         } else {
-            ProShowQueues.encoderQueue.sync(execute: work)
+            sessionQueue.sync(execute: work)
         }
     }
 
@@ -203,6 +307,28 @@ final class HardwareVideoEncoder: @unchecked Sendable {
     private static let baseFrameRatePropertyKey = "BaseFrameRate" as CFString
 
     #if canImport(VideoToolbox)
+    /// FLV timestamps follow the same host anchor as AAC; CFR index only drives VideoToolbox order.
+    private func rtmpTimestampMs(for pts: CMTime) -> UInt32 {
+        let frameStepMs = UInt32(max(1, 1_000 / max(1, targetFps)))
+        let cfrMs: UInt32
+        if pts.isValid, pts.timescale == CMTimeScale(targetFps), pts.value >= 0 {
+            cfrMs = StreamVideoCFRClock.timestampMs(frameIndex: pts.value, fps: targetFps)
+        } else {
+            let seconds = CMTimeGetSeconds(pts)
+            cfrMs = seconds.isFinite ? UInt32(max(0, min(Double(UInt32.max), seconds * 1000))) : 0
+        }
+        var candidate = cfrMs
+        if !strictPresentationTimestamps, MediaClockAnchor.shared.isActive {
+            let hostMs = MediaClockAnchor.shared.timestampMs(MediaClockAnchor.shared.currentPresentationTime())
+            candidate = max(candidate, hostMs)
+        }
+        if candidate <= lastRTMPTimestampMs {
+            candidate = lastRTMPTimestampMs &+ frameStepMs
+        }
+        lastRTMPTimestampMs = candidate
+        return candidate
+    }
+
     private func handle(_ sample: CMSampleBuffer?) {
         guard let sample, CMSampleBufferDataIsReady(sample) else { return }
         onEncodedSample?(sample)
@@ -212,13 +338,7 @@ final class HardwareVideoEncoder: @unchecked Sendable {
         }
         guard let avcc = Self.avccPayload(from: sample) else { return }
         let pts = CMSampleBufferGetPresentationTimeStamp(sample)
-        let timestampMs: UInt32
-        if pts.isValid, pts.timescale == CMTimeScale(targetFps), pts.value >= 0 {
-            timestampMs = StreamVideoCFRClock.timestampMs(frameIndex: pts.value, fps: targetFps)
-        } else {
-            let seconds = CMTimeGetSeconds(pts)
-            timestampMs = seconds.isFinite ? UInt32(max(0, min(Double(UInt32.max), seconds * 1000))) : 0
-        }
+        let timestampMs = rtmpTimestampMs(for: pts)
         encodedFrameCount += 1
         onAccessUnitBytes?(avcc.count)
         onEncoded?(.accessUnit(timestampMs: timestampMs, keyframe: Self.isKeyframe(sample), avcc: avcc))

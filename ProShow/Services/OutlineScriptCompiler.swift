@@ -563,6 +563,9 @@ struct RundownProgramCut: Equatable, Sendable {
             case .note, .layout:
                 continue
             case .unknown:
+                if RundownBlockSlideSource.placeholderLetter(in: direction) != nil {
+                    return .camera
+                }
                 let word = (direction.rawKind ?? direction.label)
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                     .lowercased()
@@ -612,8 +615,8 @@ enum ProgramPageViewport {
     private static var loadingPlateCache: [String: CVPixelBuffer] = [:]
 
     /// Neutral program plate while a page raster is still loading (stream + Audience).
-    static func loadingPlatePixelBuffer(label: String) -> CVPixelBuffer? {
-        let cacheKey = "\(label)#v2"
+    static func loadingPlatePixelBuffer(label: String, subtitle: String = "Loading page…") -> CVPixelBuffer? {
+        let cacheKey = "\(label)#\(subtitle)#v2"
         if let cached = loadingPlateCache[cacheKey] { return cached }
         let width = Int(Self.width)
         let height = Int(Self.height)
@@ -639,7 +642,7 @@ enum ProgramPageViewport {
         let bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
 
         let title = label as NSString
-        let subtitle = "Loading page…" as NSString
+        let subtitleLine = subtitle as NSString
         let titleFont = NSFont.systemFont(ofSize: 36, weight: .semibold)
         let subtitleFont = NSFont.systemFont(ofSize: 22, weight: .regular)
         let titleAttrs: [NSAttributedString.Key: Any] = [
@@ -651,7 +654,7 @@ enum ProgramPageViewport {
             .foregroundColor: NSColor.white.withAlphaComponent(0.55)
         ]
         let titleSize = title.size(withAttributes: titleAttrs)
-        let subtitleSize = subtitle.size(withAttributes: subtitleAttrs)
+        let subtitleSize = subtitleLine.size(withAttributes: subtitleAttrs)
         let blockH = titleSize.height + 10 + subtitleSize.height
         guard let context = CGContext(
             data: base,
@@ -676,7 +679,7 @@ enum ProgramPageViewport {
         )
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
-        subtitle.draw(at: subtitleOrigin, withAttributes: subtitleAttrs)
+        subtitleLine.draw(at: subtitleOrigin, withAttributes: subtitleAttrs)
         title.draw(at: titleOrigin, withAttributes: titleAttrs)
         NSGraphicsContext.restoreGraphicsState()
 

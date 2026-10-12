@@ -12,9 +12,10 @@ import AppKit
 import UIKit
 #endif
 
-/// Source picker using the same home language as the start screen.
+/// Source picker. Same sidebar language as the desk: system appearance, ribbon selection, drawer content.
 struct AddShotModalView: View {
     @Bindable var controller: ShowController
+    @Environment(\.colorScheme) private var scheme
     @State private var discovery = SourceDiscoveryManager()
     @State private var previewStore = InputPreviewStore()
     @State private var category: AddShotCategory = .all
@@ -28,6 +29,9 @@ struct AddShotModalView: View {
     @State private var expandedGroups: Set<String> = [
         "Placeholders",
         "Solid Colors",
+        "Slides",
+        "Web Browser",
+        "Web pages",
         "Library",
         "Playlists",
         "Media Files",
@@ -66,16 +70,7 @@ struct AddShotModalView: View {
         }
     }
 
-    private var addShotContextSubtitle: String {
-        switch controller.addShotPurpose {
-        case .assignToSelectedObjects:
-            "Assign a placeholder, media file, or source"
-        case .assignRundownProgramSlide:
-            "Link a slide, web page, camera, or media to this outline item"
-        case .addToLayer:
-            "Choose a source for this layer"
-        }
-    }
+    private var addShotContextSubtitle: String { "" }
 
     private var addShotConfirmHint: String {
         switch controller.addShotPurpose {
@@ -100,15 +95,21 @@ struct AddShotModalView: View {
                 dock
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(StartHome.page)
+            .background(ShowDrawerPalette.background(scheme))
         }
         .frame(width: Self.modalWidth, height: Self.modalHeight)
         .frame(maxWidth: Self.modalMaxWidth, maxHeight: Self.modalMaxHeight)
-        .background(StartHome.page)
+        .background(ShowDrawerPalette.background(scheme))
         .clipShape(RoundedRectangle(cornerRadius: DeskRadius.sheet, style: .continuous))
-        .preferredColorScheme(.dark)
+        .modifier(ShowSidebarSystemScheme())
         .focusEffectDisabled()
-        .onAppear { rescanHardware() }
+        .onAppear {
+            refreshCatalog()
+            rescanHardware()
+        }
+        .onChange(of: controller.liveKitDesk.revision) { _, _ in
+            refreshCatalog()
+        }
         .onDisappear {
             previewStore.shutdown()
             RundownProgramSlideAssignSession.cancel()
@@ -132,20 +133,19 @@ struct AddShotModalView: View {
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
-                ZStack {
-                    Circle().fill(StartHome.ink)
-                    Image(systemName: "film")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white)
-                }
-                .frame(width: 28, height: 28)
+                Image(systemName: "film")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(ShowSidebarPalette.symbol)
+                    .frame(width: 28, height: 28)
+                    .accessibilityHidden(true)
                 Text(controller.addShotPurpose.title)
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(ShowSidebarPalette.title)
+                    .lineLimit(2)
             }
-            .padding(.horizontal, 22)
-            .padding(.top, 22)
-            .padding(.bottom, 28)
+            .padding(.horizontal, 16)
+            .padding(.top, 18)
+            .padding(.bottom, 16)
             .accessibilityElement(children: .combine)
             .accessibilityAddTraits(.isHeader)
 
@@ -161,6 +161,7 @@ struct AddShotModalView: View {
                     }
                 }
             }
+            .frame(maxHeight: .infinity, alignment: .top)
             .focusEffectDisabled()
 
             navButton("Cancel", systemImage: "xmark") {
@@ -169,32 +170,14 @@ struct AddShotModalView: View {
             .padding(.bottom, 20)
             .keyboardShortcut(.cancelAction)
         }
-        .frame(width: 200, alignment: .leading)
-        .background(StartHome.sidebar)
+        .frame(width: 220, alignment: .leading)
+        .background(ShowSidebarPalette.background(scheme))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Source categories")
     }
 
     private func navButton(_ title: String, systemImage: String, selected: Bool = false, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 14, weight: .medium))
-                    .frame(width: 18)
-                Text(title)
-                    .font(.system(size: 14, weight: selected ? .semibold : .regular))
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-            }
-            .foregroundStyle(selected ? Color.white : Color.white.opacity(0.72))
-            .padding(.horizontal, 18)
-            .frame(height: 36)
-            .background(selected ? Color.white.opacity(0.08) : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(DeskPressButtonStyle())
-        .padding(.horizontal, 8)
-        .accessibilityAddTraits(selected ? .isSelected : [])
+        DeskModalNavRow(title: title, systemImage: systemImage, selected: selected, action: action)
     }
 
     private var header: some View {
@@ -202,41 +185,47 @@ struct AddShotModalView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(addShotContextTitle)
                     .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(.white)
-                Text(addShotContextSubtitle)
-                    .font(.system(size: 13))
-                    .foregroundStyle(Color.white.opacity(0.5))
+                    .foregroundStyle(ShowSidebarPalette.title)
+                if !addShotContextSubtitle.isEmpty {
+                    Text(addShotContextSubtitle)
+                        .font(.system(size: 13))
+                        .foregroundStyle(ShowSidebarPalette.subtitle)
+                }
             }
             Spacer(minLength: 12)
             HStack(spacing: 8) {
-                chip("List", selected: !isGrid) { isGrid = false }
-                chip("Grid", selected: isGrid) { isGrid = true }
+                PaneLayoutToggle(
+                    gridOn: isGrid,
+                    listOn: !isGrid,
+                    onGrid: { isGrid = true },
+                    onList: { isGrid = false }
+                )
                 chip("Offline", selected: discovery.showDisconnected) {
                     discovery.showDisconnected.toggle()
                 }
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Color.white.opacity(0.45))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(ShowSidebarPalette.subtitle)
                         .accessibilityHidden(true)
                     TextField("Search sources", text: $query)
                         .textFieldStyle(.plain)
                         .font(.system(size: 13))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(ShowSidebarPalette.title)
                         .focused($searchFocused)
                         .accessibilityLabel("Search sources")
                 }
                 .padding(.horizontal, 12)
                 .frame(width: 220, height: 34)
-                .background(Color.white.opacity(0.08), in: Capsule(style: .continuous))
+                .background(ShowSidebarPalette.field(scheme), in: Capsule(style: .continuous))
                 Button {
                     rescanHardware()
                 } label: {
                     Image(systemName: "arrow.clockwise")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(ShowSidebarPalette.title)
                         .frame(width: 34, height: 34)
-                        .background(Color.white.opacity(0.08), in: Circle())
+                        .background(ShowSidebarPalette.field(scheme), in: Circle())
                         .opacity(discovery.isRefreshingHardware ? 0.45 : 1)
                 }
                 .buttonStyle(DeskPressButtonStyle())
@@ -253,11 +242,11 @@ struct AddShotModalView: View {
     private func accessBanner(_ message: String) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(StartHome.tangerine)
+                .foregroundStyle(ThemeTokens.warningAmber)
                 .accessibilityHidden(true)
             Text(message)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.white)
+                .foregroundStyle(ShowSidebarPalette.title)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 8)
             if message.contains("Camera") {
@@ -269,30 +258,34 @@ struct AddShotModalView: View {
         }
         .padding(.horizontal, 28)
         .padding(.vertical, 8)
-        .background(Color.white.opacity(0.06))
+        .background(ShowSidebarPalette.selection(scheme))
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.updatesFrequently)
     }
 
     private func privacyButton(_ title: String, action: @escaping () -> Void) -> some View {
-        Button(title, action: action)
-            .buttonStyle(DeskPressButtonStyle())
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(StartHome.ink)
-            .padding(.horizontal, 10)
-            .frame(height: 26)
-            .background(StartHome.lemon, in: Capsule())
-            .accessibilityLabel(title)
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 12)
+                .frame(minHeight: 28)
+                .background(ProShowTheme.accent, in: Capsule())
+                .contentShape(Capsule())
+        }
+        .buttonStyle(DeskPressButtonStyle())
+        .accessibilityLabel(title)
     }
 
     private func chip(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(selected ? StartHome.ink : Color.white.opacity(0.8))
+                .foregroundStyle(selected ? Color.white : ShowSidebarPalette.title)
                 .padding(.horizontal, 12)
                 .frame(height: 28)
-                .background(selected ? Color.white : Color.white.opacity(0.08), in: Capsule(style: .continuous))
+                .background(selected ? ProShowTheme.accent : ShowSidebarPalette.field(scheme), in: Capsule(style: .continuous))
+                .contentShape(Capsule())
         }
         .buttonStyle(DeskPressButtonStyle())
         .accessibilityAddTraits(selected ? .isSelected : [])
@@ -311,7 +304,7 @@ struct AddShotModalView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 22) {
                 ForEach(groups) { group in
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 4) {
                         Button {
                             if expandedGroups.contains(group.groupName) {
                                 expandedGroups.remove(group.groupName)
@@ -321,12 +314,12 @@ struct AddShotModalView: View {
                         } label: {
                             HStack {
                                 Text(group.groupName)
-                                    .font(.system(size: 20, weight: .semibold))
-                                    .foregroundStyle(.white)
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(ShowSidebarPalette.title)
                                 Spacer(minLength: 0)
                                 Image(systemName: expandedGroups.contains(group.groupName) ? "chevron.down" : "chevron.right")
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(Color.white.opacity(0.4))
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(ShowSidebarPalette.symbol)
                             }
                         }
                         .buttonStyle(DeskPressButtonStyle())
@@ -341,11 +334,16 @@ struct AddShotModalView: View {
                             }
                         }
                     }
+                    .padding(expandedGroups.contains(group.groupName) ? 8 : 0)
+                    .background(
+                        expandedGroups.contains(group.groupName) ? ShowSidebarPalette.selection(scheme) : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    )
                 }
                 if groups.isEmpty {
-                    Text(query.isEmpty ? "Nothing in this category yet. Add a media file or pick another group." : "No sources match “\(query)”.")
+                    Text(query.isEmpty ? "No sources." : "No matches.")
                         .font(.system(size: 14))
-                        .foregroundStyle(Color.white.opacity(0.55))
+                        .foregroundStyle(ShowSidebarPalette.subtitle)
                         .padding(.top, 12)
                 }
             }
@@ -366,8 +364,8 @@ struct AddShotModalView: View {
                         sourceCard(item, tint: StartHome.rowTint(index))
                             .overlay {
                                 if selectedID == item.id {
-                                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                        .strokeBorder(Color.white, lineWidth: 3)
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .strokeBorder(ProShowTheme.accent, lineWidth: 2)
                                 }
                             }
                     }
@@ -389,46 +387,46 @@ struct AddShotModalView: View {
                     .frame(maxWidth: .infinity)
                     .aspectRatio(16 / 9, contentMode: .fit)
                 Text("Placeholder \(letter)")
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(ShowSidebarPalette.title)
                 Text("Maps later to a prop, screen, or source")
                     .font(.system(size: 11))
-                    .foregroundStyle(Color.white.opacity(0.5))
+                    .foregroundStyle(ShowSidebarPalette.subtitle)
             }
             .padding(12)
             .frame(maxWidth: .infinity, minHeight: 168, alignment: .leading)
-            .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background(ShowSidebarPalette.field(scheme), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         } else if item.sourceType == .solidColor, let hex = item.tintHex ?? item.connectionString {
             VStack(alignment: .leading, spacing: 10) {
                 SolidColorCard(hex: hex, cornerRadius: 14)
                     .frame(maxWidth: .infinity)
                     .aspectRatio(16 / 9, contentMode: .fit)
                 Text(item.name)
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(ShowSidebarPalette.title)
                 Text(hex)
                     .font(.system(size: 11).monospacedDigit())
-                    .foregroundStyle(Color.white.opacity(0.5))
+                    .foregroundStyle(ShowSidebarPalette.subtitle)
             }
             .padding(12)
             .frame(maxWidth: .infinity, minHeight: 168, alignment: .leading)
-            .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background(ShowSidebarPalette.field(scheme), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         } else if item.sourceType.showsDevicePreview {
             VStack(alignment: .leading, spacing: 10) {
                 devicePreview(item, cornerRadius: 14, prefersLive: selectedID == item.id)
                     .frame(maxWidth: .infinity)
                     .aspectRatio(16 / 9, contentMode: .fit)
                 Text(item.name)
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(ShowSidebarPalette.title)
                     .lineLimit(2)
                 Text(item.groupName)
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(Color.white.opacity(0.5))
+                    .foregroundStyle(ShowSidebarPalette.subtitle)
             }
             .padding(12)
             .frame(maxWidth: .infinity, minHeight: 168, alignment: .leading)
-            .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background(ShowSidebarPalette.field(scheme), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         } else if item.sourceType == .mediaFile {
             VStack(alignment: .leading, spacing: 10) {
                 MediaPreviewFrame(
@@ -441,11 +439,11 @@ struct AddShotModalView: View {
                 .aspectRatio(16 / 9, contentMode: .fit)
                 Text(item.groupName)
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(Color.white.opacity(0.5))
+                    .foregroundStyle(ShowSidebarPalette.subtitle)
             }
             .padding(12)
             .frame(maxWidth: .infinity, minHeight: 168, alignment: .leading)
-            .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background(ShowSidebarPalette.field(scheme), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         } else {
             VStack(alignment: .leading, spacing: 12) {
                 Image(systemName: item.category.iconName)
@@ -475,29 +473,34 @@ struct AddShotModalView: View {
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(item.name)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .font(.system(size: 13))
+                        .foregroundStyle(ShowSidebarPalette.title)
                         .lineLimit(1)
                     Text(rowDetail(item))
                         .font(.system(size: 12))
-                        .foregroundStyle(Color.white.opacity(0.5))
+                        .foregroundStyle(ShowSidebarPalette.subtitle)
                         .lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 if item.isFavorite {
                     Image(systemName: "star.fill")
                         .font(.system(size: 12))
-                        .foregroundStyle(StartHome.lemon)
+                        .foregroundStyle(ThemeTokens.warningAmber)
                         .accessibilityLabel("Favorite")
                 }
-                Image(systemName: selectedID == item.id ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(selectedID == item.id ? StartHome.lemon : Color.white.opacity(0.28))
+                Circle()
+                    .fill(selectedID == item.id ? ShowSidebarPalette.title : Color.clear)
+                    .frame(width: 6, height: 6)
                     .accessibilityHidden(true)
             }
             .padding(.horizontal, 8)
-            .padding(.vertical, 8)
-            .background(selectedID == item.id ? Color.white.opacity(0.06) : Color.clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .padding(.vertical, 6)
+            .overlay(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                    .fill(selectedID == item.id ? ProShowTheme.accent : Color.clear)
+                    .frame(width: 3)
+                    .padding(.vertical, 6)
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(DeskPressButtonStyle())
@@ -518,11 +521,11 @@ struct AddShotModalView: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(selectedItem?.name ?? "No source selected")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(ShowSidebarPalette.title)
                         .lineLimit(1)
                     Text(selectedItem.map(rowDetail) ?? "Pick a placeholder, color, or file")
                         .font(.system(size: 11))
-                        .foregroundStyle(Color.white.opacity(0.5))
+                        .foregroundStyle(ShowSidebarPalette.subtitle)
                 }
             }
             .accessibilityElement(children: .combine)
@@ -533,10 +536,10 @@ struct AddShotModalView: View {
                 isAddingColor = true
             }
             .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(.white)
+            .foregroundStyle(ShowSidebarPalette.title)
             .padding(.horizontal, 14)
             .frame(height: 34)
-            .background(Color.white.opacity(0.08), in: Capsule(style: .continuous))
+            .background(ShowSidebarPalette.field(scheme), in: Capsule(style: .continuous))
             .buttonStyle(DeskPressButtonStyle())
             .popover(isPresented: $isAddingColor, arrowEdge: .top) {
                 VStack(alignment: .leading, spacing: 12) {
@@ -548,21 +551,21 @@ struct AddShotModalView: View {
                         .textFieldStyle(.plain)
                         .padding(.horizontal, 10)
                         .frame(height: 32)
-                        .background(Color.white.opacity(0.08), in: Capsule(style: .continuous))
+                        .background(ShowSidebarPalette.field(scheme), in: Capsule(style: .continuous))
                     Button("Add color") {
                         commitDraftColor()
                     }
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(StartHome.ink)
+                    .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
                     .frame(height: 34)
-                    .background(StartHome.lemon, in: Capsule(style: .continuous))
+                    .background(ProShowTheme.accent, in: Capsule(style: .continuous))
                     .buttonStyle(DeskPressButtonStyle())
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(ShowSidebarPalette.title)
                 .padding(16)
                 .frame(width: 240)
-                .background(StartHome.dock)
+                .background(ShowDrawerPalette.background(scheme))
             }
 
             Button("Add media file") {
@@ -577,10 +580,10 @@ struct AddShotModalView: View {
                 #endif
             }
             .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(.white)
+            .foregroundStyle(ShowSidebarPalette.title)
             .padding(.horizontal, 14)
             .frame(height: 34)
-            .background(Color.white.opacity(0.08), in: Capsule(style: .continuous))
+            .background(ShowSidebarPalette.field(scheme), in: Capsule(style: .continuous))
             .buttonStyle(DeskPressButtonStyle())
             .keyboardShortcut("o", modifiers: [.command])
 
@@ -589,10 +592,10 @@ struct AddShotModalView: View {
                     addSelected(asCopy: true)
                 }
                 .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.white)
+                .foregroundStyle(ShowSidebarPalette.title)
                 .padding(.horizontal, 14)
                 .frame(height: 34)
-                .background(Color.white.opacity(0.08), in: Capsule(style: .continuous))
+                .background(ShowSidebarPalette.field(scheme), in: Capsule(style: .continuous))
                 .buttonStyle(DeskPressButtonStyle())
                 .disabled(selectedItem == nil)
                 .opacity(selectedItem == nil ? 0.4 : 1)
@@ -602,10 +605,10 @@ struct AddShotModalView: View {
                 addSelected(asCopy: false)
             }
             .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(StartHome.ink)
+            .foregroundStyle(.white)
             .padding(.horizontal, 18)
             .frame(height: 34)
-            .background(selectedItem == nil ? Color.white.opacity(0.35) : StartHome.lemon, in: Capsule(style: .continuous))
+            .background(selectedItem == nil ? ShowSidebarPalette.field(scheme) : ProShowTheme.accent, in: Capsule(style: .continuous))
             .buttonStyle(DeskPressButtonStyle())
             .keyboardShortcut(.defaultAction)
             .disabled(selectedItem == nil)
@@ -613,7 +616,7 @@ struct AddShotModalView: View {
         }
         .padding(.horizontal, 22)
         .frame(height: 64)
-        .background(StartHome.dock)
+        .background(ShowDrawerPalette.background(scheme))
     }
 
     @ViewBuilder
@@ -633,11 +636,11 @@ struct AddShotModalView: View {
             )
         } else {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(selectedItem == nil ? Color.white.opacity(0.08) : StartHome.tangerine)
+                .fill(selectedItem == nil ? ShowSidebarPalette.field(scheme) : ProShowTheme.sandboxOrange)
                 .overlay {
                     Image(systemName: selectedItem?.category.iconName ?? "film")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(selectedItem == nil ? Color.white.opacity(0.45) : StartHome.ink)
+                        .foregroundStyle(selectedItem == nil ? ShowSidebarPalette.subtitle : Color.white)
                 }
         }
     }
@@ -729,6 +732,23 @@ struct AddShotModalView: View {
         refreshCatalog()
     }
 
+    private var presentationShowsForCatalog: [Show] {
+        var shows: [Show] = []
+        var seen = Set<UUID>()
+        for show in controller.libraryShows where seen.insert(show.id).inserted {
+            shows.append(show)
+        }
+        if seen.insert(controller.show.id).inserted {
+            shows.append(controller.show)
+        }
+        let program = controller.rundownClock.program ?? controller.programDocument
+        let programShow = ProgramOutlinePresentation.makeShow(from: program)
+        if !programShow.allSlides.isEmpty, seen.insert(programShow.id).inserted {
+            shows.append(programShow)
+        }
+        return shows
+    }
+
     private func rescanHardware() {
         Task {
             await discovery.refreshLiveHardware(
@@ -736,11 +756,13 @@ struct AddShotModalView: View {
                 mediaCollections: controller.mediaCollections,
                 libraryShows: controller.libraryShows,
                 playlistItems: controller.libraryItems,
+                presentationShows: presentationShowsForCatalog,
                 overlays: controller.inspector.props.map(\.name),
                 customColors: controller.customSolidColors,
                 templates: controller.scenes.scenes.map(\.name),
                 existingShots: controller.masterLayers.flatMap(\.shots),
-                favoriteIDs: Set(discovery.items.filter(\.isFavorite).map(\.id))
+                favoriteIDs: Set(discovery.items.filter(\.isFavorite).map(\.id)),
+                liveGuests: controller.liveKitDesk.discoveredItems()
             )
             controller.enableLiveIO()
             controller.videoInputs.refreshDevices()
@@ -756,11 +778,13 @@ struct AddShotModalView: View {
             mediaCollections: controller.mediaCollections,
             libraryShows: controller.libraryShows,
             playlistItems: controller.libraryItems,
+            presentationShows: presentationShowsForCatalog,
             overlays: controller.inspector.props.map(\.name),
             customColors: controller.customSolidColors,
             templates: controller.scenes.scenes.map(\.name),
             existingShots: controller.masterLayers.flatMap(\.shots),
-            favoriteIDs: Set(discovery.items.filter(\.isFavorite).map(\.id))
+            favoriteIDs: Set(discovery.items.filter(\.isFavorite).map(\.id)),
+            liveGuests: controller.liveKitDesk.discoveredItems()
         )
         expandedGroups.formUnion(Set(discovery.groups(category: .all, query: "").map(\.groupName)))
     }

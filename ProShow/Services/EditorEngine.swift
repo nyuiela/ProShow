@@ -82,12 +82,14 @@ final class EditorEngine {
 
     var selectedObjects: [CanvasObject] {
         guard let document = selectedDocument else { return [] }
-        return document.sortedObjects.filter { selectedObjectIDs.contains($0.id) }
+        let pool = document.objects + document.boards.flatMap(\.objects)
+        return pool.filter { selectedObjectIDs.contains($0.id) }
     }
 
     var selectionBounds: CanvasBounds? {
         guard let document = selectedDocument else { return nil }
-        let bounds = document.objects
+        let pool = document.objects + document.boards.flatMap(\.objects)
+        let bounds = pool
             .filter { selectedObjectIDs.contains($0.id) }
             .map { liveHandleBounds[$0.id] ?? $0.bounds }
         return CanvasBounds.union(bounds)
@@ -133,12 +135,71 @@ final class EditorEngine {
 
     var objectTreeRows: [ObjectTreeItem] {
         guard let document = selectedDocument else { return [] }
+        if let index = activeExtraBoardIndex(in: document) {
+            return GroupSelectionController.treeRows(
+                objects: document.boards[index].objects,
+                groups: [],
+                collapsedGroupIDs: collapsedGroupIDs
+            )
+        }
         let groups = document.groups ?? GroupSelectionController.inferredGroups(from: document.objects)
         return GroupSelectionController.treeRows(
             objects: document.objects,
             groups: groups,
             collapsedGroupIDs: collapsedGroupIDs
         )
+    }
+
+    func openTheme(pack: ProShowThemePack, documents: [EditorDocument]) {
+        kind = .theme
+        selectedObjectIDs = []
+        inspectorTab = .slide
+        undoStack = []
+        redoStack = []
+        canvasPanX = 0
+        canvasPanY = 0
+        zoom = 0.42
+        themeCollection = pack.collectionName
+        self.documents = documents
+        selectedDocumentID = documents.first?.id
+        if let first = documents.first?.objects.first {
+            selectedObjectIDs = [first.id]
+            inspectorTab = first.isTextLike ? .text : .shape
+        }
+    }
+
+    func openStagePack(pack: ProShowThemePack, documents: [EditorDocument], selectedVariantID: UUID?) {
+        kind = .stage
+        selectedObjectIDs = []
+        inspectorTab = .slide
+        undoStack = []
+        redoStack = []
+        canvasPanX = 0
+        canvasPanY = 0
+        zoom = 0.42
+        themeCollection = pack.collectionName
+        self.documents = documents
+        selectedDocumentID = documents.first(where: { $0.id == selectedVariantID })?.id ?? documents.first?.id
+        if let firstObject = selectedDocument?.objects.first {
+            selectedObjectIDs = [firstObject.id]
+            inspectorTab = firstObject.isTextLike ? .text : .shape
+        }
+    }
+
+    func insertThemeVariant(id: UUID, name: String, collectionName: String, objects: [CanvasObject]) {
+        guard kind == .theme else { return }
+        let document = EditorDocument(
+            id: id,
+            name: name,
+            kind: .theme,
+            objects: objects,
+            collectionName: collectionName,
+            variantName: name
+        )
+        documents.append(document)
+        selectedDocumentID = document.id
+        selectedObjectIDs = Set(objects.prefix(1).map(\.id))
+        notifyDocumentsChanged()
     }
 
     func open(_ kind: EditorKind, show: Show, selectedSlideID: SlideID?) {
@@ -355,7 +416,7 @@ final class EditorEngine {
         if let editing = inlineEditID, editing != id, !additive {
             endInlineEdit()
         }
-        let objects = selectedDocument?.objects ?? []
+        let objects = canvasObjectPool()
         let object = objects.first(where: { $0.id == id })
         if isolatedObjectID != nil, object?.groupID != objects.first(where: { $0.id == isolatedObjectID })?.groupID {
             isolatedObjectID = nil
@@ -428,11 +489,18 @@ final class EditorEngine {
         else {
             return Self.makeObject(kind: kind, zIndex: 0, token: token)
         }
-        let z = (documents[index].objects.map(\.zIndex).max() ?? 0) + 1
+        let pool = activeEditingObjects(in: documents[index])
+        let host = activeCanvasPixelSize(in: documents[index])
+        let z = (pool.map(\.zIndex).max() ?? 0) + 1
         var object = Self.makeObject(kind: kind, zIndex: z, token: token)
-        object.name = uniqueName(kind.defaultName, in: documents[index].objects)
+        object.bounds = Self.boundsCentered(object.bounds, canvasWidth: host.width, canvasHeight: host.height)
+        object.name = uniqueName(kind.defaultName, in: pool)
         registerUndo()
-        documents[index].objects.append(object)
+        if let boardIndex = activeExtraBoardIndex(in: documents[index]) {
+            documents[index].boards[boardIndex].objects.append(object)
+        } else {
+            documents[index].objects.append(object)
+        }
         selectedObjectIDs = [object.id]
         inspectorTab = object.isTextLike ? .text : .shape
         notifyDocumentsChanged()
@@ -475,8 +543,14 @@ final class EditorEngine {
         var seen = Set<UUID>()
         let unique = order.filter { seen.insert($0).inserted }
         for (offset, id) in unique.enumerated() {
+            let zIndex = unique.count - offset
             if let item = documents[docIndex].objects.firstIndex(where: { $0.id == id }) {
-                documents[docIndex].objects[item].zIndex = unique.count - offset
+                documents[docIndex].objects[item].zIndex = zIndex
+            }
+            for boardIndex in documents[docIndex].boards.indices {
+                if let item = documents[docIndex].boards[boardIndex].objects.firstIndex(where: { $0.id == id }) {
+                    documents[docIndex].boards[boardIndex].objects[item].zIndex = zIndex
+                }
             }
         }
         notifyDocumentsChanged()
@@ -611,6 +685,12 @@ final class EditorEngine {
             body(&objects[itemIndex])
         }
         next[docIndex].objects = objects
+        for boardIndex in next[docIndex].boards.indices {
+            for itemIndex in next[docIndex].boards[boardIndex].objects.indices
+            where selectedObjectIDs.contains(next[docIndex].boards[boardIndex].objects[itemIndex].id) {
+                body(&next[docIndex].boards[boardIndex].objects[itemIndex])
+            }
+        }
         documents = next
         notifyDocumentsChanged()
     }
@@ -871,9 +951,10 @@ final class EditorEngine {
         var snapDX = 0.0
         var snapDY = 0.0
         if let document = selectedDocument, let anchor = dragOrigins.first {
-            let (anchorID, anchorOrigin) = anchor
-            let canvas = CanvasBounds(x: 0, y: 0, width: document.canvasWidth, height: document.canvasHeight)
-            let others = document.objects.filter { !dragOrigins.keys.contains($0.id) }.map(\.bounds)
+            let (_, anchorOrigin) = anchor
+            let host = canvasHost(for: anchor.key, in: document)
+            let canvas = CanvasBounds(x: 0, y: 0, width: host.width, height: host.height)
+            let others = host.objects.filter { !dragOrigins.keys.contains($0.id) }.map(\.bounds)
             let rawX = anchorOrigin.x + translationX
             let rawY = anchorOrigin.y + translationY
             let result = SmartGuideEngine.compute(
@@ -890,7 +971,6 @@ final class EditorEngine {
             snapDX = result.x - rawX
             snapDY = result.y - rawY
             layoutSnapState = result.state
-            _ = anchorID
         }
 
         for (id, origin) in dragOrigins {
@@ -1033,7 +1113,7 @@ final class EditorEngine {
             for (id, origin) in handleOrigins {
                 let scaledBounds = TransformHandleEngine.scaleChild(origin, from: oldCompound, to: newCompound)
                 setLiveHandleBound(id: id, bounds: scaledBounds)
-                if let object = selectedDocument?.objects.first(where: { $0.id == id }),
+                if let object = canvasObject(id: id),
                    object.isTextLike,
                    let base = handleFontSizes[id] {
                     setLiveHandleFontSize(id: id, fontSize: max(1, base * scaleY))
@@ -1042,7 +1122,7 @@ final class EditorEngine {
             return
         }
         for (id, origin) in handleOrigins {
-            guard let object = selectedDocument?.objects.first(where: { $0.id == id }) else { continue }
+            guard let object = canvasObject(id: id) else { continue }
             let lock = TransformHandleEngine.shouldLockAspect(
                 handle: handle,
                 elementLocked: CanvasTransformEngine.defaultLockAspect(
@@ -1425,7 +1505,7 @@ final class EditorEngine {
     }
 
     func beginInlineEdit(id: UUID) {
-        guard let object = selectedDocument?.objects.first(where: { $0.id == id }),
+        guard let object = canvasObject(id: id),
               !object.isCanvasLocked
         else { return }
         selectObject(id)
@@ -1484,6 +1564,9 @@ final class EditorEngine {
         else { return }
         registerUndo()
         documents[index].objects.removeAll { selectedObjectIDs.contains($0.id) }
+        for boardIndex in documents[index].boards.indices {
+            documents[index].boards[boardIndex].objects.removeAll { selectedObjectIDs.contains($0.id) }
+        }
         var groups = documents[index].groups ?? []
         GroupSelectionController.pruneEmptyGroups(objects: documents[index].objects, groups: &groups)
         documents[index].groups = groups
@@ -1518,14 +1601,19 @@ final class EditorEngine {
               !objects.isEmpty
         else { return }
         var copies = ClipboardController.rematerialize(objects, offset: offset)
-        var existing = documents[index].objects
+        let boardIndex = activeExtraBoardIndex(in: documents[index])
+        var existing = boardIndex.map { documents[index].boards[$0].objects } ?? documents[index].objects
         for copyIndex in copies.indices {
             copies[copyIndex].name = uniqueName(copies[copyIndex].name, in: existing)
             copies[copyIndex].zIndex = (existing.map(\.zIndex).max() ?? 0) + 1
             existing.append(copies[copyIndex])
         }
         registerUndo()
-        documents[index].objects.append(contentsOf: copies)
+        if let boardIndex {
+            documents[index].boards[boardIndex].objects.append(contentsOf: copies)
+        } else {
+            documents[index].objects.append(contentsOf: copies)
+        }
         selectedObjectIDs = Set(copies.map(\.id))
         inspectorTab = copies.contains(where: \.isTextLike) && copies.allSatisfy(\.isTextLike) ? .text : .shape
         notifyDocumentsChanged()
@@ -1533,7 +1621,8 @@ final class EditorEngine {
 
     func bringForward() {
         guard let document = selectedDocument else { return }
-        let ceiling = (document.objects.map(\.zIndex).max() ?? 0) + 1
+        let pool = activeEditingObjects(in: document)
+        let ceiling = (pool.map(\.zIndex).max() ?? 0) + 1
         mutateSelectedObjects { $0.zIndex = min(ceiling, $0.zIndex + 1) }
     }
 
@@ -1542,7 +1631,8 @@ final class EditorEngine {
     }
 
     func selectAllObjects() {
-        selectedObjectIDs = Set(selectedDocument?.objects.map(\.id) ?? [])
+        guard let document = selectedDocument else { return }
+        selectedObjectIDs = Set(activeEditingObjects(in: document).map(\.id))
         if selectedObjectIDs.isEmpty {
             inspectorTab = .slide
         } else if inspectorTab == .slide {
@@ -1551,10 +1641,225 @@ final class EditorEngine {
     }
 
     func setResolution(_ resolution: CanvasResolution) {
-        mutateSelectedDocument {
-            $0.canvasWidth = resolution.size.width
-            $0.canvasHeight = resolution.size.height
+        setCanvasSize(width: resolution.size.width, height: resolution.size.height)
+    }
+
+    /// Changes the artboard the editor is showing and fits it in the pane.
+    /// Pixel objects stay put. The live program still composites at the project canvas size.
+    func setCanvasSize(width: Double, height: Double) {
+        let width = Self.clampedEvenCanvas(width)
+        let height = Self.clampedEvenCanvas(height)
+        guard let document = selectedDocument else { return }
+        if abs(document.canvasWidth - width) < 0.5, abs(document.canvasHeight - height) < 0.5 {
+            return
         }
+        mutateSelectedDocument {
+            $0.canvasWidth = width
+            $0.canvasHeight = height
+            if let index = $0.boards.firstIndex(where: \.isPrimary) {
+                $0.boards[index].width = width
+                $0.boards[index].height = height
+                $0.boards[index].name = CanvasResolution.screenFamily(width: width, height: height).title
+            }
+        }
+        fitCurrentDocument()
+    }
+
+    static func clampedEvenCanvas(_ value: Double) -> Double {
+        let rounded = value.rounded()
+        let even = rounded.truncatingRemainder(dividingBy: 2) == 0 ? rounded : rounded - 1
+        return min(7680, max(16, even))
+    }
+
+    var activeCanvasID: UUID?
+
+    func canvasBoards(in document: EditorDocument) -> [EditorCanvasFrame] {
+        if document.boards.isEmpty {
+            return [.primary(for: document, guides: gridConfig, checkerboard: checkerboard)]
+        }
+        var boards = document.boards
+        if let index = boards.firstIndex(where: \.isPrimary) {
+            boards[index].width = document.canvasWidth
+            boards[index].height = document.canvasHeight
+        } else {
+            boards.insert(.primary(for: document, guides: gridConfig, checkerboard: checkerboard), at: 0)
+        }
+        return boards.sorted { lhs, rhs in
+            if lhs.id == activeCanvasID { return false }
+            if rhs.id == activeCanvasID { return true }
+            if lhs.isPrimary != rhs.isPrimary { return lhs.isPrimary }
+            return lhs.originX < rhs.originX
+        }
+    }
+
+    func isCanvasActive(_ board: EditorCanvasFrame, in document: EditorDocument) -> Bool {
+        if let activeCanvasID { return activeCanvasID == board.id }
+        return board.isPrimary || board.id == document.id
+    }
+
+    func selectCanvas(_ id: UUID) {
+        activeCanvasID = id
+        selectedObjectIDs = []
+    }
+
+    /// Page position of the canvas that owns the current selection. Quick actions and handles use this origin.
+    func selectionFrameOrigin() -> CGPoint {
+        guard let document = selectedDocument else { return .zero }
+        if let id = selectedObjectIDs.first {
+            if document.objects.contains(where: { $0.id == id }) {
+                let primary = canvasBoards(in: document).first(where: \.isPrimary)
+                return CGPoint(x: primary?.originX ?? 0, y: primary?.originY ?? 0)
+            }
+            if let board = document.boards.first(where: { $0.objects.contains(where: { $0.id == id }) }) {
+                return CGPoint(x: board.originX, y: board.originY)
+            }
+        }
+        if let frame = activeCanvasFrame() {
+            return CGPoint(x: frame.originX, y: frame.originY)
+        }
+        return .zero
+    }
+
+    private func activeCanvasPixelSize(in document: EditorDocument) -> (width: Double, height: Double) {
+        if let index = activeExtraBoardIndex(in: document) {
+            let board = document.boards[index]
+            return (board.width, board.height)
+        }
+        return (document.canvasWidth, document.canvasHeight)
+    }
+
+    /// Puts a new object on the center of its canvas, shrinking it so the box stays inside the frame.
+    private static func boundsCentered(_ bounds: CanvasBounds, canvasWidth: Double, canvasHeight: Double) -> CanvasBounds {
+        let margin = 48.0
+        let maxW = max(16, canvasWidth - margin * 2)
+        let maxH = max(16, canvasHeight - margin * 2)
+        var next = bounds
+        if next.width > maxW || next.height > maxH {
+            let fit = min(maxW / max(next.width, 1), maxH / max(next.height, 1))
+            next.width *= fit
+            next.height *= fit
+        }
+        next.x = (canvasWidth - next.width) / 2
+        next.y = (canvasHeight - next.height) / 2
+        return next
+    }
+
+    /// Guides and background for the canvas that is selected. Falls back to the session guides when the slide still has one implicit frame.
+    func activeCanvasFrame() -> EditorCanvasFrame? {
+        guard let document = selectedDocument else { return nil }
+        let boards = canvasBoards(in: document)
+        if let activeCanvasID, let board = boards.first(where: { $0.id == activeCanvasID }) {
+            return board
+        }
+        return boards.first(where: \.isPrimary) ?? boards.first
+    }
+
+    func updateActiveCanvas(_ body: (inout EditorCanvasFrame) -> Void) {
+        mutateSelectedDocument { document in
+            if document.boards.isEmpty {
+                document.boards = [.primary(for: document, guides: gridConfig, checkerboard: checkerboard)]
+            } else if !document.boards.contains(where: \.isPrimary) {
+                document.boards.insert(.primary(for: document, guides: gridConfig, checkerboard: checkerboard), at: 0)
+            }
+            let targetID = activeCanvasID ?? document.boards.first(where: \.isPrimary)?.id
+            guard let targetID, let index = document.boards.firstIndex(where: { $0.id == targetID }) else { return }
+            body(&document.boards[index])
+            if document.boards[index].isPrimary {
+                document.backgroundEnabled = document.boards[index].backgroundEnabled
+                document.backgroundHex = document.boards[index].backgroundHex
+                document.canvasWidth = document.boards[index].width
+                document.canvasHeight = document.boards[index].height
+            }
+        }
+    }
+
+    func setActiveCanvasSize(width: Double, height: Double) {
+        let width = Self.clampedEvenCanvas(width)
+        let height = Self.clampedEvenCanvas(height)
+        let frame = activeCanvasFrame()
+        if frame?.isPrimary != false {
+            setCanvasSize(width: width, height: height)
+            return
+        }
+        updateActiveCanvas {
+            $0.width = width
+            $0.height = height
+        }
+    }
+
+    func canvasObject(id: UUID) -> CanvasObject? {
+        guard let document = selectedDocument else { return nil }
+        if let object = document.objects.first(where: { $0.id == id }) { return object }
+        for board in document.boards {
+            if let object = board.objects.first(where: { $0.id == id }) { return object }
+        }
+        return nil
+    }
+
+    private func activeExtraBoardIndex(in document: EditorDocument) -> Int? {
+        guard let activeCanvasID,
+              let index = document.boards.firstIndex(where: { $0.id == activeCanvasID }),
+              !document.boards[index].isPrimary
+        else { return nil }
+        return index
+    }
+
+    func addCanvas(name: String, width: Double, height: Double) {
+        let width = Self.clampedEvenCanvas(width)
+        let height = Self.clampedEvenCanvas(height)
+        var added: EditorCanvasFrame?
+        mutateSelectedDocument { document in
+            if document.boards.isEmpty {
+                document.boards = [.primary(for: document, guides: gridConfig, checkerboard: checkerboard)]
+            }
+            let gap = 480.0
+            let maxX = document.boards.map { $0.originX + $0.width }.max() ?? 0
+            let frame = EditorCanvasFrame(
+                id: UUID(),
+                name: Self.uniqueCanvasName(name, in: document.boards),
+                width: width,
+                height: height,
+                originX: maxX + gap,
+                originY: 0,
+                isPrimary: false
+            )
+            document.boards.append(frame)
+            added = frame
+        }
+        guard let added else { return }
+        activeCanvasID = added.id
+        revealCanvas(added)
+    }
+
+    func moveCanvas(id: UUID, dx: Double, dy: Double) {
+        guard abs(dx) > 0.4 || abs(dy) > 0.4 else { return }
+        mutateSelectedDocument { document in
+            if document.boards.isEmpty {
+                document.boards = [.primary(for: document, guides: gridConfig, checkerboard: checkerboard)]
+            }
+            guard let index = document.boards.firstIndex(where: { $0.id == id }) else { return }
+            document.boards[index].originX += dx
+            document.boards[index].originY += dy
+        }
+    }
+
+    func revealCanvas(_ board: EditorCanvasFrame) {
+        guard let document = selectedDocument else { return }
+        let zoom = max(self.zoom, 0.0001)
+        let centerX = board.originX + board.width / 2
+        let centerY = board.originY + board.height / 2
+        canvasPanX = (document.canvasWidth / 2 - centerX) * zoom
+        canvasPanY = (document.canvasHeight / 2 - centerY) * zoom
+    }
+
+    private static func uniqueCanvasName(_ base: String, in boards: [EditorCanvasFrame]) -> String {
+        let existing = Set(boards.map(\.name))
+        if !existing.contains(base) { return base }
+        var index = 2
+        while existing.contains("\(base) \(index)") {
+            index += 1
+        }
+        return "\(base) \(index)"
     }
 
     @discardableResult
@@ -1663,11 +1968,18 @@ final class EditorEngine {
 
     func removeObjectFromPresentation(id objectID: UUID, slideID: SlideID) {
         guard kind == .presentation,
-              let docIndex = documents.firstIndex(where: { $0.slideID == slideID }),
-              let objectIndex = documents[docIndex].objects.firstIndex(where: { $0.id == objectID })
+              let docIndex = documents.firstIndex(where: { $0.slideID == slideID })
         else { return }
-        registerUndo()
-        documents[docIndex].objects.remove(at: objectIndex)
+        if let objectIndex = documents[docIndex].objects.firstIndex(where: { $0.id == objectID }) {
+            registerUndo()
+            documents[docIndex].objects.remove(at: objectIndex)
+        } else if let boardIndex = documents[docIndex].boards.firstIndex(where: { $0.objects.contains(where: { $0.id == objectID }) }),
+                  let objectIndex = documents[docIndex].boards[boardIndex].objects.firstIndex(where: { $0.id == objectID }) {
+            registerUndo()
+            documents[docIndex].boards[boardIndex].objects.remove(at: objectIndex)
+        } else {
+            return
+        }
         selectedObjectIDs.remove(objectID)
         notifyDocumentsChanged()
     }
@@ -1743,18 +2055,46 @@ final class EditorEngine {
 
     private func mutateObject(id: UUID, register: Bool, _ body: (inout CanvasObject) -> Void) {
         guard let documentID = selectedDocumentID,
-              let docIndex = documents.firstIndex(where: { $0.id == documentID }),
-              let itemIndex = documents[docIndex].objects.firstIndex(where: { $0.id == id })
+              let docIndex = documents.firstIndex(where: { $0.id == documentID })
         else { return }
-        if register { registerUndoIfNeeded() }
-        var next = documents
-        var objects = next[docIndex].objects
-        body(&objects[itemIndex])
-        next[docIndex].objects = objects
-        documents = next
+        if let itemIndex = documents[docIndex].objects.firstIndex(where: { $0.id == id }) {
+            if register { registerUndoIfNeeded() }
+            var next = documents
+            var objects = next[docIndex].objects
+            body(&objects[itemIndex])
+            next[docIndex].objects = objects
+            documents = next
+        } else if let boardIndex = documents[docIndex].boards.firstIndex(where: { $0.objects.contains(where: { $0.id == id }) }),
+                  let itemIndex = documents[docIndex].boards[boardIndex].objects.firstIndex(where: { $0.id == id }) {
+            if register { registerUndoIfNeeded() }
+            var next = documents
+            body(&next[docIndex].boards[boardIndex].objects[itemIndex])
+            documents = next
+        } else {
+            return
+        }
         if !defersDocumentNotification {
             notifyDocumentsChanged()
         }
+    }
+
+    private func canvasObjectPool() -> [CanvasObject] {
+        guard let document = selectedDocument else { return [] }
+        return document.objects + document.boards.flatMap(\.objects)
+    }
+
+    private func activeEditingObjects(in document: EditorDocument) -> [CanvasObject] {
+        if let index = activeExtraBoardIndex(in: document) {
+            return document.boards[index].objects
+        }
+        return document.objects
+    }
+
+    private func canvasHost(for objectID: UUID, in document: EditorDocument) -> (width: Double, height: Double, objects: [CanvasObject]) {
+        if let board = document.boards.first(where: { !$0.isPrimary && $0.objects.contains(where: { $0.id == objectID }) }) {
+            return (board.width, board.height, board.objects)
+        }
+        return (document.canvasWidth, document.canvasHeight, document.objects)
     }
 
     private func snap(_ value: Double, _ increment: Double) -> Double {
@@ -1790,12 +2130,12 @@ final class EditorEngine {
             return CanvasBounds(x: 240, y: 1800, width: 1680, height: 240)
         case .copyrightToken:
             return CanvasBounds(x: 120, y: 1980, width: 1680, height: 120)
-        case .image, .videoInput, .webView, .prop:
+        case .image, .videoInput, .webView, .browser, .prop:
             return .centered(width: 1920, height: 1080)
         case .ellipse, .cutout:
             return .centered(width: 720, height: 720)
-        case .rectangle, .roundedRectangle, .maskShape:
-            return .centered(width: 1280, height: 720)
+        case .rectangle, .roundedRectangle, .maskShape, .qrCode:
+            return .centered(width: 640, height: 640)
         case .line:
             return .centered(width: 1600, height: 24)
         case .polygon:
@@ -1860,6 +2200,19 @@ final class EditorEngine {
         if kind == .timerCountdown {
             object.countdownStartOn = .onSlideEnter
         }
+        if kind.isBrowserLike {
+            let placeholder = "https://"
+            object.assignedSource = AssignedMediaSource(
+                sourceID: placeholder,
+                name: "Browser",
+                sourceType: .webPage,
+                category: .network,
+                connectionString: placeholder,
+                tintHex: "#000000"
+            )
+            object.fill.type = .image
+            object.fill.imageURI = placeholder
+        }
         return object
     }
 
@@ -1882,12 +2235,15 @@ final class EditorEngine {
                     name: slide.previewSummary,
                     kind: .presentation,
                     slideID: slide.id,
+                    canvasWidth: slide.editorCanvases.first(where: \.isPrimary)?.width ?? CanvasConfig.width,
+                    canvasHeight: slide.editorCanvases.first(where: \.isPrimary)?.height ?? CanvasConfig.height,
                     backgroundEnabled: slide.backgroundEnabled,
                     backgroundHex: slide.backgroundHex,
                     objects: objects(from: slide, number: index + 1),
                     transition: slide.transition,
                     notes: slide.notes,
-                    mediaActionTitle: slide.mediaAction?.title ?? ""
+                    mediaActionTitle: slide.mediaAction?.title ?? "",
+                    boards: slide.editorCanvases
                 )
             }
         case .stage:
@@ -1996,18 +2352,17 @@ final class EditorEngine {
                 )
             }
         }
-        let lines = slide.displayText.split(separator: "\n").map(String.init)
+        var lines = slide.lines
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        if slide.canvas.isEmpty && slide.themeVariantID == nil && slide.theme == "Default" {
+            let title = slide.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            if lines.isEmpty || lines.allSatisfy({ $0 == title }) {
+                return []
+            }
+        }
         if lines.isEmpty {
-            return [
-                textObject(
-                    name: "Text Box \(number)",
-                    kind: .text,
-                    bounds: .centered(width: 2800, height: 220),
-                    zIndex: 1,
-                    text: slide.previewSummary,
-                    fontSize: 88
-                )
-            ]
+            return []
         }
         return lines.enumerated().map { index, line in
             textObject(

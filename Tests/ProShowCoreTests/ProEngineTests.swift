@@ -21,7 +21,7 @@ struct ProEngineTests {
         #expect(ProShowQueues.metalRenderQueue.qos == .userInteractive)
         #expect(ProShowQueues.videoDisplayLinkQueue.qos == .userInteractive)
         #expect(ProShowQueues.videoIngestQueue.qos == .userInitiated)
-        #expect(ProShowQueues.encoderQueue.qos == .utility)
+        #expect(ProShowQueues.encoderQueue.qos == .userInitiated)
         #expect(ProShowQueues.diskIOQueue.qos == .utility)
     }
 

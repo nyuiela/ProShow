@@ -12,7 +12,7 @@ settings:
   base:
     SWIFT_VERSION: "5.0"
     CURRENT_PROJECT_VERSION: 1
-    MARKETING_VERSION: "0.1.0"
+    MARKETING_VERSION: "1.0.0"
 targets:
   ProShow:
     type: application
@@ -21,13 +21,54 @@ targets:
       - path: ProShow
         excludes:
           - "**/.DS_Store"
+    dependencies:
+      - package: AudioKit
+        product: AudioKit
+      - package: AudioKitUI
+        product: AudioKitUI
+      - package: Controls
+        product: Controls
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kaleel.proshow
+        CODE_SIGN_ENTITLEMENTS: ProShow/ProShow.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
         INFOPLIST_KEY_CFBundleDisplayName: ProShow
+        INFOPLIST_KEY_NSCameraUsageDescription: "ProShow uses the Mac camera as a video input layer."
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "ProShow uses the microphone for program and ISO audio."
+        INFOPLIST_KEY_NSScreenCaptureUsageDescription: "ProShow captures a display for the screen-share input."
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_NAME: ProShow
         TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTS_MACCATALYST: NO
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+    postBuildScripts:
+      - name: Pin Debug App
+        basedOnDependencyAnalysis: false
+        script: |
+          "${SRCROOT}/scripts/pin_debug_app.sh" "${BUILT_PRODUCTS_DIR}/${FULL_PRODUCT_NAME}"
+  ProShowTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests/ProShowCoreTests
+    dependencies:
+      - target: ProShow
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kaleel.proshow.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/ProShow.app/Contents/MacOS/ProShow"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+packages:
+  AudioKit:
+    url: https://github.com/AudioKit/AudioKit.git
+    from: 5.6.1
+  AudioKitUI:
+    url: https://github.com/AudioKit/AudioKitUI.git
+    from: 0.3.6
+  Controls:
+    url: https://github.com/AudioKit/Controls.git
+    from: 1.1.0

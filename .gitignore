@@ -9,3 +9,17 @@ DerivedData/
 *.ipa
 *.dSYM.zip
 *.dSYM
+/build
+Configs/Local.xcconfig
+ProShow/LocalOAuth.plist
+
+# Foundry (Next.js guest join)
+foundry/node_modules/
+foundry/.next/
+foundry/.env.local
+foundry/.env*.local
+foundry/npm-debug.log*
+
+# Profiling / traces
+*.profraw
+*.trace

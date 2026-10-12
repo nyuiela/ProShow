@@ -34,22 +34,14 @@ struct RundownWorkspaceView: View {
         focusedIndex.flatMap { blocks[safe: $0] }
     }
 
-    private var focusedProgramSlide: Slide? {
+    private var focusedProgramPreview: ProgramOutlineRowPreview? {
         guard let block = focusedRundownBlock else { return nil }
-        return controller.programSlide(for: block)
-    }
-
-    private var focusedProgramPageURL: String? {
-        guard let block = focusedRundownBlock else { return nil }
-        return ProgramOutlinePresentation.resolvedPageURL(
-            for: block,
-            in: program,
-            showLookup: { controller.show(matching: $0) }
-        )
+        return controller.programPreview(for: block)
     }
 
     var body: some View {
         VStack(spacing: 0) {
+            runtimeChromeRow
             featuredTopBar
             screenBody
             transportFooter
@@ -59,6 +51,9 @@ struct RundownWorkspaceView: View {
         .lockFlickerFreeBackground()
         .onAppear {
             PromptFloatController.shared.attachRundown(controller)
+            #if os(macOS)
+            RundownFloatController.shared.attachRundown(controller)
+            #endif
             controller.syncProgramSlidesFromOutline()
             controller.prefetchProgramSlidePageFrames()
             if clock.isShowRunning, let active = clock.activeBlockIndex, blocks.indices.contains(active) {
@@ -66,7 +61,12 @@ struct RundownWorkspaceView: View {
             }
             loadPrompt()
         }
-        .onChange(of: focusedIndex) { _, _ in loadPrompt() }
+        .onChange(of: focusedIndex) { _, _ in
+            loadPrompt()
+            if let block = focusedRundownBlock {
+                warmProgramSlidePreview(for: block)
+            }
+        }
         .onChange(of: blocks.map(\.scriptBody).joined(separator: "\u{1e}")) { _, _ in loadPrompt() }
         .alert("Program File", isPresented: Binding(
             get: { importError != nil },
@@ -87,6 +87,11 @@ struct RundownWorkspaceView: View {
                 draft: $blockEditorDraft,
                 onSave: { saveBlockEditor($0) }
             )
+            .frame(
+                maxWidth: RundownBlockEditorSheet.modalMaxWidth,
+                maxHeight: RundownBlockEditorSheet.modalMaxHeight
+            )
+            .frame(width: RundownBlockEditorSheet.modalWidth, height: RundownBlockEditorSheet.modalHeight)
         }
         .sheet(isPresented: $showTalentEditor) {
             RundownTalentEditorSheet(
@@ -98,6 +103,23 @@ struct RundownWorkspaceView: View {
     }
 
     // MARK: - Top bar
+
+    private var runtimeChromeRow: some View {
+        HStack(spacing: 8) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                WorkspaceTitleGroup(controller: controller)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            RundownPromptSidebarToggle(controller: controller)
+            #if os(macOS)
+            RundownOutlineFloatToggle()
+            #endif
+        }
+        .padding(.horizontal, DeskSpace.xs)
+        .padding(.vertical, 6)
+        .frame(height: 38)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
 
     private var featuredTopBar: some View {
         HStack(spacing: 16) {
@@ -157,20 +179,24 @@ struct RundownWorkspaceView: View {
 
     private var screenBody: some View {
         HSplitView {
-            featuredList
-                .frame(minWidth: 400, idealWidth: 480, maxWidth: 560)
-            RundownDetailPane(
-                controller: controller,
-                block: focusedIndex.flatMap { blocks[safe: $0] },
-                blockIndex: focusedIndex,
-                selectedTalentID: $selectedTalentID,
-                onEditBlock: { openEditBlock() },
-                onEditTalent: { talent in
-                    editingTalentIsNew = false
-                    talentDraft = talent
-                    showTalentEditor = true
-                }
-            )
+            VStack(spacing: 0) {
+                featuredList
+            }
+            .frame(minWidth: 400, idealWidth: 480, maxWidth: 560)
+            VStack(spacing: 0) {
+                RundownDetailPane(
+                    controller: controller,
+                    block: focusedIndex.flatMap { blocks[safe: $0] },
+                    blockIndex: focusedIndex,
+                    selectedTalentID: $selectedTalentID,
+                    onEditBlock: { openEditBlock() },
+                    onEditTalent: { talent in
+                        editingTalentIsNew = false
+                        talentDraft = talent
+                        showTalentEditor = true
+                    }
+                )
+            }
             .frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity)
             if controller.showsPromptSidebar {
                 RundownTeleprompterView(
@@ -408,11 +434,13 @@ struct RundownWorkspaceView: View {
         .onTapGesture(count: 2) {
             selectedBlockIndex = index
             selectedTalentID = block.assignedTalentIds.first
+            warmProgramSlidePreview(for: block)
             controller.takeRundownBlockLive(at: index)
         }
         .onTapGesture(count: 1) {
             selectedBlockIndex = index
             selectedTalentID = block.assignedTalentIds.first
+            warmProgramSlidePreview(for: block)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(block.itemNumber), \(block.title)")
@@ -430,6 +458,11 @@ struct RundownWorkspaceView: View {
         let offset = blocks.prefix(index).reduce(0.0) { $0 + $1.plannedDurationSeconds }
         let date = program.hardStartTime.addingTimeInterval(offset)
         return RundownFormat.timeOfDay(date)
+    }
+
+    private func warmProgramSlidePreview(for block: RundownBlock) {
+        guard let preview = controller.programPreview(for: block) else { return }
+        controller.prepareSlidePreviewCapture(for: preview.slide)
     }
 
     // MARK: - Footer
@@ -472,15 +505,15 @@ struct RundownWorkspaceView: View {
     private var rundownFooterPreviews: some View {
         HStack(alignment: .bottom, spacing: 10) {
             #if os(macOS)
-            if focusedProgramSlide != nil {
+            if let block = focusedRundownBlock, let preview = focusedProgramPreview {
                 RundownProgramSlidePreview(
-                    slide: focusedProgramSlide,
-                    canvasObjects: focusedProgramSlide.map {
-                        controller.resolvedCanvasObjects($0.audienceCanvas())
-                    } ?? [],
-                    pageURL: focusedProgramPageURL
+                    controller: controller,
+                    slide: preview.slide,
+                    canvasObjects: preview.canvas,
+                    pageURL: preview.pageURL
                 )
                 .frame(width: 120)
+                .id("\(block.id)-\(preview.slide.id)-\(preview.canvas.count)-\(preview.pageURL ?? "")")
             }
             #endif
             VStack(alignment: .leading, spacing: 4) {

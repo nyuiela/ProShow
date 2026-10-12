@@ -30,6 +30,8 @@ final class SharedTexturePublisher: @unchecked Sendable {
 #endif
     private var lastItemTime: CMTime = .invalid
     private var consumers: [ObjectIdentifier: () -> Void] = [:]
+    private var mainNotifyScheduled = false
+    private var pendingNotifyHandlers: [() -> Void] = []
 
     private init() {}
 
@@ -160,12 +162,36 @@ final class SharedTexturePublisher: @unchecked Sendable {
         pixelBuffer = nil
 #endif
         consumers.removeAll()
+        mainNotifyScheduled = false
+        pendingNotifyHandlers = []
         lock.unlock()
     }
 
     private func notify(_ handlers: [() -> Void]) {
-        for handler in handlers {
-            handler()
+        if Thread.isMainThread {
+            for handler in handlers {
+                handler()
+            }
+            return
+        }
+        lock.lock()
+        pendingNotifyHandlers = handlers
+        guard !mainNotifyScheduled else {
+            lock.unlock()
+            return
+        }
+        mainNotifyScheduled = true
+        lock.unlock()
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.lock.lock()
+            let batch = self.pendingNotifyHandlers
+            self.pendingNotifyHandlers = []
+            self.mainNotifyScheduled = false
+            self.lock.unlock()
+            for handler in batch {
+                handler()
+            }
         }
     }
 }

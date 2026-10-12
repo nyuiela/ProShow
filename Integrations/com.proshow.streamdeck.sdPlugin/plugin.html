@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>ProShow Stream Deck</title>
+  <script src="plugin.js"></script>
+</head>
+<body>
+<script>
+  let socket = null;
+  let pluginUUID = null;
+
+  function connectElgatoStreamDeckSocket(port, uuid) {
+    pluginUUID = uuid;
+    socket = new WebSocket("ws://127.0.0.1:" + port);
+    socket.onmessage = async (event) => {
+      const data = JSON.parse(event.data);
+      if (data.event !== "keyUp") return;
+      const settings = (data.payload && data.payload.settings) || {};
+      try {
+        await handleKey(data.action, settings);
+      } catch (error) {
+        console.error(error);
+      }
+    };
+  }
+
+  window.connectElgatoStreamDeckSocket = connectElgatoStreamDeckSocket;
+</script>
+</body>
+</html>

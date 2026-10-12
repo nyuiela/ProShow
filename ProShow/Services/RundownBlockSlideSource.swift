@@ -24,6 +24,9 @@ enum RundownBlockSlideSource {
     private static let slideKey = "linkedPresentationSlideID"
 
     static func resolve(_ block: RundownBlock) -> RundownBlockSlideSourceKind {
+        if block.programSlideID != nil {
+            return resolveOwnedProgramSlide(block)
+        }
         if let showID = block.linkedPresentationShowID,
            let slideID = block.linkedPresentationSlideID {
             return .presentationSlide(showID: showID, slideID: slideID)
@@ -33,6 +36,18 @@ enum RundownBlockSlideSource {
             return .mediaFile(path)
         }
         if let id = block.linkedPlaylistId { return .playlistItem(id) }
+        let cut = RundownProgramCut.resolve(block)
+        if cut.picture == .camera { return .camera }
+        if let url = cut.pageURL { return .webPage(url) }
+        return .blank
+    }
+
+    /// Row owns a slide in the `.program` file — ignore stale external link IDs from older copies.
+    private static func resolveOwnedProgramSlide(_ block: RundownBlock) -> RundownBlockSlideSourceKind {
+        if let id = block.linkedMediaBinItemID { return .mediaBin(id) }
+        if let path = block.linkedMediaFilePath?.trimmingCharacters(in: .whitespacesAndNewlines), !path.isEmpty {
+            return .mediaFile(path)
+        }
         let cut = RundownProgramCut.resolve(block)
         if cut.picture == .camera { return .camera }
         if let url = cut.pageURL { return .webPage(url) }
@@ -93,11 +108,25 @@ enum RundownBlockSlideSource {
         block.linkCues = []
     }
 
+    /// Drops orphan link metadata left from pre-link `.program` copies or mixed saves.
+    static func sanitizeSlideBindings(_ block: inout RundownBlock) {
+        if block.programSlideID != nil {
+            block.linkedPresentationShowID = nil
+            block.linkedPresentationSlideID = nil
+            block.linkedPlaylistId = nil
+            return
+        }
+        if block.screenDirections.contains(where: { $0.kind == .camera }) {
+            block.linkedPresentationShowID = nil
+            block.linkedPresentationSlideID = nil
+        }
+    }
+
     static func apply(_ kind: RundownBlockSlideSourceKind, to block: inout RundownBlock) {
         clearBindings(on: &block)
         switch kind {
         case .blank:
-            break
+            block.programSlideID = nil
         case .webPage(let url):
             let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
             let canonical = PromptWebsiteURL.canonical(trimmed) ?? trimmed
@@ -127,6 +156,17 @@ enum RundownBlockSlideSource {
         }
     }
 
+    static func placeholderLetter(in block: RundownBlock) -> String? {
+        block.screenDirections.compactMap { placeholderLetter(in: $0) }.first
+    }
+
+    static func placeholderLetter(in direction: ScreenDirection) -> String? {
+        if let url = direction.url, let letter = PlaceholderLetter.parse(url) {
+            return letter.rawValue
+        }
+        return PlaceholderLetter.parse(direction.label)?.rawValue
+    }
+
     static func apply(discovered item: DiscoveredSourceItem, webURL: String?, to block: inout RundownBlock) {
         if item.id == "rundown-slide-blank" {
             apply(.blank, to: &block)
@@ -145,6 +185,21 @@ enum RundownBlockSlideSource {
             apply(.webPage(url), to: &block)
         case .systemCamera:
             apply(.camera, to: &block)
+            let name = item.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            block.screenDirections = [
+                ScreenDirection(
+                    kind: .camera,
+                    label: name.isEmpty ? "Camera" : name,
+                    url: item.connectionString
+                ),
+            ]
+            block.videoCue = OutlineScriptCompiler.videoCueSummary(block.screenDirections)
+        case .placeholderSlot:
+            guard let letter = item.placeholderLetter ?? item.connectionString.flatMap(PlaceholderLetter.parse)?.rawValue else { break }
+            block.screenDirections = [
+                ScreenDirection(kind: .camera, label: "Placeholder \(letter)", url: "placeholder://\(letter)"),
+            ]
+            block.videoCue = OutlineScriptCompiler.videoCueSummary(block.screenDirections)
         case .mediaFile:
             if item.id.hasPrefix("media-"), let uuid = UUID(uuidString: String(item.id.dropFirst("media-".count))) {
                 apply(.mediaBin(uuid), to: &block)

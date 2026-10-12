@@ -1,0 +1,204 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "%lld Issues" : {
+      "comment" : "Pre-flight fail count. Number first.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%lld Issues" } }
+      }
+    },
+    "%lld Warnings" : {
+      "comment" : "Pre-flight warning count.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%lld Warnings" } }
+      }
+    },
+    "Access needed. Open Settings." : {
+      "comment" : "Inline error. Permission.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Access needed. Open Settings." } }
+      }
+    },
+    "Action failed. Show Log." : {
+      "comment" : "Fallback when the raw error is too long for the desk.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Action failed. Show Log." } }
+      }
+    },
+    "All Checks Passed" : {
+      "comment" : "Pre-flight pass title.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "All Checks Passed" } }
+      }
+    },
+    "Blocking issues. Open Pre-Flight." : {
+      "comment" : "Go Live blocked by pre-flight.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Blocking issues. Open Pre-Flight." } }
+      }
+    },
+    "Choose a destination." : {
+      "comment" : "Go Live with no destination.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose a destination." } }
+      }
+    },
+    "Clip" : {
+      "comment" : "Audio over. Status word.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Clip" } }
+      }
+    },
+    "Connecting" : {
+      "comment" : "Transitional status.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connecting" } }
+      }
+    },
+    "Disk is full." : {
+      "comment" : "Save failed body.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Disk is full." } }
+      }
+    },
+    "Encoder failed. Retry." : {
+      "comment" : "Stream encoder did not start.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Encoder failed. Retry." } }
+      }
+    },
+    "Error" : {
+      "comment" : "Problem status. Cause stays in the tooltip or inspector.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Error" } }
+      }
+    },
+    "Ingest dropped. Retry." : {
+      "comment" : "Stream connection dropped.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Ingest dropped. Retry." } }
+      }
+    },
+    "Ingest timed out. Retry." : {
+      "comment" : "Stream ingest timeout.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Ingest timed out. Retry." } }
+      }
+    },
+    "Ingest unreachable. Check network." : {
+      "comment" : "Stream host did not answer.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Ingest unreachable. Check network." } }
+      }
+    },
+    "Live" : {
+      "comment" : "On-air status.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Live" } }
+      }
+    },
+    "Off" : {
+      "comment" : "Idle status.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Off" } }
+      }
+    },
+    "Offline" : {
+      "comment" : "Not connected.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Offline" } }
+      }
+    },
+    "Paused" : {
+      "comment" : "Paused status.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Paused" } }
+      }
+    },
+    "Ready" : {
+      "comment" : "Armed or preview on.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Ready" } }
+      }
+    },
+    "Recording" : {
+      "comment" : "Recording status.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Recording" } }
+      }
+    },
+    "SBX" : {
+      "comment" : "Sandbox compact form. Only allowed abbreviation.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "SBX" } }
+      }
+    },
+    "Sandbox" : {
+      "comment" : "Rehearsal status.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sandbox" } }
+      }
+    },
+    "Selected" : {
+      "comment" : "Selection status.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Selected" } }
+      }
+    },
+    "Server missing. Add a URL." : {
+      "comment" : "RTMP URL empty.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Server missing. Add a URL." } }
+      }
+    },
+    "Sign-in failed. Check the redirect." : {
+      "comment" : "OAuth did not finish.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sign-in failed. Check the redirect." } }
+      }
+    },
+    "Stopping" : {
+      "comment" : "Stream is coming down. Not in the status table; one word so the operator can tell it from Connecting.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Stopping" } }
+      }
+    },
+    "Stream failed. Retry." : {
+      "comment" : "Generic stream failure.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Stream failed. Retry." } }
+      }
+    },
+    "Stream key missing. Reconnect." : {
+      "comment" : "Platform has not issued a key.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Stream key missing. Reconnect." } }
+      }
+    },
+    "Synced" : {
+      "comment" : "Synced status.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Synced" } }
+      }
+    },
+    "X post failed. Check API access." : {
+      "comment" : "X Broadcasts API not enrolled.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "X post failed. Check API access." } }
+      }
+    },
+    "X post failed. Reconnect." : {
+      "comment" : "X token cannot post.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "X post failed. Reconnect." } }
+      }
+    },
+    "X post failed. Retry." : {
+      "comment" : "X post failed for another reason.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "X post failed. Retry." } }
+      }
+    }
+  },
+  "version" : "1.0"
+}

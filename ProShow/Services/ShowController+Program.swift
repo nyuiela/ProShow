@@ -13,23 +13,45 @@ extension ShowController {
 
     func loadProgramDocument(_ model: ProgramDocumentModel, url: URL? = nil) {
         var prepared = model
-        ProgramOutlinePresentation.syncProgramSlides(in: &prepared)
+        let lookups = programDocumentRepairLookups()
+        let repaired = ProgramOutlinePresentation.repairStoredProgramDocument(
+            in: &prepared,
+            mediaLookup: lookups.media,
+            showLookup: lookups.show,
+            playlistShowLookup: lookups.playlist
+        )
         programDocument = prepared
         rundownClock.loadProgram(prepared)
         if let url {
             adoptProgramFile(url)
+            if repaired {
+                try? saveProgramDocument(to: url)
+            }
+            bindUnassignedProgramCameras()
         } else {
             programDocumentURL = nil
         }
+        refreshProgramOutlinePresentationIfSelected()
     }
 
     func loadProgramDocument(from url: URL) throws {
         beginProgramFileAccess(url)
         var model = try ProgramDocumentStore.load(from: url)
-        ProgramOutlinePresentation.syncProgramSlides(in: &model)
+        let lookups = programDocumentRepairLookups()
+        let repaired = ProgramOutlinePresentation.repairStoredProgramDocument(
+            in: &model,
+            mediaLookup: lookups.media,
+            showLookup: lookups.show,
+            playlistShowLookup: lookups.playlist
+        )
         programDocument = model
         rundownClock.loadProgram(model)
         adoptProgramFile(url)
+        if repaired {
+            try saveProgramDocument(to: url)
+        }
+        bindUnassignedProgramCameras()
+        refreshProgramOutlinePresentationIfSelected()
     }
 
     func saveProgramDocument(to url: URL? = nil) throws {
@@ -55,10 +77,21 @@ extension ShowController {
         beginProgramFileAccess(url)
         do {
             var model = try ProgramDocumentStore.load(from: url)
-            ProgramOutlinePresentation.syncProgramSlides(in: &model)
+            let lookups = programDocumentRepairLookups()
+            let repaired = ProgramOutlinePresentation.repairStoredProgramDocument(
+                in: &model,
+                mediaLookup: lookups.media,
+                showLookup: lookups.show,
+                playlistShowLookup: lookups.playlist
+            )
             programDocument = model
             programDocumentURL = url.standardizedFileURL
             rundownClock.loadProgram(model)
+            if repaired {
+                try? saveProgramDocument(to: url)
+            }
+            bindUnassignedProgramCameras()
+            refreshProgramOutlinePresentationIfSelected()
         } catch {
             mediaAlert = "Couldn’t reopen the program file. \(error.localizedDescription)"
         }
@@ -205,11 +238,29 @@ extension ShowController {
             loadPresentation(id: linked.show.id)
             goLive(slideID: linked.slideID)
         } else if let slideID = programSlideID(for: block) {
+            let doc = rundownClock.program ?? programDocument
+            if let slide = programSlide(for: block) {
+                let prepared = ProgramOutlinePresentation.airPrepareSlide(slide, in: doc)
+                ensureSlideLiveInputsOnMainLayer(prepared)
+            }
             takeProgramOutlineSlideLive(slideID: slideID)
         } else if let page = RundownProgramCut.resolve(block).pageURL {
             fallbackRundownPageRaster(cut: RundownProgramCut(picture: .display, pageURL: page))
+        } else {
+            clearScriptOnlyOutlinePicture()
         }
         prefetchRundownPageFrames(after: block)
+    }
+
+    /// Script-only outline rows — no `.program` slide; drop slide/page layers from the program stack.
+    func clearScriptOnlyOutlinePicture() {
+        compositor.dismissRundownPage()
+        ProgramPageRaster.shared.load(nil)
+        if compositor.stack.media?.id == RundownPageMedia.id {
+            compositor.clearProgramMedia()
+        }
+        compositor.clear(.slide)
+        refreshLiveStack()
     }
 
     private func fallbackRundownPageRaster(cut: RundownProgramCut) {
@@ -221,39 +272,61 @@ extension ShowController {
     }
 
     #if os(macOS)
-    /// Keeps upcoming display pages warm without blocking the live web view.
-    func prefetchRundownPageFrames(near index: Int) {
+    /// Distinct browser / program page URLs from `startIndex` through the end of the rundown.
+    func rundownBrowserPageURLs(fromBlockIndex startIndex: Int) -> [String] {
         let doc = rundownClock.program ?? programDocument
         let blocks = doc.rundownBlocks
-        guard !blocks.isEmpty else { return }
+        guard !blocks.isEmpty else { return [] }
+        let start = min(max(0, startIndex), blocks.count - 1)
+        var seen = Set<String>()
         var urls: [String] = []
-        for offset in 0...2 {
-            let idx = index + offset
-            guard blocks.indices.contains(idx) else { continue }
+        for idx in start..<blocks.count {
             let block = blocks[idx]
-            if let url = ProgramOutlinePresentation.resolvedPageURL(
+            let url = ProgramOutlinePresentation.resolvedPageURL(
                 for: block,
                 in: doc,
                 showLookup: { id in self.show(matching: id) }
-            ) {
+            ) ?? RundownProgramCut.resolve(block).pageURL
+            guard let url else { continue }
+            let key = PromptWebsiteURL.canonical(url) ?? url
+            if seen.insert(key).inserted {
                 urls.append(url)
-                continue
-            }
-            if let page = RundownProgramCut.resolve(block).pageURL {
-                urls.append(page)
             }
         }
-        ProgramPageRaster.shared.prefetch(urls)
+        return urls
+    }
+
+    /// Queue every upcoming rundown browser page for background raster (live `load` still works if a page is not ready).
+    func prefetchUpcomingRundownBrowserPages(fromBlockIndex startIndex: Int? = nil) {
+        let blocks = (rundownClock.program ?? programDocument).rundownBlocks
+        guard !blocks.isEmpty else { return }
+        let start: Int
+        if let startIndex {
+            start = startIndex
+        } else if rundownClock.isShowRunning, let active = rundownClock.activeBlockIndex {
+            start = active
+        } else {
+            start = blocks.indices.contains(rundownFocusedBlockIndex) ? rundownFocusedBlockIndex : 0
+        }
+        let urls = rundownBrowserPageURLs(fromBlockIndex: start)
+        guard let next = urls.first else { return }
+        ProgramPageRaster.shared.prefetch([next])
+    }
+
+    /// Keeps upcoming display pages warm without blocking the live web view.
+    func prefetchRundownPageFrames(near index: Int) {
+        prefetchUpcomingRundownBrowserPages(fromBlockIndex: index)
     }
 
     func prefetchRundownPageFrames(after block: RundownBlock) {
         let blocks = (rundownClock.program ?? programDocument).rundownBlocks
         guard let index = blocks.firstIndex(where: { $0.id == block.id }) else { return }
-        prefetchRundownPageFrames(near: index + 1)
+        prefetchUpcomingRundownBrowserPages(fromBlockIndex: index + 1)
     }
     #else
     func prefetchRundownPageFrames(near index: Int) {}
     func prefetchRundownPageFrames(after block: RundownBlock) {}
+    func prefetchUpcomingRundownBrowserPages(fromBlockIndex startIndex: Int? = nil) {}
     #endif
 
     private func takeRundownCamera() {
@@ -282,8 +355,29 @@ extension ShowController {
         let current = blocks.indices.contains(rundownFocusedBlockIndex) ? rundownFocusedBlockIndex : 0
         let next = min(max(0, current + delta), blocks.count - 1)
         guard next != current else { return }
-        rundownFocusedBlockIndex = next
-        TeleprompterSession.shared.loadIfNeeded(script: blocks[next].scriptBody, settings: .shared)
+        stepRundownOutline(to: next)
+    }
+
+    func stepRundownOutline(to index: Int) {
+        let blocks = (rundownClock.program ?? programDocument).rundownBlocks
+        guard blocks.indices.contains(index) else { return }
+        rundownFocusedBlockIndex = index
+        TeleprompterSession.shared.loadIfNeeded(script: blocks[index].scriptBody, settings: .shared)
+    }
+
+    /// Previous or next outline item on air (clock + program cut), not selection-only.
+    func takeAdjacentRundownBlockLive(by delta: Int) {
+        let blocks = (rundownClock.program ?? programDocument).rundownBlocks
+        guard !blocks.isEmpty else { return }
+        let current: Int
+        if rundownClock.isShowRunning, let active = rundownClock.activeBlockIndex, blocks.indices.contains(active) {
+            current = active
+        } else {
+            current = blocks.indices.contains(rundownFocusedBlockIndex) ? rundownFocusedBlockIndex : 0
+        }
+        let next = min(max(0, current + delta), blocks.count - 1)
+        guard next != current else { return }
+        takeRundownBlockLive(at: next)
     }
 
     func refreshRundownTick() {

@@ -13,6 +13,8 @@ public enum AddShotCategory: String, CaseIterable, Identifiable, Codable, Sendab
     case backgrounds = "Backgrounds"
     case templates = "Templates"
     case shots = "Shots"
+    case slides = "Slides"
+    case webPages = "Web Browser"
 
     public var id: String { rawValue }
 
@@ -30,6 +32,8 @@ public enum AddShotCategory: String, CaseIterable, Identifiable, Codable, Sendab
         case .backgrounds: "paintpalette"
         case .templates: "rectangle.3.group"
         case .shots: "film"
+        case .slides: "rectangle.on.rectangle.angled"
+        case .webPages: "globe"
         }
     }
 }
@@ -75,6 +79,21 @@ public enum PlaceholderLetter: String, CaseIterable, Codable, Sendable {
 
     public var tintIndex: Int {
         Self.allCases.firstIndex(of: self) ?? 0
+    }
+
+    /// `A`, `Placeholder B`, or `placeholder://A`.
+    public static func parse(_ raw: String) -> PlaceholderLetter? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let lower = trimmed.lowercased()
+        if lower.hasPrefix("placeholder://") {
+            return PlaceholderLetter(rawValue: String(trimmed.dropFirst("placeholder://".count)).uppercased())
+        }
+        if lower.hasPrefix("placeholder ") {
+            let rest = trimmed.dropFirst("placeholder ".count).trimmingCharacters(in: .whitespacesAndNewlines)
+            return PlaceholderLetter(rawValue: rest.uppercased())
+        }
+        return PlaceholderLetter(rawValue: trimmed.uppercased())
     }
 }
 

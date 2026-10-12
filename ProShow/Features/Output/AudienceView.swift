@@ -1,4 +1,7 @@
 import SwiftUI
+#if canImport(CoreVideo)
+import CoreVideo
+#endif
 
 /// Audience / program surface — full-bleed lyrics on a dark stage.
 struct AudienceView: View {
@@ -30,7 +33,13 @@ struct AudienceView: View {
             )
             .ignoresSafeArea()
 
-            if let slide, !slide.isBlank, !slide.displayText.isEmpty {
+            if let slide, !slide.canvas.isEmpty {
+                ProgramSlideCanvas(
+                    objects: slide.canvas,
+                    canvasWidth: CanvasConfig.width,
+                    canvasHeight: CanvasConfig.height
+                )
+            } else if let slide, !slide.isBlank, !slide.displayText.isEmpty {
                 Text(slide.displayText)
                     .font(.system(size: 56, weight: .semibold, design: .serif))
                     .multilineTextAlignment(.center)
@@ -48,21 +57,21 @@ struct AudienceView: View {
             if showsChrome {
                 VStack {
                     HStack {
-                        Text("PROGRAM")
-                            .font(.caption.weight(.bold))
-                            .tracking(1.5)
+                        Text("Program")
+                            .font(DeskType.meta)
                             .foregroundStyle(ProShowTheme.liveRed)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
-                            .background(Color.black.opacity(0.45))
+                            .background(Color.black.opacity(0.45), in: Capsule(style: .continuous))
+                            .accessibilityLabel("Program output")
                         Spacer()
                     }
-                    .padding(16)
+                    .padding(DeskSpace.md)
                     Spacer()
                 }
             }
         }
-        .animation(.easeInOut(duration: 0.25), value: slide?.id)
+        .animation(.timingCurve(0.23, 1, 0.32, 1, duration: 0.22), value: slide?.id)
     }
 }
 
@@ -75,24 +84,163 @@ struct PreviewMonitorView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(label)
-                .font(.caption.weight(.bold))
-                .tracking(1.2)
+                .font(DeskType.meta)
                 .foregroundStyle(accent)
 
             AudienceView(slide: slide, showsChrome: false)
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: DeskRadius.control, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    RoundedRectangle(cornerRadius: DeskRadius.control, style: .continuous)
                         .strokeBorder(accent.opacity(0.45), lineWidth: 1)
                 )
-                .aspectRatio(16 / 9, contentMode: .fit)
+                .aspectRatio(DeskLayout.programAspect, contentMode: .fit)
         }
+    }
+}
+
+/// Stream monitor: shows the encoded program (`program.encode`) — same composite as YouTube / X RTMP.
+struct StreamProgramView: View {
+    @Bindable var controller: ShowController
+    var showsChrome: Bool = true
+
+    var body: some View {
+        GeometryReader { proxy in
+            let canvasW = CGFloat(max(controller.streaming.config.width, 16))
+            let canvasH = CGFloat(max(controller.streaming.config.height, 16))
+            let scale = min(proxy.size.width / canvasW, proxy.size.height / canvasH)
+            let fitted = CGSize(width: canvasW * scale, height: canvasH * scale)
+            ZStack {
+                ProShowTheme.stageBlack
+                ZStack(alignment: .topLeading) {
+                    feed
+                    if showsChrome {
+                        chrome
+                    }
+                }
+                .frame(width: fitted.width, height: fitted.height)
+                .clipped()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .background(ProShowTheme.stageBlack)
+        .lockFlickerFreeBackground()
+        .overlay(alignment: .bottomLeading) {
+            DeskSignalProbeView(controller: controller, style: .outputOverlay)
+                .padding(16)
+                .allowsHitTesting(false)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(statusLabel)
+        .accessibilityValue(statusValue)
+    }
+
+    @ViewBuilder
+    private var feed: some View {
+        ZStack {
+            ProShowTheme.stageBlack
+            ProgramCanonicalMonitorView(
+                controller: controller,
+                outputEnabled: controller.programOutputEnabled,
+                isRenderingPaused: !controller.programOutputEnabled
+            )
+        }
+        .onAppear {
+            controller.evaluateProgramClockState()
+        }
+        .onDisappear {
+            controller.evaluateProgramClockState()
+        }
+    }
+
+    private var chrome: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                statusPill
+                Spacer()
+                if controller.streaming.isLive {
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        Text(StreamingEngine.broadcastTimecode(from: controller.streaming.startedAt, now: context.date))
+                            .font(DeskType.mono)
+                            .foregroundStyle(ProShowTheme.primaryLabel)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.black.opacity(0.5), in: Capsule(style: .continuous))
+                    }
+                }
+            }
+            .padding(12)
+            Spacer()
+            HStack {
+                Text(destinationLine)
+                    .font(DeskType.meta)
+                    .foregroundStyle(ProShowTheme.primaryLabel)
+                    .lineLimit(1)
+                Spacer()
+                Text("\(controller.streaming.config.width)×\(controller.streaming.config.height)")
+                    .font(DeskType.mono)
+                    .foregroundStyle(ProShowTheme.secondaryLabel)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color.black.opacity(0.45))
+        }
+        .allowsHitTesting(false)
+    }
+
+    private var statusPill: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(statusColor)
+                .frame(width: 8, height: 8)
+            Text(statusTitle)
+                .font(DeskType.bodyEmph)
+                .foregroundStyle(ProShowTheme.primaryLabel)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(Color.black.opacity(0.55), in: Capsule(style: .continuous))
+        .accessibilityHidden(true)
+    }
+
+    private var statusTitle: String {
+        if controller.streaming.isLive { return ProShowCopy.Status.live }
+        if controller.streaming.state == .starting { return ProShowCopy.Status.connecting }
+        return ProShowCopy.Status.ready
+    }
+
+    private var statusColor: Color {
+        if controller.streaming.isLive { return ProShowTheme.liveRed }
+        if controller.streaming.state == .starting { return ProShowTheme.accent }
+        return ProShowTheme.statusOff
+    }
+
+    private var destinationLine: String {
+        let names = controller.streaming.config.relayDestinations.map(\.name).filter { !$0.isEmpty }
+        if names.count >= 2 {
+            return names.joined(separator: " · ")
+        }
+        if controller.streaming.isLive {
+            return controller.streaming.config.useCloudRelay ? "Cloud relay" : "Direct RTMP"
+        }
+        return "Encoded program"
+    }
+
+    private var statusLabel: String { "Stream output" }
+
+    private var statusValue: String {
+        if controller.streaming.isLive {
+            return ProShowCopy.meta([ProShowCopy.Status.live, destinationLine])
+        }
+        if controller.streaming.state == .starting {
+            return ProShowCopy.Status.connecting
+        }
+        return ProShowCopy.Status.ready
     }
 }
 
 #Preview("Audience") {
     AudienceView(
-        slide: Slide(lines: ["Amazing grace, how sweet the sound", "That saved a wretch like me"]),
+        slide: Slide(lines: ["Starting soon", "Program begins shortly"]),
         showsChrome: true
     )
 }

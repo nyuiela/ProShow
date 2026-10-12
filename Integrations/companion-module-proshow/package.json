@@ -1,0 +1,13 @@
+{
+  "name": "companion-module-proshow",
+  "version": "1.0.0",
+  "description": "Bitfocus Companion module for ProShow (127.0.0.1:55076).",
+  "main": "src/main.js",
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@companion-module/base": "^1.11.0"
+  }
+}

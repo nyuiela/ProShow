@@ -33,4 +33,15 @@ extension StreamingEngine {
         }
         return 0
     }
+
+    var outboundNetworkAudioDropCount: Int {
+        guard let transport else { return 0 }
+        if let fanout = transport as? MultiRTMPTransport {
+            return fanout.aggregateNetworkAudioDropCount
+        }
+        if let direct = transport as? RTMPStreamTransport {
+            return direct.networkAudioDropCount
+        }
+        return 0
+    }
 }

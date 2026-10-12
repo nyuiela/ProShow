@@ -432,10 +432,10 @@ struct StreamingEngineTests {
         queue.enqueue(Data([0x27]), kind: .video(keyframe: false))
         queue.enqueue(Data([0xAF]), kind: .audio)
         queue.sync()
-        #expect(queue.acceptedTagCount == acceptedBeforeKey)
+        #expect(queue.acceptedTagCount == acceptedBeforeKey + 1)
         queue.enqueue(Data([0x17]), kind: .video(keyframe: true))
         queue.sync()
-        #expect(queue.acceptedTagCount == acceptedBeforeKey + 1)
+        #expect(queue.acceptedTagCount == acceptedBeforeKey + 2)
         lock.lock()
         let completions = held
         held.removeAll()
@@ -444,6 +444,112 @@ struct StreamingEngineTests {
             done()
         }
         queue.cancel()
+    }
+
+    @Test
+    func endpointQueue_keepsAudioWhenVideoBacksUp() {
+        let lock = NSLock()
+        var held: [@Sendable () -> Void] = []
+        let queue = RTMPEndpointQueue(endpointId: "audio", maxPending: 2) { _, done in
+            lock.lock()
+            held.append(done)
+            lock.unlock()
+        }
+        for _ in 0..<16 {
+            queue.enqueue(Data([0xAF]), kind: .audio)
+            queue.enqueue(Data([0x27]), kind: .video(keyframe: false))
+        }
+        queue.sync()
+        #expect(queue.droppedAudioTagCount == 0)
+        #expect(queue.droppedTagCount > 0)
+        lock.lock()
+        let completions = held
+        lock.unlock()
+        for done in completions { done() }
+        queue.cancel()
+    }
+
+    @Test
+    func endpointQueue_capsAudioTags() {
+        let lock = NSLock()
+        var held: [@Sendable () -> Void] = []
+        let queue = RTMPEndpointQueue(endpointId: "audio-cap", maxPending: 120) { _, done in
+            lock.lock()
+            held.append(done)
+            lock.unlock()
+        }
+        for _ in 0..<40 {
+            queue.enqueue(Data([0xAF]), kind: .audio)
+        }
+        queue.sync()
+        #expect(queue.droppedAudioTagCount == 2)
+        lock.lock()
+        let completions = held
+        lock.unlock()
+        for done in completions { done() }
+        queue.cancel()
+    }
+
+    @Test
+    func masterClock_videoAndAudioPTSAreRational() {
+        let clock = MasterClock(t0: .zero)
+        let video = clock.videoPTS(frameIndex: 30, fpsNum: 30, fpsDen: 1)
+        #expect(video.value == 30)
+        #expect(video.timescale == 30)
+        #expect(clock.flvMilliseconds(video) == 1_000)
+        let audio = clock.audioPTS(sampleCount: 1024)
+        #expect(audio.value == 1024)
+        #expect(audio.timescale == 48_000)
+        let first = clock.claimVideoFrame()
+        let second = clock.claimVideoFrame()
+        #expect(first == 0)
+        #expect(second == 1)
+    }
+
+    @Test
+    func audioMixer_starvedLaneStillEmitsFullBlock() {
+        let mixer = AudioMixer()
+        let clock = MasterClock(t0: .zero)
+        let ready = DispatchSemaphore(value: 0)
+        mixer.onBlock = { samples, _ in
+            #expect(samples.count == 2048)
+            #expect(samples.contains { $0 > 0 })
+            ready.signal()
+        }
+        mixer.mixOnce(clock: clock) {
+            var tone = [Float](repeating: 0, count: 2048)
+            for index in stride(from: 0, to: 2048, by: 2) {
+                tone[index] = 0.25
+            }
+            mixer.absorb(tone, role: .microphone, gain: 1)
+            mixer.absorb([Float](repeating: 0, count: 64), role: .desktop, gain: 1)
+        }
+        #expect(ready.wait(timeout: .now() + 1) == .success)
+    }
+
+    @Test
+    func sendQueue_dropsPFramesAndKeepsAudio() {
+        let queue = StreamSendQueue(endpointId: "test", dropThreshold: 0.01, maxDuration: 5)
+        var sentAudio = 0
+        var sentVideo = 0
+        var held: [() -> Void] = []
+        queue.transmit = { packet, done in
+            switch packet.kind {
+            case .audio: sentAudio += 1
+            case .video: sentVideo += 1
+            }
+            held.append(done)
+        }
+        let audio = StreamV2Packet(kind: .audio, pts: CMTime(value: 0, timescale: 1000), payload: Data([1]))
+        let lateAudio = StreamV2Packet(kind: .audio, pts: CMTime(value: 800, timescale: 1000), payload: Data([1]))
+        let delta = StreamV2Packet(kind: .video(keyframe: false), pts: CMTime(value: 400, timescale: 1000), payload: Data([2]))
+        queue.enqueue(audio)
+        queue.enqueue(delta)
+        queue.enqueue(lateAudio)
+        queue.sync()
+        #expect(sentAudio == 2)
+        #expect(sentVideo == 0)
+        #expect(queue.droppedPFrameCount >= 1)
     }
 
     #if canImport(AVFoundation) && canImport(CoreVideo)
@@ -484,4 +590,89 @@ struct StreamingEngineTests {
         encoder.teardown()
     }
     #endif
+
+    @Test
+    func laneKey_ignoresBitrateAndSplitsFrameRate() {
+        let preset = StreamEncoderConfig.preset720p30Saver()
+        let youtube = LaneMember(id: UUID(), screen: .stream, scaleMode: .fit, bitrateBps: 6_000_000, ceilingBps: 8_000_000)
+        let twitch = LaneMember(id: UUID(), screen: .stream, scaleMode: .fill, bitrateBps: 4_000_000, ceilingBps: 6_000_000)
+        let third = LaneMember(id: UUID(), screen: .stream, scaleMode: .fit, bitrateBps: 2_500_000, ceilingBps: 3_000_000)
+        let plan = EncodeLaneGrouper.group(members: [youtube, twitch, third], streamPreset: preset)
+        #expect(plan.lanes.count == 1)
+        #expect(plan.lanes[0].targetBitrateBps == 2_500_000)
+        #expect(plan.lanes[0].scaleMode == .fit)
+        #expect(plan.refusedIDs.isEmpty)
+
+        var sixty = twitch
+        sixty.frameRate = 60
+        sixty.id = UUID()
+        let split = EncodeLaneGrouper.group(members: [youtube, sixty], streamPreset: preset)
+        #expect(split.lanes.count == 2)
+        #expect(split.lanes.map(\.key.frameRate).sorted() == [30, 60])
+    }
+
+    @Test
+    func laneGrouper_phoneIsSecondLane_wallDoesNotEncode_thirdIsRefused() {
+        let preset = StreamEncoderConfig(
+            width: 1920, height: 1080, frameRate: 30, targetBitrateBps: 4_500_000, maxBitrateCeilingBps: 5_400_000
+        )
+        let stream = LaneMember(id: UUID(), screen: .stream, scaleMode: .fit, bitrateBps: 4_500_000, ceilingBps: 5_400_000)
+        let phone = LaneMember(id: UUID(), screen: .phone, scaleMode: .fill, bitrateBps: 8_000_000, ceilingBps: 8_000_000)
+        let wall = LaneMember(id: UUID(), screen: .wall, scaleMode: .fit, bitrateBps: 1_000_000, ceilingBps: 1_000_000)
+        let custom = LaneMember(id: UUID(), screen: .custom, scaleMode: .fit, bitrateBps: 3_000_000, ceilingBps: 3_000_000, width: 1080, height: 1080)
+        let plan = EncodeLaneGrouper.group(members: [stream, phone, wall, custom], streamPreset: preset)
+        #expect(plan.lanes.count == 2)
+        #expect(plan.lanes.map(\.role) == [.stream, .phone])
+        #expect(plan.lanes[1].key.width == 1080)
+        #expect(plan.lanes[1].key.height == 1920)
+        #expect(plan.lanes[1].key.frameRate == 30)
+        #expect(plan.displayOnlyIDs == [wall.id])
+        #expect(plan.refusedIDs == [custom.id])
+        #expect(plan.lanes[1].targetBitrateBps == 8_000_000)
+    }
+
+    @Test
+    func missingPhoneCanvas_alwaysFits_presentKeepsFill() {
+        #expect(PhoneSlideRouting.state(boards: []) == .absent)
+        #expect(PhoneSlideRouting.scaleMode(requested: .fill, state: .absent) == .fit)
+        #expect(PhoneSlideRouting.scaleMode(requested: .fill, state: .linked) == .fit)
+        let phone = EditorCanvasFrame(
+            id: UUID(),
+            name: "Phone",
+            width: 1080,
+            height: 1920,
+            originX: 0,
+            originY: 0,
+            isPrimary: false
+        )
+        #expect(PhoneSlideRouting.state(boards: [phone]) == .present)
+        #expect(PhoneSlideRouting.scaleMode(requested: .fill, state: .present) == .fill)
+        let fit = FrameScale.placement(sourceWidth: 1920, sourceHeight: 1080, destWidth: 1080, destHeight: 1920, mode: .fit)
+        #expect(fit.height < 1920)
+        #expect(fit.upscaled == false)
+        let up = FrameScale.placement(sourceWidth: 1280, sourceHeight: 720, destWidth: 1920, destHeight: 1080, mode: .fit)
+        #expect(up.upscaled)
+    }
+
+    @Test
+    func legacyDestination_decodesWithoutScreenField() throws {
+        let account = StreamAccount(accountName: "YouTube", platform: .youtube)
+        let data = try JSONEncoder().encode(account)
+        var object = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
+        object.removeValue(forKey: "screenId")
+        object.removeValue(forKey: "scaleMode")
+        let legacy = try JSONSerialization.data(withJSONObject: object)
+        let decoded = try JSONDecoder().decode(StreamAccount.self, from: legacy)
+        #expect(decoded.screenKind == .stream)
+        #expect(decoded.scaleMode == .fit)
+        var phone = decoded
+        phone.screenId = DestinationScreenKind.phone.rawValue
+        phone.scaleMode = .fill
+        let again = try JSONDecoder().decode(StreamAccount.self, from: JSONEncoder().encode(phone))
+        #expect(again.screenKind == .phone)
+        #expect(again.scaleMode == .fill)
+        let quiet = try JSONSerialization.jsonObject(with: JSONEncoder().encode(decoded)) as? [String: Any] ?? [:]
+        #expect(quiet["screenId"] == nil)
+        #expect(quiet["scaleMode"] == nil)
+    }
 }

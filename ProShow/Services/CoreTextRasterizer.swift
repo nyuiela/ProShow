@@ -15,13 +15,132 @@ enum CoreTextRasterizer {
     static func drawCanvasAttributed(
         object: CanvasObject,
         attributed: NSAttributedString,
+        in elementBounds: CGRect,
+        layoutScale: CGFloat,
+        context: CGContext
+    ) {
+        guard attributed.length > 0, elementBounds.width > 0, elementBounds.height > 0 else { return }
+        let style = SlideTextAttributes.from(object: object, text: " ", scale: layoutScale)
+        let textRect = textLayoutRect(for: object, style: style, bounds: elementBounds, scale: layoutScale)
+        if let fill = style.backgroundColor {
+            context.saveGState()
+            context.setFillColor(fill.cgColor)
+            context.fill(textRect)
+            context.restoreGState()
+        }
+        drawAttributedString(
+            attributed,
+            in: textRect,
+            verticalAlign: verticalAlignmentForProgramText(for: object),
+            context: context
+        )
+    }
+
+    static func drawCanvasAttributed(
+        object: CanvasObject,
+        attributed: NSAttributedString,
         in bounds: CGRect,
         context: CGContext
     ) {
-        guard attributed.length > 0, bounds.width > 0, bounds.height > 0 else { return }
-        let scale = uniformScale(for: object, in: bounds)
-        let style = SlideTextAttributes.from(object: object, text: " ", scale: scale)
-        let textRect = textLayoutRect(for: object, style: style, bounds: bounds, scale: scale)
+        let layoutScale = uniformScale(for: object, in: bounds)
+        drawCanvasAttributed(
+            object: object,
+            attributed: attributed,
+            in: bounds,
+            layoutScale: layoutScale,
+            context: context
+        )
+    }
+
+    static func displayAttributedString(
+        object: CanvasObject,
+        text: String,
+        layoutScale: CGFloat,
+        textRect: CGRect
+    ) -> NSAttributedString {
+        var style = SlideTextAttributes.from(object: object, text: text, scale: layoutScale)
+        style.text = text
+        if object.textLayout.autoFitMode == .shrink {
+            style.font = fittedFont(for: object, style: style, in: textRect, scale: layoutScale)
+        }
+        var attributed = TextAttributeConverter.makeAttributedString(from: style)
+        if object.typography.isSuperscript || object.typography.isSubscript {
+            let mutable = NSMutableAttributedString(attributedString: attributed)
+            let offset = object.typography.isSuperscript
+                ? object.typography.fontSize * layoutScale * 0.35
+                : -object.typography.fontSize * layoutScale * 0.25
+            if mutable.length > 0 {
+                mutable.addAttribute(.baselineOffset, value: offset, range: NSRange(location: 0, length: mutable.length))
+            }
+            attributed = mutable
+        }
+        return attributed
+    }
+
+    static func textLayoutRectForDisplay(
+        object: CanvasObject,
+        elementBounds: CGRect,
+        layoutScale: CGFloat
+    ) -> CGRect {
+        let style = SlideTextAttributes.from(object: object, text: " ", scale: layoutScale)
+        return textLayoutRect(for: object, style: style, bounds: elementBounds, scale: layoutScale)
+    }
+
+    /// Top-left origin of the laid-out text block inside `textRect` (matches `drawAttributedString`).
+    static func alignedTextBlockOrigin(
+        attributed: NSAttributedString,
+        in textRect: CGRect,
+        verticalAlign: TextVerticalAlign
+    ) -> CGPoint {
+        guard attributed.length > 0, textRect.width > 0, textRect.height > 0 else {
+            return textRect.origin
+        }
+        let layoutHeight = measuredLayoutHeight(for: attributed, width: textRect.width)
+        let inkHeight = TextAttributeConverter.measureVerticalInkExtent(for: attributed)
+        let multiline = attributed.string.contains("\n") || layoutHeight > inkHeight * 1.4
+        if !multiline {
+            let line = CTLineCreateWithAttributedString(attributed as CFAttributedString)
+            let glyphBounds = CTLineGetBoundsWithOptions(line, [.useGlyphPathBounds, .useOpticalBounds])
+            let y: CGFloat
+            switch verticalAlign {
+            case .top:
+                y = textRect.minY - glyphBounds.minY
+            case .middle:
+                y = textRect.midY - glyphBounds.height / 2 - glyphBounds.minY
+            case .bottom, .baseline:
+                y = textRect.maxY - glyphBounds.height - glyphBounds.minY
+            }
+            return CGPoint(x: textRect.minX, y: y)
+        }
+        let alignHeight = layoutHeight
+        let frame = verticallyAlignedFrame(
+            contentHeight: alignHeight,
+            within: textRect,
+            align: verticalAlign
+        )
+        return frame.origin
+    }
+
+    static func drawCanvasText(
+        object: CanvasObject,
+        text: String,
+        in elementBounds: CGRect,
+        layoutScale: CGFloat,
+        context: CGContext
+    ) {
+        guard !text.isEmpty, elementBounds.width > 0, elementBounds.height > 0 else { return }
+        let textRect = textLayoutRectForDisplay(
+            object: object,
+            elementBounds: elementBounds,
+            layoutScale: layoutScale
+        )
+        let attributed = displayAttributedString(
+            object: object,
+            text: text,
+            layoutScale: layoutScale,
+            textRect: textRect
+        )
+        let style = SlideTextAttributes.from(object: object, text: text, scale: layoutScale)
         if let fill = style.backgroundColor {
             context.saveGState()
             context.setFillColor(fill.cgColor)
@@ -42,42 +161,8 @@ enum CoreTextRasterizer {
         in bounds: CGRect,
         context: CGContext
     ) {
-        guard !text.isEmpty, bounds.width > 0, bounds.height > 0 else { return }
-        let scale = uniformScale(for: object, in: bounds)
-        var style = SlideTextAttributes.from(object: object, text: text, scale: scale)
-        style.text = text
-        if object.textLayout.autoFitMode == .shrink {
-            style.font = fittedFont(for: object, style: style, in: textLayoutRect(
-                for: object,
-                style: style,
-                bounds: bounds,
-                scale: scale
-            ), scale: scale)
-        }
-        var attributed = TextAttributeConverter.makeAttributedString(from: style)
-        if object.typography.isSuperscript || object.typography.isSubscript {
-            let mutable = NSMutableAttributedString(attributedString: attributed)
-            let offset = object.typography.isSuperscript
-                ? object.typography.fontSize * scale * 0.35
-                : -object.typography.fontSize * scale * 0.25
-            if mutable.length > 0 {
-                mutable.addAttribute(.baselineOffset, value: offset, range: NSRange(location: 0, length: mutable.length))
-            }
-            attributed = mutable
-        }
-        let textRect = textLayoutRect(for: object, style: style, bounds: bounds, scale: scale)
-        if let fill = style.backgroundColor {
-            context.saveGState()
-            context.setFillColor(fill.cgColor)
-            context.fill(textRect)
-            context.restoreGState()
-        }
-        drawAttributedString(
-            attributed,
-            in: textRect,
-            verticalAlign: verticalAlignmentForProgramText(for: object),
-            context: context
-        )
+        let layoutScale = uniformScale(for: object, in: bounds)
+        drawCanvasText(object: object, text: text, in: bounds, layoutScale: layoutScale, context: context)
     }
 
     static func drawRichText(
@@ -106,8 +191,12 @@ enum CoreTextRasterizer {
         let inkHeight = TextAttributeConverter.measureVerticalInkExtent(for: attributed)
         let multiline = attributed.string.contains("\n") || layoutHeight > inkHeight * 1.4
 
-        if !multiline, usesProgramEncodeCoordinates(context) {
-            drawSingleLineInProgramSpace(attributed, in: bounds, verticalAlign: verticalAlign, context: context)
+        if !multiline {
+            if usesProgramEncodeCoordinates(context) {
+                drawSingleLineInProgramSpace(attributed, in: bounds, verticalAlign: verticalAlign, context: context)
+            } else {
+                drawSingleLineInCanvasSpace(attributed, in: bounds, verticalAlign: verticalAlign, context: context)
+            }
             return
         }
 
@@ -153,6 +242,50 @@ enum CoreTextRasterizer {
             &fitRange
         )
         return max(1, ceil(measured.height))
+    }
+
+    /// Flipped canvas views (editor / audience `NSView`, top-left origin).
+    private static func drawSingleLineInCanvasSpace(
+        _ attributed: NSAttributedString,
+        in bounds: CGRect,
+        verticalAlign: TextVerticalAlign,
+        context: CGContext
+    ) {
+        let line = CTLineCreateWithAttributedString(attributed as CFAttributedString)
+        let glyphBounds = CTLineGetBoundsWithOptions(line, [.useGlyphPathBounds, .useOpticalBounds])
+
+        let paragraph = attributed.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle
+        let alignment = paragraph?.alignment ?? .natural
+        var x = bounds.minX
+        switch alignment {
+        case .center:
+            x = bounds.midX - glyphBounds.width / 2 - glyphBounds.minX
+        case .right:
+            x = bounds.maxX - glyphBounds.width - glyphBounds.minX
+        default:
+            x = bounds.minX - glyphBounds.minX
+        }
+
+        let yAnchor: CGFloat
+        let textY: CGFloat
+        switch verticalAlign {
+        case .top:
+            yAnchor = bounds.minY
+            textY = -glyphBounds.maxY
+        case .bottom, .baseline:
+            yAnchor = bounds.maxY
+            textY = -glyphBounds.minY
+        case .middle:
+            yAnchor = bounds.midY
+            textY = -glyphBounds.height / 2
+        }
+
+        context.saveGState()
+        context.translateBy(x: x, y: yAnchor)
+        context.scaleBy(x: 1, y: -1)
+        context.textPosition = CGPoint(x: 0, y: textY)
+        CTLineDraw(line, context)
+        context.restoreGState()
     }
 
     private static func drawSingleLineInProgramSpace(

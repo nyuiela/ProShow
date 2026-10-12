@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Shared text box inset + frame alignment for editor, program output, and Core Text encode.
+/// Shared text box metrics for Core Text encode and inline edit alignment.
+/// Static labels rasterize via `CoreTextRasterizer` on the full element bounds (margins applied inside Core Text).
 enum CanvasTextBoxLayout {
     static func edgeInsets(for object: CanvasObject, scale: CGFloat) -> EdgeInsets {
         let margins = object.textLayout.margins

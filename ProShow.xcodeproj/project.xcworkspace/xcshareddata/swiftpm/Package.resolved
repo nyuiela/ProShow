@@ -1,0 +1,60 @@
+{
+  "originHash" : "bdbaa19f5d1bee8e4607177dac6ddaaaa92e4497142645156d2939fec0768e79",
+  "pins" : [
+    {
+      "identity" : "audiokit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/AudioKit/AudioKit.git",
+      "state" : {
+        "revision" : "97a35fe04cd8e3d13b8744e1216b8673f825bef6",
+        "version" : "5.7.2"
+      }
+    },
+    {
+      "identity" : "audiokitui",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/AudioKit/AudioKitUI.git",
+      "state" : {
+        "revision" : "1a61e8a96c7ee24c3e5abe06dc3334a31fd7571d",
+        "version" : "0.3.7"
+      }
+    },
+    {
+      "identity" : "client-sdk-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/livekit/client-sdk-swift.git",
+      "state" : {
+        "revision" : "f07831a7f06bca9e2fc2e136db591b7b42f16d8d",
+        "version" : "2.17.0"
+      }
+    },
+    {
+      "identity" : "controls",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/AudioKit/Controls.git",
+      "state" : {
+        "revision" : "4dd10370125af7f1e26d7a71b2c5929bb3c95087",
+        "version" : "1.1.4"
+      }
+    },
+    {
+      "identity" : "livekit-uniffi-xcframework",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/livekit/livekit-uniffi-xcframework.git",
+      "state" : {
+        "revision" : "7a9bf91b1601d5c408ae0cac7dc2047b5a4f615e",
+        "version" : "0.1.9"
+      }
+    },
+    {
+      "identity" : "webrtc-xcframework",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/livekit/webrtc-xcframework.git",
+      "state" : {
+        "revision" : "c73deceaddd9c07293871ae28f24d4326cc86d62",
+        "version" : "150.7871.2"
+      }
+    }
+  ],
+  "version" : 3
+}

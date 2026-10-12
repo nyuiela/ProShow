@@ -69,6 +69,12 @@ enum DeskSignalProbeBuilder {
             if let note = audio.advisory { advisories.append(note) }
         }
 
+        if let pipeline = StreamAudioPipelineDiagnostics.deskProbeSnapshot() {
+            metricParts.append(pipeline.text)
+            severity = max(severity, pipeline.severity)
+            if let note = pipeline.advisory { advisories.append(note) }
+        }
+
         if let transport = rtmpDropMetrics(controller: controller) {
             metricParts.append(transport.text)
             severity = max(severity, transport.severity)
@@ -85,7 +91,7 @@ enum DeskSignalProbeBuilder {
         let advisory = advisories.isEmpty ? nil : advisories.joined(separator: " · ")
 
         if metrics.isEmpty, advisory == nil {
-            return DeskSignalProbeSnapshot(severity: .ok, headline: headline, metrics: "Monitoring program output")
+            return DeskSignalProbeSnapshot(severity: .ok, headline: headline, metrics: "")
         }
 
         return DeskSignalProbeSnapshot(
@@ -111,18 +117,20 @@ enum DeskSignalProbeBuilder {
 
     @MainActor
     private static func headline(for controller: ShowController, now: Date) -> String {
-        if controller.streaming.state == .starting { return "STREAM · CONNECTING" }
+        if controller.streaming.state == .starting { return ProShowCopy.Status.connecting }
         if controller.streaming.isLive {
             if let started = controller.streaming.startedAt {
                 let minutes = Int(now.timeIntervalSince(started) / 60)
-                return minutes > 0 ? "ON AIR · \(minutes)m" : "ON AIR"
+                return minutes > 0
+                    ? ProShowCopy.meta([ProShowCopy.Status.live, "\(minutes)m"])
+                    : ProShowCopy.Status.live
             }
-            return "ON AIR"
+            return ProShowCopy.Status.live
         }
         if controller.isoRecorder.isRecording, controller.streaming.isLive {
-            return "ON AIR · REC"
+            return ProShowCopy.meta([ProShowCopy.Status.live, ProShowCopy.Status.recording])
         }
-        if controller.isoRecorder.isRecording { return "RECORDING" }
+        if controller.isoRecorder.isRecording { return ProShowCopy.Status.recording }
         if controller.playback.isPlaying, controller.playback.canPresentVideo {
             let title = controller.playback.title.trimmingCharacters(in: .whitespacesAndNewlines)
             if title.isEmpty || title == MediaTransportState.idle.title {
@@ -143,6 +151,7 @@ enum DeskSignalProbeBuilder {
         advisories: inout [String]
     ) {
         let telemetry = controller.streaming.telemetry
+        telemetry.refreshMeasurementWindowIfNeeded()
         let preset = controller.streaming.streamEncoderConfig
         parts.append("\(telemetry.measuredVideoBitrateKbps.formatted()) / \(preset.targetBitrateKbps) Kbps")
         parts.append(telemetry.stabilityLabel)
@@ -152,11 +161,22 @@ enum DeskSignalProbeBuilder {
         }
         if let encFps = controller.deskProbeEncodeFPS(now: now) {
             parts.append(String(format: "%.0f enc fps", encFps))
-            let target = Double(controller.projectSettings.frameRate.encoderFPS)
-            if target > 0, encFps < target * 0.62 {
-                severity = max(severity, encFps < target * 0.4 ? .critical : .caution)
-                advisories.append("Encode cadence below program frame rate — output may stutter")
+            let target = Double(max(1, controller.streaming.config.framerate))
+            if target > 0, encFps < target * 0.72 {
+                severity = max(severity, encFps < target * 0.45 ? .critical : .caution)
+                advisories.append("Encode cadence below stream frame rate — output may stutter")
             }
+        }
+        if telemetry.skippedCompositeFrameCount > 0 {
+            parts.append("\(telemetry.skippedCompositeFrameCount) composite skips")
+            severity = max(severity, telemetry.skippedCompositeFrameCount > 24 ? .critical : .caution)
+            advisories.append("Program composite is behind. Stream repeats the last frame.")
+        }
+        if telemetry.streamCFRHoldFrameCount > 0 {
+            parts.append("\(telemetry.streamCFRHoldFrameCount) CFR holds")
+        }
+        if controller.streaming.isLive {
+            parts.append(StreamEngineV2Telemetry.latestLine)
         }
         let enc = controller.streaming.hardwareEncoder.encodedFrameCount
         if enc > 0 {
@@ -269,10 +289,27 @@ enum DeskSignalProbeBuilder {
     private static func rtmpDropMetrics(controller: ShowController) -> (text: String, severity: DeskSignalSeverity, advisory: String?)? {
         guard controller.streaming.isLive || controller.streaming.state == .starting else { return nil }
         let drops = controller.streaming.outboundNetworkDropCount
-        guard drops > 0 else { return nil }
-        let text = "\(drops) network drops"
-        if drops > 40 {
-            return (text, .critical, "RTMP socket backlog — ingest may be stuttering")
+        let audioDrops = controller.streaming.outboundNetworkAudioDropCount
+        guard drops > 0 || audioDrops > 0 else { return nil }
+        var parts: [String] = []
+        if audioDrops > 0 {
+            parts.append("\(audioDrops) audio tag drops")
+        }
+        if drops > 0 {
+            parts.append("\(drops) network drops")
+        }
+        let text = parts.joined(separator: " · ")
+        if audioDrops > 8 || drops > 40 {
+            return (
+                text,
+                .critical,
+                audioDrops > 0
+                    ? "RTMP dropped AAC frames — viewers may hear cutouts"
+                    : "RTMP socket backlog — ingest may be stuttering"
+            )
+        }
+        if audioDrops > 0 {
+            return (text, .caution, "RTMP send queue dropped AAC tags")
         }
         return (text, .caution, "Network send queue dropped packets")
     }
@@ -284,5 +321,154 @@ private func max(_ lhs: DeskSignalSeverity, _ rhs: DeskSignalSeverity) -> DeskSi
     case (.caution, _), (_, .caution): return .caution
     case (.ok, _), (_, .ok): return .ok
     default: return rhs == .hidden ? lhs : rhs
+    }
+}
+
+enum DeskSignalProbeStyle {
+    /// Right inspector footer under the program preview.
+    case inspectorFooter
+    /// Audience, stream, and other full-screen program outputs.
+    case outputOverlay
+}
+
+/// Live program health: stream, media, and encode metrics.
+struct DeskSignalProbeView: View {
+    var controller: ShowController
+    var style: DeskSignalProbeStyle = .inspectorFooter
+
+    @State private var displayed = DeskSignalProbeSnapshot.hidden
+    @State private var lastMetricsCommit = Date.distantPast
+
+    private static let metricsRefreshInterval: TimeInterval = 2.0
+    private static let pollInterval: TimeInterval = 0.5
+
+    var body: some View {
+        Group {
+            if style == .inspectorFooter || displayed.isVisible {
+                probeContent(displayedForLayout)
+            }
+        }
+        .task {
+            while !Task.isCancelled {
+                let fresh = DeskSignalProbeBuilder.make(controller: controller)
+                commitDisplay(fresh)
+                try? await Task.sleep(for: .seconds(Self.pollInterval))
+            }
+        }
+    }
+
+    private var displayedForLayout: DeskSignalProbeSnapshot {
+        if displayed.isVisible { return displayed }
+        guard style == .inspectorFooter else { return .hidden }
+        return DeskSignalProbeSnapshot(
+            severity: .ok,
+            headline: controller.deskProgramOutputStatusTitle,
+            metrics: ""
+        )
+    }
+
+    @ViewBuilder
+    private func probeContent(_ snapshot: DeskSignalProbeSnapshot) -> some View {
+        switch style {
+        case .inspectorFooter:
+            VStack(alignment: .leading, spacing: 2) {
+                Text(snapshot.headline)
+                    .font(DeskType.meta.weight(.bold))
+                    .foregroundStyle(snapshot.severity.color)
+                    .lineLimit(1)
+                if !snapshot.metrics.isEmpty {
+                    Text(snapshot.metrics)
+                        .font(DeskType.micro.monospaced())
+                        .foregroundStyle(ProShowTheme.secondaryLabel)
+                        .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(
+                [snapshot.headline, snapshot.metrics]
+                    .filter { !$0.isEmpty }
+                    .joined(separator: ". ")
+            )
+        case .outputOverlay:
+            VStack(alignment: .leading, spacing: 3) {
+                Text(snapshot.headline)
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(snapshot.severity.color)
+                Text(snapshot.metrics)
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundStyle(ProShowTheme.primaryLabel.opacity(0.94))
+                    .fixedSize(horizontal: false, vertical: true)
+                if let advisory = snapshot.advisory {
+                    Text(advisory)
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(snapshot.severity.color.opacity(0.95))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .frame(maxWidth: min(420, 520), alignment: .leading)
+            .background(Color.black.opacity(0.62), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(deskProbeAccessibilityLabel(snapshot))
+        }
+    }
+
+    private func commitDisplay(_ fresh: DeskSignalProbeSnapshot) {
+        if fresh.isVisible != displayed.isVisible {
+            displayed = fresh
+            lastMetricsCommit = Date()
+            return
+        }
+        if !fresh.isVisible {
+            if style == .inspectorFooter, displayed.isVisible {
+                displayed = fresh
+                lastMetricsCommit = Date()
+            }
+            return
+        }
+
+        if deskProbeSeverityRank(fresh.severity) > deskProbeSeverityRank(displayed.severity) {
+            displayed = fresh
+            lastMetricsCommit = Date()
+            return
+        }
+        if fresh.headline != displayed.headline || fresh.advisory != displayed.advisory {
+            displayed = fresh
+            lastMetricsCommit = Date()
+            return
+        }
+
+        let elapsed = Date().timeIntervalSince(lastMetricsCommit)
+        guard elapsed >= Self.metricsRefreshInterval else { return }
+        guard fresh != displayed else { return }
+        displayed = fresh
+        lastMetricsCommit = Date()
+    }
+
+    private func deskProbeSeverityRank(_ severity: DeskSignalSeverity) -> Int {
+        switch severity {
+        case .hidden: 0
+        case .ok: 1
+        case .caution: 2
+        case .critical: 3
+        }
+    }
+
+    private func deskProbeAccessibilityLabel(_ snapshot: DeskSignalProbeSnapshot) -> String {
+        [snapshot.headline, snapshot.metrics, snapshot.advisory]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
+            .joined(separator: ". ")
+    }
+}
+
+/// Replaces the legacy “Program · Audience / Stream” footer under the right-pane monitor.
+struct DeskSignalProbeInspectorFooter: View {
+    @Bindable var controller: ShowController
+
+    var body: some View {
+        DeskSignalProbeView(controller: controller, style: .inspectorFooter)
     }
 }

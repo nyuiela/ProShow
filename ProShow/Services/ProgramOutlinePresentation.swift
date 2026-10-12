@@ -31,6 +31,12 @@ enum ProgramOutlinePresentation {
             if let url = pageURL(in: slide) {
                 setPageURL(url, on: &document.rundownBlocks[index])
             }
+            if case .camera = RundownBlockSlideSource.resolve(document.rundownBlocks[index]),
+               RundownBlockSlideSource.placeholderLetter(in: document.rundownBlocks[index]) == nil,
+               let camera = cameraConnection(in: slide),
+               !camera.connection.hasPrefix("placeholder://") {
+                setCameraConnection(name: camera.name, connection: camera.connection, on: &document.rundownBlocks[index])
+            }
         }
     }
 
@@ -41,6 +47,7 @@ enum ProgramOutlinePresentation {
         showLookup: (UUID) -> Show? = { _ in nil },
         playlistShowLookup: (UUID) -> Show? = { _ in nil }
     ) {
+        sanitizeOutlineSlideBindings(in: &document)
         for index in document.rundownBlocks.indices {
             syncProgramSlide(
                 at: index,
@@ -54,12 +61,66 @@ enum ProgramOutlinePresentation {
         document.programSlides.removeAll { !liveIDs.contains($0.id) }
     }
 
+    /// Fixes legacy `.program` files: orphan slide IDs, blank placeholders, camera rows with stale browser shapes.
+    @discardableResult
+    static func repairStoredProgramDocument(
+        in document: inout ProgramDocumentModel,
+        mediaLookup: (UUID) -> MediaBinItem? = { _ in nil },
+        showLookup: (UUID) -> Show? = { _ in nil },
+        playlistShowLookup: (UUID) -> Show? = { _ in nil }
+    ) -> Bool {
+        var changed = false
+        sanitizeOutlineSlideBindings(in: &document)
+        for index in document.rundownBlocks.indices {
+            if let slideID = document.rundownBlocks[index].programSlideID,
+               !document.programSlides.contains(where: { $0.id == slideID }) {
+                document.rundownBlocks[index].programSlideID = nil
+                changed = true
+            }
+        }
+        syncProgramSlides(
+            in: &document,
+            mediaLookup: mediaLookup,
+            showLookup: showLookup,
+            playlistShowLookup: playlistShowLookup
+        )
+        for index in document.rundownBlocks.indices {
+            var block = document.rundownBlocks[index]
+            let source = RundownBlockSlideSource.resolve(block)
+            guard let slideID = block.programSlideID,
+                  let slideIndex = document.programSlides.firstIndex(where: { $0.id == slideID })
+            else { continue }
+            let built = buildProgramSlide(
+                for: block,
+                source: source,
+                slideID: slideID,
+                mediaLookup: mediaLookup
+            )
+            var stored = document.programSlides[slideIndex]
+            let before = stored
+            // Never replace the saved canvas with the outline template. Operators
+            // delete shapes and assign sources on these slides; a reopen must keep that.
+            mergeProgramSlidePreservingEdits(stored: &stored, from: built, source: source, block: block)
+            if stored != before {
+                document.programSlides[slideIndex] = stored
+                changed = true
+            }
+            document.rundownBlocks[index] = block
+        }
+        let liveIDs = Set(document.rundownBlocks.compactMap(\.programSlideID))
+        let beforeCount = document.programSlides.count
+        document.programSlides.removeAll { !liveIDs.contains($0.id) }
+        if document.programSlides.count != beforeCount { changed = true }
+        return changed
+    }
+
     static func syncProgramSlide(
         at blockIndex: Int,
         in document: inout ProgramDocumentModel,
         mediaLookup: (UUID) -> MediaBinItem? = { _ in nil },
         showLookup: (UUID) -> Show? = { _ in nil },
-        playlistShowLookup: (UUID) -> Show? = { _ in nil }
+        playlistShowLookup: (UUID) -> Show? = { _ in nil },
+        rebuildFromSource: Bool = false
     ) {
         guard document.rundownBlocks.indices.contains(blockIndex) else { return }
         var block = document.rundownBlocks[blockIndex]
@@ -78,6 +139,12 @@ enum ProgramOutlinePresentation {
             return
         }
 
+        if case .blank = source {
+            releaseOwnedProgramSlide(block: &block, document: &document)
+            document.rundownBlocks[blockIndex] = block
+            return
+        }
+
         let slideID = block.programSlideID ?? UUID()
         block.programSlideID = slideID
         releaseExternalPresentationLink(on: &block)
@@ -90,9 +157,17 @@ enum ProgramOutlinePresentation {
         )
 
         if let existingIndex = document.programSlides.firstIndex(where: { $0.id == slideID }) {
-            var slide = document.programSlides[existingIndex]
-            mergeProgramSlidePreservingEdits(stored: &slide, from: built, source: source, block: block)
-            document.programSlides[existingIndex] = slide
+            if rebuildFromSource {
+                var next = built
+                if case .camera = source {
+                    preserveCameraAssignment(from: document.programSlides[existingIndex], onto: &next)
+                }
+                document.programSlides[existingIndex] = next
+            } else {
+                var slide = document.programSlides[existingIndex]
+                mergeProgramSlidePreservingEdits(stored: &slide, from: built, source: source, block: block)
+                document.programSlides[existingIndex] = slide
+            }
         } else {
             document.upsertProgramSlide(built)
         }
@@ -127,14 +202,21 @@ enum ProgramOutlinePresentation {
                 applyWebURL(url, to: &stored)
             }
         case .camera:
-            if !stored.canvas.contains(where: { $0.kind == .videoInput }) {
-                stored.canvas = built.canvas
+            let hadStaleBrowser = stored.canvas.contains { $0.kind.isBrowserLike }
+            stored.canvas.removeAll { $0.kind.isBrowserLike }
+            stored.backgroundEnabled = built.backgroundEnabled
+            // A camera row that still has a leftover browser and no input gets the
+            // input back. A rectangle the operator deleted stays deleted.
+            if hadStaleBrowser,
+               !stored.canvas.contains(where: { $0.kind == .videoInput }),
+               let camera = built.canvas.first(where: { $0.kind == .videoInput }) {
+                stored.canvas.insert(camera, at: 0)
             }
         case .mediaBin, .mediaFile:
             if stored.mediaAction?.filePath != built.mediaAction?.filePath {
                 stored.mediaAction = built.mediaAction
             }
-        case .blank:
+        case .blank, .playlistItem, .presentationSlide:
             break
         }
     }
@@ -151,7 +233,7 @@ enum ProgramOutlinePresentation {
         case .webPage(let url):
             return makeProgramSlide(id: slideID, title: block.title, itemNumber: block.itemNumber, pageURL: url)
         case .camera:
-            return makeCameraProgramSlide(id: slideID, title: block.title, itemNumber: block.itemNumber)
+            return makeCameraProgramSlide(id: slideID, title: block.title, itemNumber: block.itemNumber, block: block)
         case .mediaBin(let mediaID):
             let item = mediaLookup(mediaID)
             return makeMediaProgramSlide(
@@ -194,19 +276,46 @@ enum ProgramOutlinePresentation {
         )
     }
 
-    private static func makeCameraProgramSlide(id: UUID, title: String, itemNumber: String) -> Slide {
+    private static func makeCameraProgramSlide(id: UUID, title: String, itemNumber: String, block: RundownBlock) -> Slide {
         var slide = makeBlankProgramSlide(id: id, title: title, itemNumber: itemNumber)
+        let direction = block.screenDirections.first(where: { $0.kind == .camera })
+        let cameraName = direction?.label.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = (cameraName?.isEmpty == false) ? cameraName! : "Camera"
         var object = CanvasObject(
-            name: "Camera",
+            name: name,
             kind: .videoInput,
             bounds: .canvas,
             zIndex: 0,
             text: "",
             fillHex: "#000000"
         )
+        if let direction, let letter = RundownBlockSlideSource.placeholderLetter(in: direction) {
+            object.assignedSource = AssignedMediaSource(
+                sourceID: "placeholder-\(letter)",
+                name: "Placeholder \(letter)",
+                sourceType: .placeholderSlot,
+                category: .placeholders,
+                connectionString: "placeholder://\(letter)",
+                placeholderLetter: letter
+            )
+            object.token = letter
+            object.name = "Placeholder \(letter)"
+        } else if let connection = direction?.url?.trimmingCharacters(in: .whitespacesAndNewlines), !connection.isEmpty {
+            object.assignedSource = AssignedMediaSource(
+                sourceID: connection,
+                name: name,
+                sourceType: liveSourceType(for: connection),
+                category: .videoCapture,
+                connectionString: connection
+            )
+            object.token = connection
+        }
         object.visibleOnAudience = true
         object.visibleOnStage = true
         slide.canvas = [object]
+        slide.isBlank = false
+        slide.themeApplication = .native
+        slide.backgroundEnabled = false
         return slide
     }
 
@@ -221,6 +330,9 @@ enum ProgramOutlinePresentation {
     ) -> Slide {
         var slide = makeBlankProgramSlide(id: id, title: title, itemNumber: itemNumber)
         guard let filePath, !filePath.isEmpty else { return slide }
+        slide.isBlank = false
+        slide.themeApplication = .native
+        slide.backgroundEnabled = false
         slide.mediaAction = MediaAction(
             id: UUID(),
             title: titleName,
@@ -247,13 +359,19 @@ enum ProgramOutlinePresentation {
         in document: ProgramDocumentModel,
         showLookup: (UUID) -> Show? = { _ in nil }
     ) -> Slide? {
+        if let slideID = block.programSlideID,
+           let owned = document.programSlides.first(where: { $0.id == slideID }) {
+            return owned
+        }
+        if block.programSlideID != nil {
+            return nil
+        }
         if let showID = block.linkedPresentationShowID,
            let slideID = block.linkedPresentationSlideID,
            let show = showLookup(showID) {
             return show.slide(id: slideID)
         }
-        guard let slideID = block.programSlideID else { return nil }
-        return document.programSlides.first(where: { $0.id == slideID })
+        return nil
     }
 
     static func outlineReferencesSlide(_ block: RundownBlock) -> Bool {
@@ -266,9 +384,19 @@ enum ProgramOutlinePresentation {
         in document: ProgramDocumentModel,
         showLookup: (UUID) -> Show? = { _ in nil }
     ) -> String? {
-        if let url = RundownProgramCut.resolve(block).pageURL { return url }
+        if case .camera = RundownBlockSlideSource.resolve(block) { return nil }
+        let cut = RundownProgramCut.resolve(block)
+        if cut.picture == .camera { return nil }
+        if let url = cut.pageURL { return url }
         guard let slide = programSlide(for: block, in: document, showLookup: showLookup) else { return nil }
-        return pageURL(in: slide)
+        return pageURL(in: airPrepareSlide(slide, in: document))
+    }
+
+    /// Cleans mixed metadata from older `.program` files (copied slides + leftover link IDs).
+    static func sanitizeOutlineSlideBindings(in document: inout ProgramDocumentModel) {
+        for index in document.rundownBlocks.indices {
+            RundownBlockSlideSource.sanitizeSlideBindings(&document.rundownBlocks[index])
+        }
     }
 
     // MARK: - Slide factory
@@ -352,6 +480,69 @@ enum ProgramOutlinePresentation {
         return object.assignedSource?.connectionString ?? object.fill.imageURI
     }
 
+    /// Stale `.program` slides can keep a browser shape after a row switches to camera; strip it before air.
+    static func airPrepareSlide(_ slide: Slide, block: RundownBlock) -> Slide {
+        guard case .camera = RundownBlockSlideSource.resolve(block) else { return slide }
+        var next = slide
+        next.canvas.removeAll { $0.kind.isBrowserLike }
+        if !next.canvas.contains(where: { $0.kind == .videoInput }) {
+            return makeCameraProgramSlide(id: slide.id, title: slide.title, itemNumber: slide.label, block: block)
+        }
+        return next
+    }
+
+    static func airPrepareSlide(_ slide: Slide, in document: ProgramDocumentModel) -> Slide {
+        guard let block = document.rundownBlocks.first(where: { $0.programSlideID == slide.id }) else { return slide }
+        return airPrepareSlide(slide, block: block)
+    }
+
+    /// Keeps a camera the operator already assigned when the outline row has no device address.
+    private static func preserveCameraAssignment(from stored: Slide, onto built: inout Slide) {
+        guard let builtIndex = built.canvas.firstIndex(where: { $0.kind == .videoInput }),
+              built.canvas[builtIndex].assignedSource == nil,
+              let kept = stored.canvas.first(where: { $0.kind == .videoInput })?.assignedSource
+        else { return }
+        built.canvas[builtIndex].assignedSource = kept
+        let name = kept.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !name.isEmpty {
+            built.canvas[builtIndex].name = name
+        }
+        if let connection = kept.connectionString, !connection.isEmpty {
+            built.canvas[builtIndex].token = connection
+        }
+    }
+
+    static func cameraConnection(in slide: Slide) -> (name: String, connection: String)? {
+        guard let assigned = slide.canvas.first(where: { $0.kind == .videoInput })?.assignedSource else { return nil }
+        let connection = assigned.connectionString?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !connection.isEmpty else { return nil }
+        let name = assigned.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (name.isEmpty ? "Camera" : name, connection)
+    }
+
+    static func setCameraConnection(name: String, connection: String, on block: inout RundownBlock) {
+        let trimmed = connection.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let label = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolved = label.isEmpty ? "Camera" : label
+        if let index = block.screenDirections.firstIndex(where: { $0.kind == .camera }) {
+            block.screenDirections[index].label = resolved
+            block.screenDirections[index].url = trimmed
+            return
+        }
+        block.screenDirections.insert(
+            ScreenDirection(kind: .camera, label: resolved, url: trimmed),
+            at: 0
+        )
+    }
+
+    private static func liveSourceType(for connection: String) -> SourceType {
+        if connection.hasPrefix("sck://window/") { return .systemWindow }
+        if connection.hasPrefix("sck://") { return .systemDisplay }
+        if connection.hasPrefix("ndi://") || !connection.contains("://") { return .ndiSource }
+        return .systemCamera
+    }
+
     private static func setPageURL(_ url: String, on block: inout RundownBlock) {
         if let index = block.screenDirections.firstIndex(where: { $0.kind == .url }) {
             block.screenDirections[index].url = url
@@ -360,6 +551,14 @@ enum ProgramOutlinePresentation {
         block.screenDirections.append(
             ScreenDirection(kind: .url, label: ProgramPageViewport.displayHost(for: url), url: url)
         )
+    }
+}
+
+extension Slide {
+    var needsProgramLiveCameraPreview: Bool {
+        audienceCanvas().contains { object in
+            object.kind == .videoInput || object.assignedSource?.sourceType == .systemCamera
+        }
     }
 }
 

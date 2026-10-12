@@ -193,12 +193,29 @@ final class SourceDiscoveryManager {
         mediaCollections: [MediaCollection] = [],
         libraryShows: [Show] = [],
         playlistItems: [LibraryShowItem] = [],
+        presentationShows: [Show] = [],
         overlays: [String] = [],
         customColors: [SolidColorSwatch] = [],
         templates: [String] = [],
         existingShots: [LayerShot] = [],
-        favoriteIDs: Set<String> = []
+        favoriteIDs: Set<String> = [],
+        liveGuests: [DiscoveredSourceItem] = []
     ) async {
+        // Permission prompts block this function. Publish placeholders, media,
+        // slides, and Web Browser before that wait so the picker is not empty.
+        refresh(
+            media: media,
+            mediaCollections: mediaCollections,
+            libraryShows: libraryShows,
+            playlistItems: playlistItems,
+            presentationShows: presentationShows,
+            overlays: overlays,
+            customColors: customColors,
+            templates: templates,
+            existingShots: existingShots,
+            favoriteIDs: favoriteIDs,
+            liveGuests: liveGuests
+        )
         isRefreshingHardware = true
         let cameraOK = await access.requestCameraAccess()
         _ = await access.requestMicrophoneAccess()
@@ -226,11 +243,13 @@ final class SourceDiscoveryManager {
             mediaCollections: mediaCollections,
             libraryShows: libraryShows,
             playlistItems: playlistItems,
+            presentationShows: presentationShows,
             overlays: overlays,
             customColors: customColors,
             templates: templates,
             existingShots: existingShots,
-            favoriteIDs: favoriteIDs
+            favoriteIDs: favoriteIDs,
+            liveGuests: liveGuests
         )
         isRefreshingHardware = false
     }
@@ -240,11 +259,13 @@ final class SourceDiscoveryManager {
         mediaCollections: [MediaCollection] = [],
         libraryShows: [Show] = [],
         playlistItems: [LibraryShowItem] = [],
+        presentationShows: [Show] = [],
         overlays: [String] = [],
         customColors: [SolidColorSwatch] = [],
         templates: [String] = [],
         existingShots: [LayerShot] = [],
-        favoriteIDs: Set<String> = []
+        favoriteIDs: Set<String> = [],
+        liveGuests: [DiscoveredSourceItem] = []
     ) {
         var next: [DiscoveredSourceItem] = []
         next.append(contentsOf: Self.placeholderItems())
@@ -256,13 +277,20 @@ final class SourceDiscoveryManager {
         next.append(contentsOf: enumerator.ndiSources())
         next.append(contentsOf: Self.systemAudioGroup())
         next.append(contentsOf: Self.networkActions(srtPort: srtListenerPort))
+        next.append(contentsOf: liveGuests)
         next.append(contentsOf: media.map { Self.mediaItem($0, groupName: "Media Files") })
         next.append(contentsOf: mediaCollections.flatMap { collection in
             collection.items.map { Self.mediaItem($0, groupName: Self.collectionGroup(collection)) }
         })
         next.append(contentsOf: libraryShows.map(Self.libraryShowItem))
         next.append(contentsOf: playlistItems.map(Self.playlistShowItem))
-        next.append(contentsOf: Self.presentationSlideItems(libraryShows: libraryShows, playlistItems: playlistItems))
+        let catalogShows = Self.mergedPresentationShows(libraryShows: libraryShows, extra: presentationShows)
+        next.append(contentsOf: Self.slideCatalogItems(
+            shows: catalogShows,
+            playlistItems: playlistItems,
+            libraryShowIDs: Set(libraryShows.map(\.id))
+        ))
+        next.append(contentsOf: Self.webPageCatalogItems(shows: catalogShows))
         next.append(contentsOf: overlays.enumerated().map { index, name in
             DiscoveredSourceItem(
                 id: "overlay-\(index)-\(name)",
@@ -302,6 +330,10 @@ final class SourceDiscoveryManager {
             switch category {
             case .all: break
             case .favorites: if !item.isFavorite { return false }
+            case .webPages:
+                if item.category != .webPages, item.sourceType != .webPage { return false }
+            case .mediaFiles:
+                if item.category != .mediaFiles, item.category != .slides { return false }
             default: if item.category != category { return false }
             }
             return AddShotSearch.matches(item, query: query)
@@ -309,6 +341,8 @@ final class SourceDiscoveryManager {
         let order = [
             "Placeholders",
             "Solid Colors",
+            "Slides",
+            "Web pages",
             "System Device",
             "Displays",
             "Windows",
@@ -411,7 +445,7 @@ final class SourceDiscoveryManager {
             ),
             DiscoveredSourceItem(
                 id: "web-page",
-                name: "Web Page",
+                name: "Web Browser",
                 category: .network,
                 groupName: "Rendezvous / Remote Stream",
                 sourceType: .webPage,
@@ -488,22 +522,31 @@ final class SourceDiscoveryManager {
         )
     }
 
-    /// Individual slides from library shows and playlist-linked decks (runtime outline source picker).
-    static func presentationSlideItems(
-        libraryShows: [Show],
-        playlistItems: [LibraryShowItem]
+    static func mergedPresentationShows(libraryShows: [Show], extra: [Show]) -> [Show] {
+        var merged = libraryShows
+        var seen = Set(libraryShows.map(\.id))
+        for show in extra where seen.insert(show.id).inserted {
+            merged.append(show)
+        }
+        return merged
+    }
+
+    /// Every slide in library decks, playlists, and open presentations (Assign Source → Slides).
+    static func slideCatalogItems(
+        shows: [Show],
+        playlistItems: [LibraryShowItem],
+        libraryShowIDs: Set<UUID> = []
     ) -> [DiscoveredSourceItem] {
         var items: [DiscoveredSourceItem] = []
-        func appendSlides(from show: Show, groupName: String, namePrefix: String) {
-            guard show.id != ProgramOutlinePresentation.showID else { return }
+        func appendSlides(from show: Show, groupName: String, deckLabel: String) {
             for (index, slide) in show.allSlides.enumerated() {
                 let slideTitle = slide.title.trimmingCharacters(in: .whitespacesAndNewlines)
                 let label = slideTitle.isEmpty ? "Slide \(index + 1)" : slideTitle
                 items.append(
                     DiscoveredSourceItem(
                         id: "presentation-slide-\(show.id.uuidString)-\(slide.id.uuidString)",
-                        name: "\(namePrefix) · \(label)",
-                        category: .mediaFiles,
+                        name: "\(deckLabel) · \(label)",
+                        category: .slides,
                         groupName: groupName,
                         sourceType: .libraryShow,
                         connectionString: "\(show.id.uuidString)|\(slide.id.uuidString)"
@@ -511,14 +554,59 @@ final class SourceDiscoveryManager {
                 )
             }
         }
-        for show in libraryShows {
-            appendSlides(from: show, groupName: "Library", namePrefix: show.name)
+        for show in shows {
+            let group = libraryShowIDs.isEmpty || libraryShowIDs.contains(show.id) ? "Library" : "Slides"
+            appendSlides(from: show, groupName: group, deckLabel: show.name)
         }
         for item in playlistItems {
             guard let showID = item.showID,
-                  let show = libraryShows.first(where: { $0.id == showID })
+                  let show = shows.first(where: { $0.id == showID })
             else { continue }
-            appendSlides(from: show, groupName: "Playlists", namePrefix: item.title)
+            for (index, slide) in show.allSlides.enumerated() {
+                let slideTitle = slide.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                let label = slideTitle.isEmpty ? "Slide \(index + 1)" : slideTitle
+                items.append(
+                    DiscoveredSourceItem(
+                        id: "playlist-slide-\(item.id.uuidString)-\(slide.id.uuidString)",
+                        name: "\(item.title) · \(label)",
+                        category: .slides,
+                        groupName: "Playlists",
+                        sourceType: .libraryShow,
+                        connectionString: "\(show.id.uuidString)|\(slide.id.uuidString)"
+                    )
+                )
+            }
+        }
+        var seen = Set<String>()
+        return items.filter { seen.insert($0.id).inserted }
+    }
+
+    /// Browser URLs discovered on slide canvases (Assign Source → Web Pages).
+    static func webPageCatalogItems(shows: [Show]) -> [DiscoveredSourceItem] {
+        var items: [DiscoveredSourceItem] = []
+        var seenURLs = Set<String>()
+        for show in shows {
+            for (index, slide) in show.allSlides.enumerated() {
+                guard let raw = ProgramOutlinePresentation.pageURL(in: slide)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                    !raw.isEmpty
+                else { continue }
+                let url = PromptWebsiteURL.canonical(raw) ?? raw
+                guard seenURLs.insert(url.lowercased()).inserted else { continue }
+                let slideTitle = slide.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                let slideLabel = slideTitle.isEmpty ? "Slide \(index + 1)" : slideTitle
+                let host = ProgramPageViewport.displayHost(for: url)
+                items.append(
+                    DiscoveredSourceItem(
+                        id: "webpage-\(url.lowercased().hashValue)",
+                        name: "\(show.name) · \(slideLabel) · \(host)",
+                        category: .webPages,
+                        groupName: "Web pages",
+                        sourceType: .webPage,
+                        connectionString: url
+                    )
+                )
+            }
         }
         return items
     }

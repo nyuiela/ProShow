@@ -3,6 +3,8 @@ import AVFoundation
 import AVKit
 #if os(macOS)
 import AppKit
+import WebKit
+import CoreImage
 #else
 import UIKit
 #endif
@@ -15,6 +17,7 @@ struct ProgramSurfaceView: View {
     var onStage: Bool = false
     var showsChrome: Bool = false
     var lookOverride: AudienceLookConfig? = nil
+    var themeVariantOverride: UUID? = nil
     var isRenderingPaused: Bool = false
 
     var body: some View {
@@ -28,6 +31,11 @@ struct ProgramSurfaceView: View {
             onStage: onStage,
             showsChrome: showsChrome,
             lookOverride: lookOverride,
+            themeVariantOverride: themeVariantOverride,
+            resolveSlideCanvas: { base in
+                guard themeVariantOverride != nil else { return base }
+                return controller.liveSlideCanvas(variantOverrideID: themeVariantOverride)
+            },
             isRenderingPaused: isRenderingPaused
         )
         .environment(\.proShowPlayback, controller.playback)
@@ -53,6 +61,8 @@ struct LayeredAudienceView: View {
     var onStage: Bool = false
     var showsChrome: Bool = false
     var lookOverride: AudienceLookConfig? = nil
+    var themeVariantOverride: UUID? = nil
+    var resolveSlideCanvas: (([CanvasObject]) -> [CanvasObject])? = nil
     var stackSource: RenderStack? = nil
     var fillsParent: Bool = true
     var isRenderingPaused: Bool = false
@@ -64,7 +74,26 @@ struct LayeredAudienceView: View {
         if let lookOverride {
             copy.look = lookOverride
         }
+        if let resolveSlideCanvas, themeVariantOverride != nil {
+            let canvas = resolveSlideCanvas(copy.slideCanvas)
+            if !canvas.isEmpty {
+                copy.slideCanvas = canvas
+            }
+        }
         return copy
+    }
+
+    /// Rundown full-page raster or `.program` slide page on layer 3 (under transparent slide canvas).
+    private var programPageMediaURL: String? {
+        if let rundown = compositor.rundownPageURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !rundown.isEmpty {
+            return rundown
+        }
+        if stack.media?.id == RundownPageMedia.id {
+            let title = stack.media?.title.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return title.isEmpty ? nil : title
+        }
+        return nil
     }
 
     private var liveTransition: ProgramTransitionState? {
@@ -231,7 +260,15 @@ struct LayeredAudienceView: View {
 
     @ViewBuilder
     private var layer3Media: some View {
-        if let media = stack.media {
+        if let pageURL = programPageMediaURL, stack.isVisible(.media, onStage: onStage) {
+            ProgramPageAudiencePreview(
+                pageURL: pageURL,
+                isPaused: isRenderingPaused
+            )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .allowsHitTesting(false)
+                .accessibilityLabel("Program page")
+        } else if let media = stack.media {
             Group {
                 if let letter = media.placeholderLetter, let mapped = resolvePlaceholderSource?(letter) {
                     AssignedSourcePreview(
@@ -836,6 +873,8 @@ struct CanvasObjectShapeLayer: View {
     @Environment(\.preferSharedProgramClock) private var lockToProgramClock
     @Environment(\.mirrorsProgramPlayer) private var mirrorsProgramPlayer
     @Environment(\.programRenderPaused) private var programRenderPaused
+    @Environment(\.proShowProgramVideoInput) private var programVideoInput
+    @Environment(\.proShowShowsProgramVideoLayer) private var showsProgramVideoLayer
 
     var body: some View {
         let path = CanvasObjectDrawing.shapePath(for: object, size: CGSize(width: width, height: height), scale: scale)
@@ -853,9 +892,41 @@ struct CanvasObjectShapeLayer: View {
         MediaFrameStyle.from(object, scale: scale)
     }
 
+    private var paintsProgramCanvasVideo: Bool {
+        guard playsAssignedVideo, programVideoInput != nil else { return false }
+        return ProgramLiveVideoRouting.canvasUsesProgramInput(
+            assigned: object.assignedSource,
+            objectKind: object.kind,
+            programInput: programVideoInput,
+            showsProgramVideoLayer: showsProgramVideoLayer
+        )
+    }
+
     @ViewBuilder
     private func assignedOverlay(_ path: Path) -> some View {
-        if let assigned = resolvedAssignedSource(), assigned.isMappedFill {
+        if paintsProgramCanvasVideo {
+            ZStack {
+                Color.black
+                VStack(spacing: 6) {
+                    Image(systemName: "video.fill")
+                        .font(.title2)
+                    Text(object.name.isEmpty ? "Camera" : object.name)
+                        .font(.system(size: 11, weight: .semibold))
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                }
+                .foregroundStyle(.white.opacity(0.85))
+                .padding(8)
+                LivePixelPreview(
+                    endpoint: programVideoInput?.endpoint,
+                    sourceID: programVideoInput?.id.uuidString,
+                    style: mediaStyle,
+                    isPaused: programRenderPaused
+                )
+            }
+            .frame(width: width, height: height)
+            .mask(path)
+        } else if let assigned = resolvedAssignedSource(), assigned.isMappedFill {
             AssignedSourcePreview(
                 source: assigned,
                 canvasObjectKind: object.kind,
@@ -891,6 +962,11 @@ struct CanvasObjectShapeLayer: View {
             }
                 .frame(width: width, height: height)
                 .opacity(mediaStyle.opacity)
+        } else if object.kind == .qrCode {
+            QRCodeCanvasView(payload: object.text.isEmpty ? object.token : object.text)
+                .frame(width: width, height: height)
+                .mask(path)
+                .opacity(mediaStyle.opacity)
         } else if object.fill.type == .image, let image = ResolvedCanvasMedia.image(at: object.fill.imageURI) {
             let offset = MediaFrameEngine.imageOffset(style: mediaStyle, width: width, height: height)
             image
@@ -925,7 +1001,9 @@ struct CanvasObjectShapeLayer: View {
 
     @ViewBuilder
     private func filled(_ path: Path) -> some View {
-        if object.fill.type == .none {
+        if object.kind == .qrCode {
+            path.fill(Color.white)
+        } else if object.fill.type == .none {
             path.fill(.clear)
         } else if object.fill.type == .image, ResolvedCanvasMedia.image(at: object.fill.imageURI) != nil {
             path.fill(.clear)
@@ -1053,6 +1131,34 @@ struct ProgramSlideCanvas: View {
     }
 }
 
+/// Slide grid / rundown thumbs — same live camera pixels as program output, not an empty video region.
+struct ProgramSlideThumbnailPreview: View {
+    @Bindable var controller: ShowController
+    let slide: Slide
+    var objects: [CanvasObject]
+    var canvasWidth: Double = CanvasConfig.width
+    var canvasHeight: Double = CanvasConfig.height
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 15.0, paused: reduceMotion)) { _ in
+            let videoInput = controller.previewVideoInput(for: slide, forThumbnail: true)
+            ProgramSlideCanvas(
+                objects: objects,
+                canvasWidth: canvasWidth,
+                canvasHeight: canvasHeight,
+                playsAssignedVideo: true,
+                evaluationMode: .thumbnailPreview
+            )
+            .environment(\.proShowVideoInputs, controller.videoInputs)
+            .environment(\.proShowProgramVideoInput, videoInput)
+            .environment(\.proShowShowsProgramVideoLayer, false)
+        }
+        .onAppear { controller.prepareSlidePreviewCapture(for: slide) }
+        .onChange(of: slide.id) { _, _ in controller.prepareSlidePreviewCapture(for: slide) }
+    }
+}
+
 private struct ProgramCanvasObjectView: View {
     let object: CanvasObject
     var canvasObjects: [CanvasObject] = []
@@ -1079,7 +1185,8 @@ private struct ProgramCanvasObjectView: View {
         let label = Group {
             if object.isTextLike {
                 objectLabel(state)
-                    .canvasTextBoxFrame(object: object, width: width, height: height, scale: scale)
+                    .frame(width: width, height: height)
+                    .clipped()
             } else {
                 objectLabel(state)
                     .frame(width: width, height: height, alignment: .topLeading)
@@ -1220,15 +1327,9 @@ private struct ProgramCanvasObjectView: View {
                    context: context,
                    colorConfig: TickerConfigStore.shared.colorConfig
                ) {
-                CanvasStaticAttributedTextView(object: object, attributed: liveQuote, scale: scale)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: object.canvasTextFrameAlignment)
+                CanvasStaticAttributedTextView(object: object, attributed: liveQuote, layoutScale: scale)
             } else {
-            Text(AttributedString(TextAttributeConverter.makeAttributedString(
-                object: object,
-                text: value,
-                scale: scale
-            )))
-            .multilineTextAlignment(textAlignment)
+                CanvasRasterizedTextView(object: object, text: value, layoutScale: scale)
             }
             #else
             Text(value)
@@ -1252,12 +1353,7 @@ private struct ProgramCanvasObjectView: View {
                 .kerning(object.textLayout.characterSpacing * scale)
             #endif
         }
-        .modifier(LoopingTextFit(layout: object.textLayout, maxLines: CanvasTextBoxLayout.autoFitMaxLines))
-        .frame(
-            maxWidth: expands ? .infinity : nil,
-            maxHeight: expands ? .infinity : nil,
-            alignment: CanvasTextBoxLayout.frameAlignment(for: object)
-        )
+        .frame(maxWidth: expands ? .infinity : nil, maxHeight: expands ? .infinity : nil)
     }
 
     private var layerBlend: BlendMode {
@@ -1333,3 +1429,533 @@ private struct ProgramCanvasObjectView: View {
         }
     }
 }
+
+#if os(macOS)
+/// Audience program page — same raster as stream encode, centered with `pageFitStyle`.
+private struct ProgramPageAudiencePreview: View {
+    var pageURL: String?
+    var isPaused: Bool
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 20.0, paused: isPaused)) { _ in
+            let raster = ProgramPageRaster.shared
+            let _ = raster.refreshIfNeeded()
+            ZStack {
+                Color.black
+                LivePixelPreview(
+                    pixelBuffer: raster.displayBuffer(for: pageURL),
+                    stamp: raster.presentationStamp,
+                    style: MediaFrameEngine.pageFitStyle,
+                    isPaused: isPaused
+                )
+            }
+        }
+    }
+}
+
+/// Off-screen copy of the page so the stream composite gets the same picture.
+@MainActor
+final class ProgramPageRaster: NSObject, WKNavigationDelegate {
+    static let shared = ProgramPageRaster()
+
+    private enum Slot {
+        case live
+        case prefetch
+    }
+
+    private static let maxCacheBytes = 64 * 1024 * 1024
+
+    private var prefetchQueue: [String] = []
+
+    private var liveWebView: WKWebView?
+    private var liveWindow: NSWindow?
+    private var liveURL: String?
+
+    private var prefetchWebView: WKWebView?
+    private var prefetchWindow: NSWindow?
+    private var prefetchURL: String?
+
+    private var buffer: CVPixelBuffer?
+    private var bufferURL: String?
+    private var frameCache: [(url: String, buffer: CVPixelBuffer)] = []
+
+    private var snapshottingLive = false
+    private var snapshottingPrefetch = false
+    private var snapshotQueuedLive = false
+    private var snapshotQueuedPrefetch = false
+    private var prefetchHoldingForSettle = false
+    private var liveSettleUntil = Date.distantPast
+    private var liveLoadFailed = false
+    private var lastSnapshot = Date.distantPast
+    private(set) var presentationStamp: TimeInterval = 0
+
+    var livePageURL: String? { liveURL }
+
+    func isLivePage(_ urlString: String) -> Bool {
+        guard !liveLoadFailed else { return false }
+        guard let liveURL else { return false }
+        return pagesMatch(liveURL, urlString) && bufferURL == liveURL && buffer != nil
+    }
+
+    /// Same URL already in the live web view — skip `load` so double-click go-live does not refresh.
+    func isPageShowing(_ urlString: String) -> Bool {
+        guard let liveURL, pagesMatch(liveURL, urlString) else { return false }
+        if isLivePage(urlString) { return true }
+        guard let web = liveWebView else { return false }
+        if web.isLoading {
+            let current = web.url?.absoluteString ?? ""
+            return current.isEmpty || pagesMatch(current, urlString)
+        }
+        let current = web.url?.absoluteString ?? ""
+        guard !current.isEmpty else { return false }
+        return pagesMatch(current, urlString)
+    }
+
+    func displayBuffer(for url: String?) -> CVPixelBuffer? {
+        guard let url else { return nil }
+        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if liveLoadFailed, let liveURL, pagesMatch(liveURL, trimmed) {
+            return ProgramPageViewport.loadingPlatePixelBuffer(
+                label: ProgramPageViewport.displayHost(for: trimmed),
+                subtitle: "Page didn't load"
+            )
+        }
+        if let bufferURL, let buffer, pagesMatch(bufferURL, trimmed) { return buffer }
+        if let cached = cachedFrame(for: trimmed) { return cached }
+        return ProgramPageViewport.loadingPlatePixelBuffer(
+            label: ProgramPageViewport.displayHost(for: trimmed)
+        )
+    }
+
+    func releaseOffscreenWebViews() {
+        prefetchQueue.removeAll()
+        frameCache.removeAll()
+        buffer = nil
+        bufferURL = nil
+        liveURL = nil
+        teardownPrefetch()
+        liveWebView?.stopLoading()
+        liveWebView = nil
+        liveWindow?.orderOut(nil)
+        liveWindow = nil
+    }
+
+    func load(_ urlString: String?) {
+        guard let urlString, let url = URL(string: urlString) else {
+            liveURL = nil
+            buffer = nil
+            bufferURL = nil
+            liveWebView?.stopLoading()
+            liveWindow?.orderOut(nil)
+            return
+        }
+
+        if isPageShowing(urlString) { return }
+
+        liveURL = urlString
+        liveLoadFailed = false
+        liveSettleUntil = .distantPast
+        if let cached = cachedFrame(for: urlString) {
+            buffer = cached
+            bufferURL = urlString
+            presentationStamp = Date().timeIntervalSinceReferenceDate
+        }
+
+        if let prefetchURL, pagesMatch(prefetchURL, urlString), promotePrefetchToLiveIfMatching(urlString) {
+            return
+        }
+
+        let web = ensureLiveWebView()
+        web.navigationDelegate = self
+        if shouldNavigate(web, to: urlString, url: url) {
+            web.load(URLRequest(url: url))
+        } else if !web.isLoading, !isLivePage(urlString) {
+            scheduleSnapshot(from: web, slot: .live, delay: 0.05)
+        }
+    }
+
+    /// Operator menu — force navigation reload for the live program page raster.
+    func reload(_ urlString: String?) {
+        guard let urlString, let url = URL(string: urlString) else { return }
+        liveURL = urlString
+        liveLoadFailed = false
+        liveSettleUntil = .distantPast
+        let web = ensureLiveWebView()
+        web.navigationDelegate = self
+        if let current = web.url?.absoluteString, pagesMatch(current, urlString), !web.isLoading {
+            web.reload()
+        } else {
+            web.load(URLRequest(url: url))
+        }
+    }
+
+    /// Warm the next page only. Snapshots land in the frame cache.
+    func prefetch(_ urlStrings: [String]) {
+        guard let trimmed = urlStrings.lazy
+            .map({ $0.trimmingCharacters(in: .whitespacesAndNewlines) })
+            .first(where: { !$0.isEmpty && shouldEnqueuePrefetch($0) })
+        else { return }
+        prefetchQueue = [trimmed]
+        drainPrefetchQueue()
+    }
+
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        guard slot(of: webView) == .live, let liveURL else { return }
+        guard webViewMatchesExpectedURL(webView, expected: liveURL) else { return }
+        if isLivePage(liveURL) { return }
+        scheduleSnapshot(from: webView, slot: .live, delay: 0.35)
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        let slot = slot(of: webView)
+        let urlString = slot == .live ? liveURL : prefetchURL
+        guard urlString != nil else { return }
+        if slot == .live {
+            liveLoadFailed = false
+            liveSettleUntil = Date().addingTimeInterval(2.5)
+        } else {
+            prefetchHoldingForSettle = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            ProgramPageViewport.fitDocument(in: webView) {
+                self.scheduleSnapshot(from: webView, slot: slot, delay: 0)
+                if slot == .prefetch {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.15) {
+                        self.prefetchHoldingForSettle = false
+                        self.scheduleSnapshot(from: webView, slot: .prefetch, delay: 0)
+                    }
+                }
+            }
+        }
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        handleNavigationFailure(webView, error: error)
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        handleNavigationFailure(webView, error: error)
+    }
+
+    func refreshIfNeeded() {
+        guard let liveURL, !liveLoadFailed else { return }
+        guard let liveWebView else { return }
+        guard webViewMatchesExpectedURL(liveWebView, expected: liveURL) else { return }
+        let settling = Date() < liveSettleUntil
+        let interval = settling ? 0.45 : 0.75
+        guard !snapshottingLive else { return }
+        guard Date().timeIntervalSince(lastSnapshot) >= interval else { return }
+        if settling {
+            ProgramPageViewport.fitDocument(in: liveWebView) {
+                self.scheduleSnapshot(from: liveWebView, slot: .live, delay: 0)
+            }
+        } else {
+            scheduleSnapshot(from: liveWebView, slot: .live, delay: 0)
+        }
+    }
+
+    private func shouldEnqueuePrefetch(_ urlString: String) -> Bool {
+        if cachedFrame(for: urlString) != nil { return false }
+        if let prefetchURL, pagesMatch(prefetchURL, urlString) { return false }
+        if let liveURL, pagesMatch(liveURL, urlString), bufferURL == urlString, buffer != nil { return false }
+        return URL(string: urlString) != nil
+    }
+
+    private func shouldPrefetch(_ urlString: String) -> Bool {
+        shouldEnqueuePrefetch(urlString)
+    }
+
+    private var isPrefetchWorkerBusy: Bool {
+        prefetchWebView != nil && (prefetchURL != nil || snapshottingPrefetch)
+    }
+
+    private func drainPrefetchQueue() {
+        guard !isPrefetchWorkerBusy else { return }
+        while !prefetchQueue.isEmpty {
+            let next = prefetchQueue.removeFirst()
+            guard shouldPrefetch(next) else { continue }
+            startPrefetch(next)
+            return
+        }
+    }
+
+    private func startPrefetch(_ urlString: String) {
+        if let prefetchURL, pagesMatch(prefetchURL, urlString) { return }
+        prefetchURL = urlString
+        guard let url = URL(string: urlString) else { return }
+        let web = ensurePrefetchWebView()
+        web.navigationDelegate = self
+        web.load(URLRequest(url: url))
+    }
+
+    private func scheduleSnapshot(from webView: WKWebView, slot: Slot, delay: TimeInterval) {
+        let work = {
+            self.captureSnapshot(from: webView, slot: slot)
+        }
+        if delay > 0 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+        } else {
+            work()
+        }
+    }
+
+    private func captureSnapshot(from webView: WKWebView, slot: Slot) {
+        if slot == .live {
+            if snapshottingLive {
+                snapshotQueuedLive = true
+                return
+            }
+            snapshottingLive = true
+        } else {
+            if snapshottingPrefetch {
+                snapshotQueuedPrefetch = true
+                return
+            }
+            snapshottingPrefetch = true
+        }
+
+        let urlString = slot == .live ? liveURL : prefetchURL
+        let config = WKSnapshotConfiguration()
+        config.rect = webView.bounds
+        webView.takeSnapshot(with: config) { image, _ in
+            Task { @MainActor in
+                let queued = slot == .live ? self.snapshotQueuedLive : self.snapshotQueuedPrefetch
+                if slot == .live {
+                    self.snapshottingLive = false
+                    self.snapshotQueuedLive = false
+                    self.lastSnapshot = Date()
+                } else {
+                    self.snapshottingPrefetch = false
+                    self.snapshotQueuedPrefetch = false
+                }
+                if queued {
+                    self.scheduleSnapshot(from: webView, slot: slot, delay: 0.05)
+                }
+                guard let urlString, let image, let next = Self.buffer(from: image) else {
+                    if slot == .prefetch, !self.prefetchHoldingForSettle {
+                        self.teardownPrefetch()
+                        self.drainPrefetchQueue()
+                    }
+                    return
+                }
+                if slot == .live, !self.webViewMatchesExpectedURL(webView, expected: urlString) {
+                    return
+                }
+                self.storeCachedFrame(url: urlString, buffer: next)
+                if slot == .live, let liveURL = self.liveURL, self.pagesMatch(liveURL, urlString) {
+                    self.buffer = next
+                    self.bufferURL = urlString
+                    self.presentationStamp = Date().timeIntervalSinceReferenceDate
+                } else if slot == .prefetch, let prefetchURL = self.prefetchURL, self.pagesMatch(prefetchURL, urlString) {
+                    if let liveURL = self.liveURL, self.pagesMatch(liveURL, urlString) {
+                        self.buffer = next
+                        self.bufferURL = urlString
+                        self.presentationStamp = Date().timeIntervalSinceReferenceDate
+                    }
+                    if !self.prefetchHoldingForSettle {
+                        self.teardownPrefetch()
+                        self.drainPrefetchQueue()
+                    }
+                }
+            }
+        }
+    }
+
+    private func handleNavigationFailure(_ webView: WKWebView, error: Error) {
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain, nsError.code == NSURLErrorCancelled { return }
+        if slot(of: webView) == .prefetch {
+            prefetchHoldingForSettle = false
+            teardownPrefetch()
+            drainPrefetchQueue()
+            return
+        }
+        guard let liveURL else { return }
+        liveLoadFailed = true
+        liveSettleUntil = .distantPast
+        frameCache.removeAll { pagesMatch($0.url, liveURL) }
+        buffer = ProgramPageViewport.loadingPlatePixelBuffer(
+            label: ProgramPageViewport.displayHost(for: liveURL),
+            subtitle: "Page didn't load"
+        )
+        bufferURL = liveURL
+        presentationStamp = Date().timeIntervalSinceReferenceDate
+    }
+
+    private func pagesMatch(_ lhs: String, _ rhs: String) -> Bool {
+        PromptWebsiteURL.samePage(lhs, rhs)
+    }
+
+    private func shouldNavigate(_ web: WKWebView, to urlString: String, url: URL) -> Bool {
+        let current = web.url?.absoluteString ?? ""
+        if current.isEmpty { return true }
+        if pagesMatch(current, urlString) { return false }
+        return current != url.absoluteString
+    }
+
+    private func webViewMatchesExpectedURL(_ web: WKWebView, expected: String) -> Bool {
+        let current = web.url?.absoluteString ?? ""
+        if current.isEmpty { return true }
+        return pagesMatch(current, expected)
+    }
+
+    /// When prefetch already holds this URL, promote that web view to live instead of reloading twice.
+    @discardableResult
+    private func promotePrefetchToLiveIfMatching(_ urlString: String) -> Bool {
+        guard let prefetchURL, pagesMatch(prefetchURL, urlString), let incoming = prefetchWebView else {
+            return false
+        }
+
+        if let oldLive = liveWebView, oldLive !== incoming {
+            oldLive.stopLoading()
+            oldLive.navigationDelegate = nil
+            liveWindow?.orderOut(nil)
+            liveWebView = nil
+            liveWindow = nil
+        }
+
+        liveWebView = incoming
+        liveWindow = prefetchWindow
+        incoming.navigationDelegate = self
+        prefetchWebView = nil
+        prefetchWindow = nil
+        self.prefetchURL = nil
+
+        if buffer == nil, let cached = cachedFrame(for: urlString) {
+            buffer = cached
+            bufferURL = urlString
+            presentationStamp = Date().timeIntervalSinceReferenceDate
+        }
+
+        if !incoming.isLoading {
+            ProgramPageViewport.fitDocument(in: incoming) {
+                self.scheduleSnapshot(from: incoming, slot: .live, delay: 0)
+            }
+        }
+        return true
+    }
+
+    private func cachedFrame(for url: String) -> CVPixelBuffer? {
+        frameCache.first(where: { pagesMatch($0.url, url) })?.buffer
+    }
+
+    private func storeCachedFrame(url: String, buffer: CVPixelBuffer) {
+        frameCache.removeAll { $0.url == url }
+        frameCache.insert((url, buffer), at: 0)
+        var total = frameCache.reduce(0) { $0 + frameBytes($1.buffer) }
+        while frameCache.count > 1, total > Self.maxCacheBytes {
+            let dropped = frameCache.removeLast()
+            total -= frameBytes(dropped.buffer)
+        }
+    }
+
+    private func frameBytes(_ buffer: CVPixelBuffer) -> Int {
+        let width = CVPixelBufferGetWidth(buffer)
+        let height = CVPixelBufferGetHeight(buffer)
+        return max(1, width * height * 4)
+    }
+
+    private func slot(of webView: WKWebView) -> Slot {
+        webView === prefetchWebView ? .prefetch : .live
+    }
+
+    private func teardownPrefetch() {
+        prefetchURL = nil
+        prefetchWebView?.stopLoading()
+        prefetchWebView = nil
+        prefetchWindow?.orderOut(nil)
+        prefetchWindow = nil
+    }
+
+    private func ensureLiveWebView() -> WKWebView {
+        if let liveWebView { return liveWebView }
+        let pair = makeOffscreenWebView()
+        liveWebView = pair.webView
+        liveWindow = pair.window
+        return pair.webView
+    }
+
+    private func ensurePrefetchWebView() -> WKWebView {
+        if let prefetchWebView { return prefetchWebView }
+        let pair = makeOffscreenWebView()
+        prefetchWebView = pair.webView
+        prefetchWindow = pair.window
+        return pair.webView
+    }
+
+    private func makeOffscreenWebView() -> (webView: WKWebView, window: NSWindow) {
+        let web = ProgramPageViewport.makeWebView()
+        let host = NSWindow(
+            contentRect: NSRect(x: -4000, y: -4000, width: ProgramPageViewport.width, height: ProgramPageViewport.height),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        host.isReleasedWhenClosed = false
+        host.isOpaque = true
+        host.hasShadow = false
+        host.ignoresMouseEvents = true
+        host.isExcludedFromWindowsMenu = true
+        host.sharingType = .none
+        host.collectionBehavior = [.stationary, .ignoresCycle]
+        // A window parked off every display snapshots as a partial tile. Sit on the desktop, behind the icons.
+        if let screen = NSScreen.main {
+            host.setFrame(
+                NSRect(x: screen.frame.minX, y: screen.frame.minY, width: ProgramPageViewport.width, height: ProgramPageViewport.height),
+                display: false
+            )
+        }
+        host.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) - 1)
+        host.contentView = web
+        web.autoresizingMask = [.width, .height]
+        web.frame = host.contentView?.bounds ?? NSRect(x: 0, y: 0, width: ProgramPageViewport.width, height: ProgramPageViewport.height)
+        host.alphaValue = 1
+        host.orderFrontRegardless()
+        return (web, host)
+    }
+
+    private static let snapshotContext = CIContext(options: [.useSoftwareRenderer: false])
+
+    private static func buffer(from image: NSImage) -> CVPixelBuffer? {
+        let width = Int(ProgramPageViewport.width)
+        let height = Int(ProgramPageViewport.height)
+        guard let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+        var pixelBuffer: CVPixelBuffer?
+        let attrs: [CFString: Any] = [
+            kCVPixelBufferCGImageCompatibilityKey: true,
+            kCVPixelBufferCGBitmapContextCompatibilityKey: true,
+            kCVPixelBufferIOSurfacePropertiesKey: [:] as CFDictionary,
+            kCVPixelBufferMetalCompatibilityKey: true
+        ]
+        guard CVPixelBufferCreate(
+            kCFAllocatorDefault,
+            width,
+            height,
+            kCVPixelFormatType_32BGRA,
+            attrs as CFDictionary,
+            &pixelBuffer
+        ) == kCVReturnSuccess, let pixelBuffer else { return nil }
+        let target = CGRect(x: 0, y: 0, width: width, height: height)
+        let source = CIImage(cgImage: cg)
+        let extent = source.extent
+        guard extent.width > 0, extent.height > 0 else { return nil }
+        let scale = min(target.width / extent.width, target.height / extent.height)
+        let scaled = source.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+        let scaledExtent = scaled.extent
+        let placed = scaled.transformed(by: CGAffineTransform(
+            translationX: target.midX - scaledExtent.midX,
+            y: target.midY - scaledExtent.midY
+        ))
+        let black = CIImage(color: CIColor(red: 0, green: 0, blue: 0)).cropped(to: target)
+        let composite = placed.composited(over: black)
+        snapshotContext.render(
+            composite,
+            to: pixelBuffer,
+            bounds: target,
+            colorSpace: CGColorSpaceCreateDeviceRGB()
+        )
+        return pixelBuffer
+    }
+}
+#endif

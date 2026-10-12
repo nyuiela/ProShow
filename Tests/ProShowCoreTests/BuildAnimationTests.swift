@@ -70,6 +70,49 @@ struct BuildAnimationTests {
         #expect(abs(justBefore + (cycle - 1)) < 0.001)
         #expect(abs(justAfter + 1) < 0.001)
 
+        let unit = TickerEngine.unitDistance(contentExtent: CGFloat(width), gap: CGFloat(gap))
+        let elapsedA = 1.5
+        let elapsedB = elapsedA + cycle / speed
+        let offsetA = TickerEngine.primaryOffset(
+            elapsed: elapsedA,
+            speed: CGFloat(speed),
+            unitDistance: unit,
+            scrollForward: true
+        )
+        let offsetB = TickerEngine.primaryOffset(
+            elapsed: elapsedB,
+            speed: CGFloat(speed),
+            unitDistance: unit,
+            scrollForward: true
+        )
+        #expect(abs(offsetA - offsetB) < 0.0001)
+        let pair = TickerEngine.pairedOffsets(primary: offsetA, unitDistance: unit)
+        #expect(abs(pair.1 - pair.0 - unit) < 0.0001)
+
+        #if canImport(AppKit)
+        var object = CanvasObject(name: "Ticker", kind: .text, bounds: .init(x: 0, y: 0, width: 400, height: 80))
+        object.text = "ProShow"
+        object.textOutline.enabled = true
+        object.textOutline.width = 4
+        object.textOutline.color = "#FF0000"
+        object.textShadow.enabled = true
+        object.textShadow.blur = 6
+        let style = SlideTextAttributes.from(object: object, text: object.text, scale: 1)
+        let plain = SlideTextAttributes.from(
+            object: {
+                var o = object
+                o.textOutline.enabled = false
+                o.textShadow.enabled = false
+                return o
+            }(),
+            text: object.text,
+            scale: 1
+        )
+        let plainWidth = TextAttributeConverter.measureHorizontalCycleExtent(style: plain)
+        let styledWidth = TextAttributeConverter.measureHorizontalCycleExtent(style: style)
+        #expect(styledWidth > plainWidth)
+        #endif
+
         let id = UUID()
         let step = ElementBuildStep(
             elementId: id,
