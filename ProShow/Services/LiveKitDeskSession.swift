@@ -89,6 +89,7 @@ final class LiveKitDeskBridge {
 
 #if canImport(LiveKit)
 import Accelerate
+import VideoToolbox
 import AVFoundation
 import LiveKit
 
@@ -158,7 +159,7 @@ final class LiveKitDeskSession: NSObject, RoomDelegate {
         let track = await LocalVideoTrack.createBufferTrack(
             name: "program",
             source: .camera,
-            options: BufferCaptureOptions(dimensions: .h720_169, fps: 24)
+            options: BufferCaptureOptions(dimensions: .h720_169, fps: ProgramFramePump.targetFPS)
         )
         guard let capturer = track.capturer as? BufferCapturer else { return }
         programPump.bind(capturer)
@@ -184,9 +185,10 @@ final class LiveKitDeskSession: NSObject, RoomDelegate {
             _ = try await room.localParticipant.publish(
                 videoTrack: track,
                 options: VideoPublishOptions(
-                    encoding: VideoEncoding(maxBitrate: 2_500_000, maxFps: 24),
+                    encoding: VideoEncoding(maxBitrate: 2_500_000, maxFps: ProgramFramePump.targetFPS),
                     simulcast: false,
-                    degradationPreference: .maintainFramerateAndResolution
+                    preferredCodec: .h264,
+                    degradationPreference: .maintainFramerate
                 )
             )
             _ = try await room.localParticipant.publish(
@@ -435,27 +437,24 @@ final class ProgramFramePump: @unchecked Sendable {
         lock.unlock()
     }
 
+    /// Called on the program output bus. Only a cheap gate runs here; the 720p scale
+    /// and the hand-off to WebRTC run on the capture queue so the composite never waits.
     func push(_ buffer: CVPixelBuffer) {
         let now = CFAbsoluteTimeGetCurrent()
         lock.lock()
-        guard armed else {
+        guard armed, let capturer else {
             lock.unlock()
             return
         }
-        if now - lastPush < (1.0 / 24.0) || captureBusy {
+        // Accept frames on the program cadence. A strict 1/fps gate against a 30 fps
+        // source dropped every other frame (uneven 33/66 ms gaps, about 15 fps).
+        if now - lastPush < Self.minInterval || captureBusy {
             lock.unlock()
             return
         }
         lastPush = now
         captureBusy = true
-        let capturer = capturer
         lock.unlock()
-        guard let capturer else {
-            lock.lock()
-            captureBusy = false
-            lock.unlock()
-            return
-        }
         let width = CVPixelBufferGetWidth(buffer)
         let height = CVPixelBufferGetHeight(buffer)
         guard width > 16, height > 16 else {
@@ -464,19 +463,18 @@ final class ProgramFramePump: @unchecked Sendable {
             lock.unlock()
             return
         }
-        guard let fitted = Self.fit720(buffer) else {
-            lock.lock()
-            captureBusy = false
-            lock.unlock()
-            return
-        }
         Self.captureQueue.async { [weak self] in
-            capturer.capture(fitted)
+            if let fitted = Self.fit720(buffer) {
+                capturer.capture(fitted)
+            }
             self?.lock.lock()
             self?.captureBusy = false
             self?.lock.unlock()
         }
     }
+
+    static let targetFPS = 30
+    private static let minInterval = 0.75 / Double(targetFPS)
 
     private var armed = false
     private var captureBusy = false
@@ -504,63 +502,41 @@ final class ProgramFramePump: @unchecked Sendable {
         return buffer
     }
 
-    /// One 1280×720 picture so the encoder never changes size. A size change shows up as a blink on the guest page.
+    /// One 1280x720 picture so the encoder never changes size. A size change shows up as a blink on the guest page.
+    /// Scale and letterbox in one VideoToolbox pass into a pool owned only by LiveKit,
+    /// so WebRTC never encodes a buffer the program pool is recycling.
+    private static var transfer: VTPixelTransferSession?
+    private static var returnPool: CVPixelBufferPool?
+
     private static func fit720(_ source: CVPixelBuffer) -> CVPixelBuffer? {
-        let sw = CVPixelBufferGetWidth(source)
-        let sh = CVPixelBufferGetHeight(source)
-        guard sw > 0, sh > 0, CVPixelBufferGetPixelFormatType(source) == kCVPixelFormatType_32BGRA else { return nil }
-        if sw == 1280, sh == 720 { return copy(source) }
-        let scale = min(1280.0 / Double(sw), 720.0 / Double(sh))
-        let dw = max(2, Int((Double(sw) * scale).rounded(.down)) & ~1)
-        let dh = max(2, Int((Double(sh) * scale).rounded(.down)) & ~1)
-        let fillsFrame = dw == 1280 && dh == 720
-        guard let scaled = make(width: dw, height: dh, format: kCVPixelFormatType_32BGRA) else { return nil }
-        guard CVPixelBufferLockBaseAddress(source, .readOnly) == kCVReturnSuccess else { return nil }
-        guard CVPixelBufferLockBaseAddress(scaled, []) == kCVReturnSuccess else {
-            CVPixelBufferUnlockBaseAddress(source, .readOnly)
-            return nil
+        guard CVPixelBufferGetWidth(source) > 0, CVPixelBufferGetHeight(source) > 0 else { return nil }
+        if transfer == nil {
+            var session: VTPixelTransferSession?
+            guard VTPixelTransferSessionCreate(allocator: kCFAllocatorDefault, pixelTransferSessionOut: &session) == noErr,
+                  let session else { return nil }
+            VTSessionSetProperty(session, key: kVTPixelTransferPropertyKey_ScalingMode, value: kVTScalingMode_Letterbox)
+            VTSessionSetProperty(session, key: kVTPixelTransferPropertyKey_RealTime, value: kCFBooleanTrue)
+            transfer = session
         }
-        var src = vImage_Buffer(
-            data: CVPixelBufferGetBaseAddress(source),
-            height: vImagePixelCount(sh),
-            width: vImagePixelCount(sw),
-            rowBytes: CVPixelBufferGetBytesPerRow(source)
-        )
-        var mid = vImage_Buffer(
-            data: CVPixelBufferGetBaseAddress(scaled),
-            height: vImagePixelCount(dh),
-            width: vImagePixelCount(dw),
-            rowBytes: CVPixelBufferGetBytesPerRow(scaled)
-        )
-        let error = vImageScale_ARGB8888(&src, &mid, nil, vImage_Flags(kvImageHighQualityResampling))
-        CVPixelBufferUnlockBaseAddress(scaled, [])
-        CVPixelBufferUnlockBaseAddress(source, .readOnly)
-        guard error == kvImageNoError else { return nil }
-        if fillsFrame { return scaled }
-        guard let dest = make(width: 1280, height: 720, format: kCVPixelFormatType_32BGRA) else { return nil }
-        guard CVPixelBufferLockBaseAddress(scaled, .readOnly) == kCVReturnSuccess else { return nil }
-        guard CVPixelBufferLockBaseAddress(dest, []) == kCVReturnSuccess,
-              let midBase = CVPixelBufferGetBaseAddress(scaled),
-              let dstBase = CVPixelBufferGetBaseAddress(dest) else {
-            CVPixelBufferUnlockBaseAddress(scaled, .readOnly)
-            return nil
+        if returnPool == nil {
+            let attrs: [String: Any] = [
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+                kCVPixelBufferWidthKey as String: 1280,
+                kCVPixelBufferHeightKey as String: 720,
+                kCVPixelBufferIOSurfacePropertiesKey as String: [:] as [String: Any],
+            ]
+            var pool: CVPixelBufferPool?
+            CVPixelBufferPoolCreate(kCFAllocatorDefault,
+                                    [kCVPixelBufferPoolMinimumBufferCountKey as String: 6] as CFDictionary,
+                                    attrs as CFDictionary, &pool)
+            returnPool = pool
         }
-        defer {
-            CVPixelBufferUnlockBaseAddress(dest, [])
-            CVPixelBufferUnlockBaseAddress(scaled, .readOnly)
-        }
-        memset(dstBase, 0, CVPixelBufferGetBytesPerRow(dest) * 720)
-        let originX = (1280 - dw) / 2
-        let originY = (720 - dh) / 2
-        let midStride = CVPixelBufferGetBytesPerRow(scaled)
-        let dstStride = CVPixelBufferGetBytesPerRow(dest)
-        for row in 0..<dh {
-            dstBase.advanced(by: (originY + row) * dstStride + originX * 4).copyMemory(
-                from: midBase.advanced(by: row * midStride),
-                byteCount: dw * 4
-            )
-        }
-        return dest
+        guard let transfer, let returnPool else { return nil }
+        var out: CVPixelBuffer?
+        guard CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, returnPool, &out) == kCVReturnSuccess,
+              let out else { return nil }
+        guard VTPixelTransferSessionTransferImage(transfer, from: source, to: out) == noErr else { return nil }
+        return out
     }
 
     private var lastPush: CFAbsoluteTime = 0
