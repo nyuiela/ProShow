@@ -292,9 +292,7 @@ struct LayerShotContextMenu: View {
         }
         if isLive {
             Button("Clear Live", systemImage: "record.circle") {
-                let name = controller.masterLayers.indices.contains(layerIndex)
-                    ? controller.masterLayers[layerIndex].title
-                    : "Layer \(layerIndex + 1)"
+                let name = controller.masterLayers.displayName(at: layerIndex)
                 controller.requestDeskDestructiveConfirm(
                     .clearLiveShot(layerName: name, layerIndex: layerIndex)
                 )

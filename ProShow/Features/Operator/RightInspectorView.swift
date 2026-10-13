@@ -820,9 +820,7 @@ private struct LayersActionPane: View {
                 }
                 Button("Clear Live on Selected", systemImage: "record.circle") {
                     let index = controller.addShotLayerIndex
-                    let name = controller.masterLayers.indices.contains(index)
-                        ? controller.masterLayers[index].title
-                        : "Layer \(index + 1)"
+                    let name = controller.masterLayers.displayName(at: index)
                     controller.requestDeskDestructiveConfirm(.clearLiveShot(layerName: name, layerIndex: index))
                 }
             } label: {
@@ -843,7 +841,7 @@ private struct LayersActionPane: View {
             ForEach(Array(controller.masterLayers.enumerated()), id: \.element.id) { index, layer in
                 LiveSourceRowView(controller: controller, layer: layer, index: index) {
                     renameLayerID = layer.id
-                    renameTitle = layer.title
+                    renameTitle = layer.hasDefaultTitle ? "" : layer.title
                 }
                 if index < controller.masterLayers.count - 1 {
                     InspectorRowRule()
@@ -1002,6 +1000,8 @@ private struct LiveSourceRowView: View {
     let index: Int
     let onRename: () -> Void
 
+    private var displayName: String { controller.masterLayers.displayName(at: index) }
+
     @State private var dragOffset: CGFloat = 0
 
     private var isSelected: Bool { controller.addShotLayerIndex == index }
@@ -1028,7 +1028,7 @@ private struct LiveSourceRowView: View {
             .contentShape(Rectangle())
             .simultaneousGesture(swipeGesture)
             .accessibilityElement(children: .contain)
-            .accessibilityAction(named: Text("Clear live on \(layer.title)")) {
+            .accessibilityAction(named: Text("Clear live on \(displayName)")) {
                 clearLive()
             }
     }
@@ -1052,7 +1052,7 @@ private struct LiveSourceRowView: View {
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 1) {
                         HStack(spacing: 6) {
-                            Text(layer.title)
+                            Text(displayName)
                                 .font(DeskType.meta.weight(.semibold))
                                 .foregroundStyle(ShowSidebarPalette.title)
                                 .lineLimit(1)
@@ -1073,7 +1073,7 @@ private struct LiveSourceRowView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(DeskPressButtonStyle())
-            .accessibilityLabel(layer.title)
+            .accessibilityLabel(displayName)
             .accessibilityValue(liveShot.map { "Live \($0.name)" } ?? (layer.shots.isEmpty ? "No shots" : "\(layer.shots.count) shots"))
             .accessibilityAddTraits(isSelected ? .isSelected : [])
 
@@ -1095,8 +1095,8 @@ private struct LiveSourceRowView: View {
                 }
                 .buttonStyle(DeskPressButtonStyle())
                 .padding(.trailing, 4)
-                .help("Clear live on \(layer.title)")
-                .accessibilityLabel("Clear live on \(layer.title)")
+                .help("Clear live on \(displayName)")
+                .accessibilityLabel("Clear live on \(displayName)")
             }
         }
     }
@@ -1160,8 +1160,8 @@ private struct LiveSourceRowView: View {
         .buttonStyle(DeskPressButtonStyle())
         .disabled(!controller.masterLayerLiveShotCarriesAudio(layerIndex: index))
         .opacity(controller.masterLayerLiveShotCarriesAudio(layerIndex: index) ? 1 : 0.35)
-        .help(isAudioMuted ? "Unmute \(liveShot?.name ?? layer.title)" : "Mute \(liveShot?.name ?? layer.title)")
-        .accessibilityLabel(isAudioMuted ? "Unmute \(liveShot?.name ?? layer.title)" : "Mute \(liveShot?.name ?? layer.title)")
+        .help(isAudioMuted ? "Unmute \(liveShot?.name ?? displayName)" : "Mute \(liveShot?.name ?? displayName)")
+        .accessibilityLabel(isAudioMuted ? "Unmute \(liveShot?.name ?? displayName)" : "Mute \(liveShot?.name ?? displayName)")
     }
 
     private var actionsMenu: some View {
@@ -1226,8 +1226,8 @@ private struct LiveSourceRowView: View {
                 .contentShape(Rectangle())
         }
         .modifier(InspectorMenuChrome())
-        .help("\(layer.title) actions")
-        .accessibilityLabel("\(layer.title) actions")
+        .help("\(displayName) actions")
+        .accessibilityLabel("\(displayName) actions")
     }
 
     private var swipeReveal: some View {
@@ -1274,7 +1274,7 @@ private struct LiveSourceRowView: View {
     private func clearLive() {
         guard canClearLive else { return }
         controller.requestDeskDestructiveConfirm(
-            .clearLiveShot(layerName: layer.title, layerIndex: index)
+            .clearLiveShot(layerName: displayName, layerIndex: index)
         )
     }
 }

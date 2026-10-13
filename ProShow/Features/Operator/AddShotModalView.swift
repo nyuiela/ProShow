@@ -51,7 +51,7 @@ struct AddShotModalView: View {
     static let modalMaxHeight: CGFloat = 680
 
     private var layerTitle: String {
-        controller.masterLayers[safe: controller.addShotLayerIndex]?.title ?? "Main Layer 1"
+        controller.masterLayers.displayName(at: controller.addShotLayerIndex)
     }
 
     private var groups: [SourceGroup] {

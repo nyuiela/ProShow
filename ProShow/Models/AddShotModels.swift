@@ -370,3 +370,62 @@ enum AddShotSearch {
         return tokens.allSatisfy { haystack.contains($0) }
     }
 }
+
+// MARK: - Operator-facing layer names
+
+extension SourceType {
+    /// Short kind name shown to operators instead of the internal layer number.
+    var layerKindName: String {
+        switch self {
+        case .systemCamera, .ndiSource, .srtStream: "Camera"
+        case .systemMicrophone: "Mic"
+        case .systemAudioCapture: "Audio"
+        case .systemDisplay: "Screen"
+        case .systemWindow: "Window"
+        case .webPage: "Web"
+        case .rendezvousGuest: "Guest"
+        case .mediaFile: "Media"
+        case .libraryShow, .templateLayout: "Slide"
+        case .solidColor: "Color"
+        case .placeholderSlot: "Placeholder"
+        }
+    }
+}
+
+extension MasterLayer {
+    /// Default titles ("Main Layer 3") are internal. Anything else was typed by the operator.
+    var hasDefaultTitle: Bool {
+        let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if t.isEmpty { return true }
+        guard t.hasPrefix("Main Layer") else { return false }
+        return Int(t.dropFirst("Main Layer".count).trimmingCharacters(in: .whitespaces)) != nil
+    }
+
+    var liveShot: LayerShot? {
+        guard let liveShotID else { return nil }
+        return shots.first { $0.id == liveShotID }
+    }
+}
+
+extension Array where Element == MasterLayer {
+    /// Content-based name: "Camera", "Mic", "Empty". Same kind twice adds the source
+    /// name when it is short and distinct, else "Camera 2". The index stays internal.
+    func displayName(at index: Int) -> String {
+        guard indices.contains(index) else { return "Empty" }
+        let layer = self[index]
+        if !layer.hasDefaultTitle { return layer.title }
+        guard let shot = layer.liveShot else { return "Empty" }
+        let kind = shot.source.sourceType.layerKindName
+        let sameKind = indices.filter { i in
+            self[i].hasDefaultTitle && self[i].liveShot?.source.sourceType.layerKindName == kind
+        }
+        guard sameKind.count > 1 else { return kind }
+        let name = shot.source.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let names = sameKind.compactMap { self[$0].liveShot?.source.name.trimmingCharacters(in: .whitespacesAndNewlines) }
+        if !name.isEmpty, name.count <= 18, names.filter({ $0 == name }).count == 1 {
+            return name
+        }
+        let position = (sameKind.firstIndex(of: index) ?? 0) + 1
+        return position == 1 ? kind : "\(kind) \(position)"
+    }
+}
