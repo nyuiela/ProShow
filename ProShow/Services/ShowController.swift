@@ -4224,6 +4224,10 @@ final class ShowController {
     var isProgramMediaMuted: Bool {
         if audioIO.programMuted || compositor.stack.audioMuted { return true }
         if compositor.isLayerAudioMuted(.media) { return true }
+        // Slide layer mute silences slide audio when no media layer owns playback.
+        if compositor.isLayerAudioMuted(.slide), compositor.stack.media == nil || compositor.stack.isCleared(.media) {
+            return true
+        }
         if compositor.stack.isCleared(.media) {
             if let media = compositor.stack.media, !media.clearsLayer, !media.isAudioMuted,
                !compositor.isLayerAudioMuted(.media) {
@@ -7674,6 +7678,16 @@ final class ShowController {
                 ]
             }
             return (200, ControlJSON.encode(["ok": true, "mic_live": isProgramMicLive, "layers": rows]))
+        }
+        if method == "POST", parts == ["v1", "layers", "program-mute"] {
+            // Same call the program stack mute button makes.
+            let parsed = ControlHTTP.jsonObject(body)
+            guard let raw = parsed["layer"].flatMap(Int.init), let layer = RenderLayer(rawValue: raw) else {
+                return (400, #"{"ok":false,"error":"missing_layer"}"#)
+            }
+            let can = canMuteProgramLayer(layer)
+            if can { toggleProgramLayerAudio(layer) }
+            return (200, ControlJSON.encode(["ok": true, "can_mute": can, "muted": isProgramLayerAudioMuted(layer), "media_muted": isProgramMediaMuted]))
         }
         if method == "POST", parts == ["v1", "layers", "mic"] {
             // Test hook: take the system mic live on a layer, or clear that layer.

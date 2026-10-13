@@ -1390,7 +1390,7 @@ enum ProgramPCMBridge {
         appendMonitor(interleavedStereo)
     }
 
-    /// Same PCM the RTMP and recording encoders send. Guests hear this, not the monitor bus.
+    /// Room return (program minus guests). RTMP and recording keep the full mix.
     static func publishStreamMix(_ interleavedStereo: [Float]) {
         programMixListener?(interleavedStereo)
     }
@@ -1619,7 +1619,7 @@ enum ProgramAACEncoder {
         let stream = frame?.stream ?? [Float](repeating: 0, count: accessUnitSamples)
         let monitor = frame?.monitor ?? stream
         ProgramPCMBridge.appendProgramMixMonitor(monitor)
-        ProgramPCMBridge.publishStreamMix(stream)
+        ProgramPCMBridge.publishStreamMix(frame?.room ?? stream)
         Task { @MainActor in
             AudioMonitoringEngine.shared.noteProgramMixFrame(monitor)
         }
@@ -1650,7 +1650,9 @@ enum ProgramAACEncoder {
         }
     }
 
-    private static func dequeueMixedFrame() -> (stream: [Float], monitor: [Float])? {
+    private static var roomScratch: [Float] = []
+
+    private static func dequeueMixedFrame() -> (stream: [Float], monitor: [Float], room: [Float])? {
         let gains = ProgramStreamAudioGates.gainSnapshot()
         lock.lock()
         trimLanesToLiveHorizonLocked()
@@ -1673,6 +1675,10 @@ enum ProgramAACEncoder {
             lane.removeFirst(consume)
             lanes[role] = lane
         }
+        // Room return is mix-minus: everything except guests. Guests already hear each
+        // other directly in LiveKit, so this stops them hearing themselves back.
+        if roomScratch.count != take { roomScratch = [Float](repeating: 0, count: take) }
+        for index in 0..<take { roomScratch[index] = stream[index] }
         let guest = GuestProgramMixBus.mix(interleavedCount: take)
         if guest.active {
             contributed = true
@@ -1692,10 +1698,15 @@ enum ProgramAACEncoder {
         let monitorOut = monitor.map { sample in
             Float(max(-1, min(1, Double(sample) * master)))
         }
+        let roomGain = Float(master)
+        for index in 0..<take {
+            roomScratch[index] = max(-1, min(1, roomScratch[index] * roomGain))
+        }
+        let room = roomScratch
         let depthLine = laneDepthSummaryUnlocked()
         lock.unlock()
         StreamAudioPipelineDiagnostics.updateLaneDepths(depthLine)
-        return (streamOut, monitorOut)
+        return (streamOut, monitorOut, room)
     }
 
     private static func laneDepthSummaryUnlocked() -> String {
