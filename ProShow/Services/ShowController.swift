@@ -709,7 +709,7 @@ final class ShowController {
         syncActivePropsToCompositor()
         let incomingMedia = resolvedAssociatedMedia(for: slide)
         let decision = MediaActionEvaluator.evaluate(
-            current: compositor.stack.media,
+            current: liveMediaWithHoldState(),
             incoming: incomingMedia,
             projectRoot: mediaProjectRoot,
             layerLocked: compositor.isLayerLocked(.media)
@@ -2053,6 +2053,19 @@ final class ShowController {
         if !playback.hasProgramClock {
             applyMediaLayerDecision(.replace(incoming))
         }
+    }
+
+    /// Live Layer 3 media with Hold taken from the slide cue that owns it (Hold can change while live).
+    private func liveMediaWithHoldState() -> MediaAction? {
+        guard var current = compositor.stack.media else { return nil }
+        let root = mediaProjectRoot
+        current.hold = show.groups.contains { group in
+            group.slides.contains { slide in
+                guard let cue = slide.mediaAction, cue.hold, !cue.clearsLayer else { return false }
+                return MediaActionEvaluator.isSameAsset(cue, current, projectRoot: root)
+            }
+        }
+        return current
     }
 
     private func applyMediaLayerDecision(_ decision: MediaLayerDecision) {
@@ -7526,6 +7539,16 @@ final class ShowController {
         if method == "GET", parts == ["v1", "presentation", "active", "prev", "trigger"] {
             goPrevious()
             return (200, ControlJSON.encode(["ok": true, "action": "prev", "index": liveIndex.map { $0 as Any } ?? NSNull()]))
+        }
+        if method == "POST", parts == ["v1", "slides", "hold"] {
+            let parsed = ControlHTTP.jsonObject(body)
+            let slides = show.groups.flatMap(\.slides)
+            guard let index = parsed["index"].flatMap(Int.init), slides.indices.contains(index),
+                  slides[index].mediaAction != nil
+            else { return (404, #"{"ok":false,"error":"no_media_cue"}"#) }
+            let hold = parsed["hold"] == "true" || parsed["hold"] == "1"
+            mutateSlide(id: slides[index].id) { $0.mediaAction?.hold = hold }
+            return (200, ControlJSON.encode(["ok": true, "index": index, "hold": hold]))
         }
         if method == "POST", parts == ["v1", "slides", "trigger"] {
             let parsed = ControlHTTP.jsonObject(body)

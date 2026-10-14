@@ -21,12 +21,16 @@ enum MediaActionEvaluator {
         layerLocked: Bool = false
     ) -> MediaLayerDecision {
         if layerLocked { return .preserve }
+        // Take match rule: same source stays, different source replaces,
+        // nothing on the next slide clears unless the live media is marked Hold.
         guard let incoming else {
-            if current?.id == RundownPageMedia.id { return .clear }
-            return current == nil ? .clear : .preserve
+            guard let current else { return .clear }
+            if current.id == RundownPageMedia.id { return .clear }
+            return current.hold ? .preserve : .clear
         }
         if incoming.clearsLayer { return .clear }
         if let current, isSameAsset(current, incoming, projectRoot: projectRoot) {
+            if current.hold, incoming.hold { return .preserve }
             return incoming.forceReset ? .replace(incoming) : .preserve
         }
         return .replace(incoming)

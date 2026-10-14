@@ -18,7 +18,15 @@ struct LayerContinuityTests {
         reset.forceReset = true
 
         #expect(MediaActionEvaluator.evaluate(current: loop, incoming: same) == .preserve)
-        #expect(MediaActionEvaluator.evaluate(current: loop, incoming: nil) == .preserve)
+        #expect(MediaActionEvaluator.evaluate(current: loop, incoming: nil) == .clear)
+        var held = loop
+        held.hold = true
+        #expect(MediaActionEvaluator.evaluate(current: held, incoming: nil) == .preserve)
+        #expect(MediaActionEvaluator.evaluate(current: held, incoming: nature) == .replace(nature))
+        var heldReset = reset
+        heldReset.hold = true
+        #expect(MediaActionEvaluator.evaluate(current: held, incoming: heldReset) == .preserve)
+        #expect(MediaActionEvaluator.evaluate(current: held, incoming: .clearLayerCue()) == .clear)
         let page = MediaAction(id: RundownPageMedia.id, title: "https://example.com", tintHex: "#000000", isImage: true)
         #expect(MediaActionEvaluator.evaluate(current: page, incoming: nil) == .clear)
         #expect(MediaActionEvaluator.evaluate(current: nil, incoming: nil) == .clear)
@@ -264,5 +272,17 @@ struct LayerContinuityTests {
         controller.tickProgram()
         #expect(abs(controller.playback.playhead - 21) < 0.2)
         #expect(controller.playback.sharesClock(with: media))
+    }
+}
+
+@Suite struct MediaHoldCodingTests {
+    @Test func holdDecodesMissingAsOff() throws {
+        let json = #"{"id":"6E0F2C1A-0000-4000-8000-000000000001","title":"a","tintHex":"#000000","isImage":false}"#
+        let action = try JSONDecoder().decode(MediaAction.self, from: Data(json.utf8))
+        #expect(action.hold == false)
+        var held = action
+        held.hold = true
+        let round = try JSONDecoder().decode(MediaAction.self, from: JSONEncoder().encode(held))
+        #expect(round.hold == true)
     }
 }

@@ -211,6 +211,8 @@ struct MediaAction: Hashable, Codable, Sendable, Identifiable {
     var audioMuted: Bool? = nil
     var forceReset: Bool = false
     var clearsLayer: Bool = false
+    /// Hold: keeps playing across slides until cleared or replaced by different media.
+    var hold: Bool = false
 
     init(
         id: UUID,
@@ -222,7 +224,8 @@ struct MediaAction: Hashable, Codable, Sendable, Identifiable {
         placeholderLetter: String? = nil,
         audioMuted: Bool? = nil,
         forceReset: Bool = false,
-        clearsLayer: Bool = false
+        clearsLayer: Bool = false,
+        hold: Bool = false
     ) {
         self.id = id
         self.title = title
@@ -234,6 +237,7 @@ struct MediaAction: Hashable, Codable, Sendable, Identifiable {
         self.audioMuted = audioMuted
         self.forceReset = forceReset
         self.clearsLayer = clearsLayer
+        self.hold = hold
     }
 
     static func clearLayerCue() -> MediaAction {
@@ -241,7 +245,7 @@ struct MediaAction: Hashable, Codable, Sendable, Identifiable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, title, tintHex, duration, isImage, filePath, placeholderLetter, audioMuted, forceReset, clearsLayer
+        case id, title, tintHex, duration, isImage, filePath, placeholderLetter, audioMuted, forceReset, clearsLayer, hold
     }
 
     init(from decoder: Decoder) throws {
@@ -256,6 +260,7 @@ struct MediaAction: Hashable, Codable, Sendable, Identifiable {
         audioMuted = try container.decodeIfPresent(Bool.self, forKey: .audioMuted)
         forceReset = try container.decodeIfPresent(Bool.self, forKey: .forceReset) ?? false
         clearsLayer = try container.decodeIfPresent(Bool.self, forKey: .clearsLayer) ?? false
+        hold = try container.decodeIfPresent(Bool.self, forKey: .hold) ?? false
     }
 
     func encode(to encoder: Encoder) throws {
@@ -270,6 +275,7 @@ struct MediaAction: Hashable, Codable, Sendable, Identifiable {
         try container.encodeIfPresent(audioMuted, forKey: .audioMuted)
         if forceReset { try container.encode(forceReset, forKey: .forceReset) }
         if clearsLayer { try container.encode(clearsLayer, forKey: .clearsLayer) }
+        if hold { try container.encode(hold, forKey: .hold) }
     }
 
     var isAudioMuted: Bool { audioMuted == true }

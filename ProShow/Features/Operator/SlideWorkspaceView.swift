@@ -669,6 +669,13 @@ struct SlideContextMenu: View {
         Button(slide?.isDisabled == true ? "Enable" : "Disable") {
             controller.toggleSlideDisabled(id: slideID)
         }
+        if let media = slide?.mediaAction, !media.clearsLayer {
+            Toggle("Hold Media", isOn: Binding(
+                get: { media.hold },
+                set: { value in controller.mutateSlide(id: slideID) { $0.mediaAction?.hold = value } }
+            ))
+            .help("Keeps playing across slides.")
+        }
 
         #if os(macOS)
         if controller.browserPageURL(for: slideID) != nil {
