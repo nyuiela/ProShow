@@ -7592,8 +7592,17 @@ final class ShowController {
             NotificationCenter.default.post(name: .proShowControlOpenProject, object: path)
             return (200, #"{"ok":true,"action":"open_project"}"#)
         }
+        if method == "POST", parts == ["v1", "backstage", "disconnect"] {
+            liveKitDesk.disconnect()
+            return (200, ControlJSON.encode(["ok": true, "guest_status": liveKitDesk.status]))
+        }
         if method == "POST", parts == ["v1", "backstage", "connect"] {
-            activateGuestRoomIfNeeded()
+            let parsed = ControlHTTP.jsonObject(body)
+            if ["1", "true"].contains(parsed["force"]?.lowercased() ?? "") {
+                liveKitDesk.connect(roomSlug: backstage.room.roomSlug)
+            } else {
+                activateGuestRoomIfNeeded()
+            }
             return (200, ControlJSON.encode([
                 "ok": true,
                 "guest_return": liveKitGuestReturnActive,

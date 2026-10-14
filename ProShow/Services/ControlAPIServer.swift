@@ -88,7 +88,8 @@ enum ControlHTTP {
             || parts == ["v1", "market", "ticker"]
             || parts == ["v1", "project", "open"]
             || parts == ["v1", "project", "close"]
-            || parts == ["v1", "backstage", "connect"] {
+            || parts == ["v1", "backstage", "connect"]
+            || parts == ["v1", "backstage", "disconnect"] {
             return method == "POST"
         }
         if parts == ["v1", "preflight"] || parts == ["v1", "telemetry"] || parts == ["v1", "ws"] {

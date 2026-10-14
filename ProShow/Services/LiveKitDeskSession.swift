@@ -20,7 +20,42 @@ final class LiveKitDeskBridge {
     @ObservationIgnored private var session: LiveKitDeskSession?
     #endif
 
+    /// One room transition at a time. Calls while a connect or disconnect is in flight are ignored
+    /// unless they target a different room, which is queued as the next connect.
+    @ObservationIgnored private var transitionInFlight = false
+    @ObservationIgnored private var pendingRoomSlug: String?
+    @ObservationIgnored private var connectGeneration = 0
+
+    func disconnect() {
+        #if canImport(LiveKit)
+        connectGeneration &+= 1
+        let previous = session
+        session = nil
+        hasStartedConnection = false
+        status = LiveKitDeskConfig.guestsOffStatus
+        guests = []
+        revision += 1
+        onRoomActive?(false)
+        onGuests?([])
+        transitionInFlight = true
+        Task { @MainActor in
+            await previous?.stop()
+            self.transitionInFlight = false
+            if let next = self.pendingRoomSlug {
+                self.pendingRoomSlug = nil
+                self.connect(roomSlug: next)
+            }
+        }
+        #endif
+    }
+
     func connect(roomSlug: String) {
+        #if canImport(LiveKit)
+        if transitionInFlight {
+            pendingRoomSlug = roomSlug
+            return
+        }
+        #endif
         hasStartedConnection = true
         self.roomSlug = roomSlug
         guard let credentials = LiveKitDeskConfig.load() else {
@@ -33,6 +68,7 @@ final class LiveKitDeskBridge {
         }
         #if canImport(LiveKit)
         status = "Connecting"
+        let previous = session
         let next = LiveKitDeskSession(credentials: credentials, roomSlug: roomSlug)
         session = next
         next.onGuests = { [weak self] feeds in
@@ -46,7 +82,21 @@ final class LiveKitDeskBridge {
             let active = text.localizedCaseInsensitiveContains("in room")
             self?.onRoomActive?(active)
         }
-        Task { await next.start() }
+        // Await a full teardown of the old room before the new one connects.
+        connectGeneration &+= 1
+        let generation = connectGeneration
+        transitionInFlight = true
+        Task { @MainActor in
+            await previous?.stop()
+            if generation == self.connectGeneration {
+                await next.start()
+            }
+            self.transitionInFlight = false
+            if let pending = self.pendingRoomSlug {
+                self.pendingRoomSlug = nil
+                if pending != self.roomSlug || self.session == nil { self.connect(roomSlug: pending) }
+            }
+        }
         #else
         status = "LiveKit SDK is not linked."
         #endif
@@ -111,6 +161,8 @@ final class LiveKitDeskSession: NSObject, RoomDelegate {
     private var admitInFlight: Set<String> = []
     private let programPump = ProgramFramePump()
     private var programTrack: LocalVideoTrack?
+    /// Set by stop(). A start() still in flight must not arm the feeder for a dead room.
+    private var stopped = false
 
     init(credentials: LiveKitDeskCredentials, roomSlug: String) {
         self.credentials = credentials
@@ -139,8 +191,13 @@ final class LiveKitDeskSession: NSObject, RoomDelegate {
                 token: token,
                 roomOptions: RoomOptions(adaptiveStream: false, dynacast: false)
             )
+            if stopped {
+                await room.disconnect()
+                return
+            }
             onStatus?("In room")
             await publishProgramReturn(on: room)
+            if stopped { return }
             for participant in room.remoteParticipants.values {
                 await considerAdmit(participant)
                 attachExisting(participant)
@@ -153,6 +210,33 @@ final class LiveKitDeskSession: NSObject, RoomDelegate {
 
     func pushProgramFrame(_ buffer: CVPixelBuffer) {
         programPump.push(buffer)
+    }
+
+    func stop() async {
+        stopped = true
+        ProgramAppAudioFeeder.shared.setEnabled(false)
+        ProgramPCMBridge.programMixListener = nil
+        programPump.pause()
+        let closing = room
+        room = nil
+        await closing?.disconnect()
+        // WebRTC finishes peer-connection teardown on its worker thread after disconnect returns.
+        // Keep the Room alive briefly and space transitions so a new room never races that
+        // teardown (rapid reconnects hit a SIGSEGV inside LiveKitWebRTC).
+        if let closing { Self.retireRoom(closing) }
+        try? await Task.sleep(nanoseconds: 750_000_000)
+    }
+
+    private static var retiredRooms: [Room] = []
+
+    private static func retireRoom(_ room: Room) {
+        retiredRooms.append(room)
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            if let index = retiredRooms.firstIndex(where: { $0 === room }) {
+                retiredRooms.remove(at: index)
+            }
+        }
     }
 
     private func publishProgramReturn(on room: Room) async {
@@ -174,6 +258,7 @@ final class LiveKitDeskSession: NSObject, RoomDelegate {
         // The capture post-processing hook never reached the encoder (subscribers got silence).
         AudioManager.shared.capturePostProcessingDelegate = nil
         let feeder = ProgramAppAudioFeeder.shared
+        guard !stopped else { return }
         ProgramPCMBridge.programMixListener = { samples in
             feeder.pushInterleavedStereo(samples)
         }
@@ -203,7 +288,9 @@ final class LiveKitDeskSession: NSObject, RoomDelegate {
             mixer.micVolume = 0
             mixer.appVolume = 1
             mixer.outputVolume = 1
+            guard !stopped else { return }
             programPump.resume()
+            feeder.setEnabled(true)
             try? await room.localParticipant.set(attributes: [
                 "ps.role": "desk",
                 "ps.programTrack": "1",
@@ -434,6 +521,13 @@ final class ProgramFramePump: @unchecked Sendable {
     func resume() {
         lock.lock()
         armed = true
+        lock.unlock()
+    }
+
+    func pause() {
+        lock.lock()
+        armed = false
+        capturer = nil
         lock.unlock()
     }
 
@@ -793,6 +887,47 @@ enum LiveKitRoomAdmin {
 #if canImport(LiveKit)
 /// Packs 48 kHz interleaved stereo program PCM into a fixed ring of
 /// deinterleaved float buffers and hands each full one to LiveKit's app-audio input.
+/// First in LiveKit's engine observer chain: pauses the program feeder around every
+/// engine start, stop and graph reconnect, then forwards to the SDK mixer observer.
+final class ProgramFeederEngineObserver: AudioEngineObserver, @unchecked Sendable {
+    var next: (any AudioEngineObserver)?
+    private let settle = 0.3
+
+    init(next: any AudioEngineObserver) {
+        self.next = next
+    }
+
+    func engineWillEnable(_ engine: AVAudioEngine, isPlayoutEnabled: Bool, isRecordingEnabled: Bool) -> Int {
+        ProgramAppAudioFeeder.shared.engineChanging(settleAfter: nil)
+        return next?.engineWillEnable(engine, isPlayoutEnabled: isPlayoutEnabled, isRecordingEnabled: isRecordingEnabled) ?? 0
+    }
+
+    func engineWillStart(_ engine: AVAudioEngine, isPlayoutEnabled: Bool, isRecordingEnabled: Bool) -> Int {
+        ProgramAppAudioFeeder.shared.engineChanging(settleAfter: settle)
+        return next?.engineWillStart(engine, isPlayoutEnabled: isPlayoutEnabled, isRecordingEnabled: isRecordingEnabled) ?? 0
+    }
+
+    func engineDidStop(_ engine: AVAudioEngine, isPlayoutEnabled: Bool, isRecordingEnabled: Bool) -> Int {
+        ProgramAppAudioFeeder.shared.engineChanging(settleAfter: nil)
+        return next?.engineDidStop(engine, isPlayoutEnabled: isPlayoutEnabled, isRecordingEnabled: isRecordingEnabled) ?? 0
+    }
+
+    func engineDidDisable(_ engine: AVAudioEngine, isPlayoutEnabled: Bool, isRecordingEnabled: Bool) -> Int {
+        ProgramAppAudioFeeder.shared.engineChanging(settleAfter: nil)
+        return next?.engineDidDisable(engine, isPlayoutEnabled: isPlayoutEnabled, isRecordingEnabled: isRecordingEnabled) ?? 0
+    }
+
+    func engineWillRelease(_ engine: AVAudioEngine) -> Int {
+        ProgramAppAudioFeeder.shared.engineChanging(settleAfter: nil)
+        return next?.engineWillRelease(engine) ?? 0
+    }
+
+    func engineWillConnectInput(_ engine: AVAudioEngine, src: AVAudioNode?, dst: AVAudioNode, format: AVAudioFormat, context: [AnyHashable: Any]) -> Int {
+        ProgramAppAudioFeeder.shared.engineChanging(settleAfter: settle)
+        return next?.engineWillConnectInput(engine, src: src, dst: dst, format: format, context: context) ?? 0
+    }
+}
+
 final class ProgramAppAudioFeeder: @unchecked Sendable {
     static let shared = ProgramAppAudioFeeder()
 
@@ -803,6 +938,47 @@ final class ProgramAppAudioFeeder: @unchecked Sendable {
     private var ringIndex = 0
     private var fill: Int = 0
     private(set) var deliveredBuffers = 0
+    private(set) var droppedBuffers = 0
+    /// Preallocated hand-off list (ring slots ready for LiveKit), so pushes never allocate.
+    private var readyIndices = [Int](repeating: 0, count: 32)
+    private var readyCount = 0
+    /// Session armed the program return (published, not tearing down).
+    private var enabled = false
+    /// LiveKit audio graph is settled. Cleared on every engine lifecycle event; the SDK's
+    /// capture(appAudio:) calls AVAudioPlayerNode.play, which throws (SIGABRT) mid-reconfigure.
+    private var engineReady = true
+    private var engineGeneration = 0
+    private var observerInstalled = false
+
+    func setEnabled(_ value: Bool) {
+        lock.lock()
+        enabled = value
+        fill = 0
+        let install = value && !observerInstalled
+        if install { observerInstalled = true }
+        lock.unlock()
+        if install {
+            let mixer = AudioManager.shared.mixer
+            AudioManager.shared.set(engineObservers: [ProgramFeederEngineObserver(next: mixer)])
+        }
+    }
+
+    /// Called synchronously from LiveKit's engine callbacks. Taking the lock waits out an in-flight push.
+    func engineChanging(settleAfter delay: Double?) {
+        lock.lock()
+        engineReady = false
+        engineGeneration &+= 1
+        let generation = engineGeneration
+        fill = 0
+        lock.unlock()
+        guard let delay else { return }
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + delay) { [weak self] in
+            guard let self else { return }
+            self.lock.lock()
+            if self.engineGeneration == generation { self.engineReady = true }
+            self.lock.unlock()
+        }
+    }
 
     private init() {
         guard let format = AVAudioFormat(
@@ -821,8 +997,14 @@ final class ProgramAppAudioFeeder: @unchecked Sendable {
     func pushInterleavedStereo(_ samples: [Float]) {
         guard !ring.isEmpty, samples.count >= 2 else { return }
         let capacity = Int(framesPerBuffer)
-        var ready: [AVAudioPCMBuffer] = []
+        // Fill under the lock, hand off to LiveKit outside it. Calling into the SDK while
+        // holding this lock deadlocked against engine callbacks on the WebRTC worker thread.
         lock.lock()
+        guard enabled, engineReady else {
+            lock.unlock()
+            return
+        }
+        readyCount = 0
         var frame = 0
         let total = samples.count / 2
         samples.withUnsafeBufferPointer { src in
@@ -840,17 +1022,27 @@ final class ProgramAppAudioFeeder: @unchecked Sendable {
                 frame += count
                 if fill == capacity {
                     buffer.frameLength = framesPerBuffer
-                    ready.append(buffer)
+                    if readyCount < readyIndices.count {
+                        readyIndices[readyCount] = ringIndex
+                        readyCount += 1
+                    }
                     ringIndex = (ringIndex + 1) % ring.count
                     fill = 0
                 }
             }
         }
-        deliveredBuffers &+= ready.count
+        let count = readyCount
         lock.unlock()
+        guard count > 0 else { return }
         let mixer = AudioManager.shared.mixer
-        for buffer in ready {
-            mixer.capture(appAudio: buffer)
+        for n in 0..<count {
+            let buffer = ring[readyIndices[n]]
+            // Drop the buffer instead of aborting if the SDK's player node throws mid-reconfigure.
+            if ProShowObjCTry({ mixer.capture(appAudio: buffer) }) {
+                deliveredBuffers &+= 1
+            } else {
+                droppedBuffers &+= 1
+            }
         }
     }
 }
