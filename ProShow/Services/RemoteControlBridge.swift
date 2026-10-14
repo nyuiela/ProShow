@@ -100,7 +100,9 @@ enum RemoteControlBridge {
             }
         }
         if method == "POST", parts == ["v1", "audio", "mute"] {
-            let muted = (body["muted"] ?? "true").lowercased() != "false"
+            // JSON booleans arrive as "1"/"0" (NSNumber description), strings as "true"/"false".
+            let raw = (body["muted"] ?? "true").lowercased()
+            let muted = !["false", "0", "no", "off"].contains(raw)
             return .muteAudio(channel: body["channel"].flatMap(Int.init), muted: muted)
         }
         if method == "POST", parts == ["v1", "camera", "switch"] {
