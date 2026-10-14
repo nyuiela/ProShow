@@ -1168,6 +1168,12 @@ enum ProgramStreamAudioGates {
         lock.unlock()
     }
 
+    static func isHardwareCaptureOpen(_ role: AudioChannelRole) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return hardwareCaptureOpen.contains(role)
+    }
+
     static func flushCaptureRole(_ role: AudioChannelRole) {
         setHardwareCaptureOpen(role, open: false)
         ProgramAACEncoder.flush(role: role)

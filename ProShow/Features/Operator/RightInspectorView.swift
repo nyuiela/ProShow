@@ -256,36 +256,30 @@ private final class PreviewHoverNSView: NSView {
 }
 #endif
 
-fileprivate struct DualChannelMeter: View {
+/// Program output meter (same source as the Audio tab Program strip). Preview mode keeps program, not the cue audition bus.
+struct DualChannelMeter: View {
     var controller: ShowController
     var barHeight: CGFloat = 86
 
     var body: some View {
         AudioMeterBridgeView(orientation: .vertical) {
-            if controller.inspector.previewFeed == .audience {
-                let preview = PreviewCueMonitor.shared
-                return [
-                    AudioMeterSample(id: "L", name: "L", db: preview.leftPeakDb, holdDb: preview.leftPeakDb, isMuted: false),
-                    AudioMeterSample(id: "R", name: "R", db: preview.rightPeakDb, holdDb: preview.rightPeakDb, isMuted: false)
-                ]
-            }
-            let monitor = AudioMonitoringEngine.shared
-            if monitor.monitorMode == .programMix {
-                return [
-                    AudioMeterSample(id: "L", name: "L", db: monitor.leftPeakDb, holdDb: monitor.leftPeakDb, isMuted: false),
-                    AudioMeterSample(id: "R", name: "R", db: monitor.rightPeakDb, holdDb: monitor.rightPeakDb, isMuted: false)
-                ]
-            }
-            let fallback = controller.playback.outputLevel
-            let left = AudioMeterBridgeView.decibels(fromLinear: controller.compositor.lastFrame?.leftMeter ?? fallback)
-            let right = AudioMeterBridgeView.decibels(fromLinear: controller.compositor.lastFrame?.rightMeter ?? fallback)
-            return [
-                AudioMeterSample(id: "L", name: "L", db: left, holdDb: left, isMuted: false),
-                AudioMeterSample(id: "R", name: "R", db: right, holdDb: right, isMuted: false)
-            ]
+            DualChannelMeter.programSamples(matrix: controller.audioMatrix)
         }
         .frame(width: InspectorPreviewLayout.meterWidth, height: barHeight)
-        .accessibilityLabel(controller.inspector.previewFeed == .audience ? "Preview levels" : "Program levels")
+        .accessibilityLabel("Program levels")
+    }
+
+    /// Shared with the phone monitor overlay. Reads MixerMasterState; no sample allocation beyond the two meter rows.
+    static func programSamples(matrix: AudioMatrixEngine) -> [AudioMeterSample] {
+        let master = matrix.master
+        let silent = matrix.programMuted || master.muted
+        let left = silent ? -120.0 : master.peakLeft
+        let right = silent ? -120.0 : master.peakRight
+        let hold = silent ? -120.0 : master.peakHoldDb
+        return [
+            AudioMeterSample(id: "L", name: "L", db: left, holdDb: hold, isMuted: silent),
+            AudioMeterSample(id: "R", name: "R", db: right, holdDb: hold, isMuted: silent)
+        ]
     }
 }
 

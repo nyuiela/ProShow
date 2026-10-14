@@ -172,6 +172,9 @@ final class AudioMatrixEngine {
         let audible = channels.compactMap { channel -> Double? in
             if programMuted || master.muted || channel.muted { return nil }
             if anySolo && !channel.solo { return nil }
+            // Program meter follows the hard capture gate: a closed mic or desktop never reaches program.
+            if channel.role == .microphone || channel.role == .desktop,
+               !ProgramStreamAudioGates.isHardwareCaptureOpen(channel.role) { return nil }
             return channel.peak
         }
         let slideChannel = channels.first { $0.role == .slide }
@@ -280,7 +283,7 @@ final class AudioMatrixEngine {
         let rows = channels.map { channel in
             #"{"id":"\#(channel.id.uuidString)","name":"\#(channel.name)","peak":\#(channel.peak),"gainDb":\#(channel.gainDb),"muted":\#(channel.muted)}"#
         }.joined(separator: ",")
-        return #"{"ok":true,"ducking":\#(duckingActive),"limiter":\#(master.limiterEnabled),"channels":[\#(rows)]}"#
+        return #"{"ok":true,"ducking":\#(duckingActive),"limiter":\#(master.limiterEnabled),"programMuted":\#(programMuted),"master":{"peakLeft":\#(master.peakLeft),"peakRight":\#(master.peakRight),"peakHoldDb":\#(master.peakHoldDb),"muted":\#(master.muted),"gainDb":\#(master.gainDb)},"channels":[\#(rows)]}"#
     }
 
     nonisolated static func linearGain(db: Double) -> Double {
