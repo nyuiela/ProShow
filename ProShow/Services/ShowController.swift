@@ -3991,6 +3991,7 @@ final class ShowController {
               let liveID = masterLayers[layerIndex].liveShotID,
               let shotIndex = masterLayers[layerIndex].shots.firstIndex(where: { $0.id == liveID })
         else { return }
+        guard liveShotSourceCarriesAudio(masterLayers[layerIndex].shots[shotIndex].source) else { return }
         var layers = masterLayers
         let muted = !(layers[layerIndex].shots[shotIndex].audioMuted == true)
         layers[layerIndex].shots[shotIndex].audioMuted = muted
@@ -4068,7 +4069,7 @@ final class ShowController {
 
     private func liveShotSourceCarriesAudio(_ source: DiscoveredSourceItem) -> Bool {
         switch source.sourceType {
-        case .systemCamera, .systemMicrophone, .systemDisplay, .systemWindow, .systemAudioCapture,
+        case .systemMicrophone, .systemDisplay, .systemWindow, .systemAudioCapture,
              .ndiSource, .srtStream, .mediaFile, .libraryShow:
             return true
         default:
@@ -4115,7 +4116,8 @@ final class ShowController {
 
     private func hardwareCaptureRole(for sourceType: SourceType) -> AudioChannelRole? {
         switch sourceType {
-        case .systemCamera, .systemMicrophone:
+        case .systemMicrophone:
+            // Camera layers carry no audio; the Mic channel belongs to Mic layers only.
             return .microphone
         case .systemDisplay, .systemWindow, .systemAudioCapture:
             return .desktop

@@ -1160,7 +1160,11 @@ private struct LiveSourceRowView: View {
         .buttonStyle(DeskPressButtonStyle())
         .disabled(!controller.masterLayerLiveShotCarriesAudio(layerIndex: index))
         .opacity(controller.masterLayerLiveShotCarriesAudio(layerIndex: index) ? 1 : 0.35)
-        .help(isAudioMuted ? "Unmute \(liveShot?.name ?? displayName)" : "Mute \(liveShot?.name ?? displayName)")
+        .help(
+            !controller.masterLayerLiveShotCarriesAudio(layerIndex: index)
+                ? "No audio. Add a Mic layer."
+                : (isAudioMuted ? "Unmute \(liveShot?.name ?? displayName)" : "Mute \(liveShot?.name ?? displayName)")
+        )
         .accessibilityLabel(isAudioMuted ? "Unmute \(liveShot?.name ?? displayName)" : "Mute \(liveShot?.name ?? displayName)")
     }
 
@@ -1205,7 +1209,7 @@ private struct LiveSourceRowView: View {
             ) {
                 controller.toggleLiveShotAudio(layerIndex: index)
             }
-            .disabled(layer.liveShotID == nil)
+            .disabled(layer.liveShotID == nil || !controller.masterLayerLiveShotCarriesAudio(layerIndex: index))
             if let liveShot {
                 Button("Remove \(liveShot.name)", systemImage: "trash") {
                     controller.removeShot(liveShot.id, layerIndex: index)
