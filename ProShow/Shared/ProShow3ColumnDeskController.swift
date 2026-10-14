@@ -21,7 +21,7 @@ final class ProShow3ColumnDeskController: NSViewController, NSSplitViewDelegate 
         onPersistInspector: @escaping (CGFloat) -> Void
     ) {
         self.libraryWidth = libraryWidth
-        self.inspectorWidth = inspectorWidth
+        self.inspectorWidth = min(max(inspectorWidth, DeskLayout.inspectorMin), DeskLayout.inspectorMax)
         self.libraryHidden = UserSettingsStore.shared.librarySidebarHidden
         self.onPersistLibrary = onPersistLibrary
         self.onPersistInspector = onPersistInspector

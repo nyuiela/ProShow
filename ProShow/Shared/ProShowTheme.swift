@@ -75,8 +75,10 @@ enum DeskLayout {
     static var sidebarMin: CGFloat { WorkspaceTitleGroupMetrics.minimumSidebarWidth }
     static let sidebarMax: CGFloat = 320
     static let inspector: CGFloat = 300
-    static let inspectorMin: CGFloat = 260
-    static let inspectorMax: CGFloat = 400
+    /// Right pane: column = monitor box + 74 (insets 16, container padding 16, rail 36, gap 6).
+    /// Max keeps a 16:9 monitor no taller than the 220 pt tab rail (391 x 220). Min gives a 326 x 184 monitor.
+    static let inspectorMin: CGFloat = 400
+    static let inspectorMax: CGFloat = 465
     static let mediaDrawer: CGFloat = 248
     static let mediaSource: CGFloat = 228
     static let toolbar: CGFloat = 56

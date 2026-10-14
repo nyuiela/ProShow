@@ -42,6 +42,7 @@ fileprivate struct LivePreviewMonitor: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var transportHovered = false
+    @State private var phoneSelected = false
 
     private var horizontalInset: CGFloat { InspectorPreviewLayout.horizontalInset }
     private var containerPadding: CGFloat { 8 }
@@ -77,11 +78,18 @@ fileprivate struct LivePreviewMonitor: View {
         VStack(spacing: 0) {
             HStack(alignment: .top, spacing: stripGap) {
                 VStack(alignment: .leading, spacing: 6) {
-                    HStack(alignment: .top, spacing: stripGap) {
-                        previewViewport(fitted: layout.stream)
+                    Group {
                         if let phone = layout.phone {
                             PhoneCanvasMonitorChrome(controller: controller, size: phone)
+                        } else {
+                            previewViewport(fitted: layout.stream)
                         }
+                    }
+                    // Phone sits trailing so the top-left toggle never covers it.
+                    .frame(width: layout.footerWidth, alignment: .trailing)
+                    .overlay(alignment: .topLeading) {
+                        MonitorModeToggle(controller: controller, phoneAvailable: phoneAvailable, phoneSelected: $phoneSelected)
+                            .padding(8)
                     }
                     DeskSignalProbeInspectorFooter(controller: controller)
                         .frame(width: layout.footerWidth, alignment: .leading)
@@ -106,23 +114,24 @@ fileprivate struct LivePreviewMonitor: View {
         let aspect = previewAspect
         let contentWidth = max(0, columnWidth - horizontalInset * 2 - containerPadding * 2)
         let previewBoxWidth = max(0, contentWidth - stripWidth - stripGap)
-        if controller.showsPhoneCanvasMonitor {
-            let pair = InspectorPreviewLayout.fittedStreamAndPhone(boxWidth: previewBoxWidth, streamAspect: aspect)
-            return (
-                pair.stream,
-                pair.phone,
-                max(pair.stream.height, InspectorPreviewLayout.clearStripMinHeight),
-                pair.stream.width + stripGap + pair.phone.width
-            )
-        }
         let stream = InspectorPreviewLayout.fittedProgramSize(boxWidth: previewBoxWidth, programAspect: aspect)
-        return (
-            stream,
-            nil,
-            max(stream.height, InspectorPreviewLayout.clearStripMinHeight),
-            stream.width
-        )
+        let rowHeight = max(stream.height, InspectorPreviewLayout.clearStripMinHeight)
+        if showsPhone {
+            // One canvas at a time: 9:16 fills the row height, centered in the stream box.
+            let phone = CGSize(width: rowHeight * 9.0 / 16.0, height: rowHeight)
+            return (stream, phone, rowHeight, stream.width)
+        }
+        return (stream, nil, rowHeight, stream.width)
     }
+
+    /// Real Phone canvas on the slide this monitor shows. The From Stream fallback does not count.
+    private var phoneAvailable: Bool {
+        guard controller.showsPhoneCanvasMonitor else { return false }
+        let slide = controller.inspector.previewFeed == .audience ? controller.operatorPreviewSlide : controller.liveSlide
+        return controller.phoneCanvasBoard(on: slide) != nil
+    }
+
+    private var showsPhone: Bool { phoneSelected && phoneAvailable }
 
     private func previewViewport(fitted: CGSize) -> some View {
         ZStack(alignment: .top) {
@@ -133,11 +142,8 @@ fileprivate struct LivePreviewMonitor: View {
         }
         .frame(width: fitted.width, height: fitted.height, alignment: .top)
         .overlay(alignment: .topTrailing) {
-            HStack(spacing: 6) {
-                ProgramPreviewFeedButton(controller: controller)
-                ProgramPreviewExpandButton()
-            }
-            .padding(8)
+            ProgramPreviewExpandButton()
+                .padding(8)
         }
         .overlay(alignment: .bottomLeading) {
             DualChannelMeter(
@@ -192,7 +198,7 @@ fileprivate struct LivePreviewMonitor: View {
     private var previewSurface: some View {
         switch controller.inspector.previewFeed {
         case .audience:
-            OperatorPreviewPicture(controller: controller, playsCueAudio: true)
+            OperatorPreviewPicture(controller: controller, playsCueAudio: true, showsCueLabel: false)
         case .stream, .stage, .matrix:
             RightPaneProgramView(controller: controller)
         }
@@ -294,6 +300,7 @@ struct OperatorPreviewPicture: View {
     @Bindable var controller: ShowController
     /// Right pane owns headphone audition. Multiview only shows the picture.
     var playsCueAudio: Bool = false
+    var showsCueLabel: Bool = true
 
     var body: some View {
         ZStack {
@@ -308,6 +315,7 @@ struct OperatorPreviewPicture: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .topLeading) {
+            if showsCueLabel {
             Text(cueLabel)
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(ProShowTheme.lyricWhite)
@@ -317,6 +325,7 @@ struct OperatorPreviewPicture: View {
                 .background(ProShowTheme.titlebar.opacity(0.92), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
                 .padding(8)
                 .allowsHitTesting(false)
+            }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Preview, \(cueLabel)")
@@ -1882,5 +1891,64 @@ private struct MicTallyPill: View {
             )
             .accessibilityLabel(live ? "Microphone live on program" : "Microphone off")
             .help(live ? "Mic is on air" : "No mic on air")
+    }
+}
+
+/// Top-left monitor chrome: Preview / Live, plus Phone view when the slide has a Phone canvas.
+fileprivate struct MonitorModeToggle: View {
+    @Bindable var controller: ShowController
+    var phoneAvailable: Bool
+    @Binding var phoneSelected: Bool
+
+    private var isLive: Bool { controller.inspector.previewFeed != .audience }
+
+    var body: some View {
+        DeskGlassGroup(spacing: 4) {
+            HStack(spacing: 4) {
+                Button {
+                    let next: PreviewFeed = isLive ? .audience : .stream
+                    controller.selectPreviewFeed(next)
+                    controller.selectPhonePreviewFeed(next)
+                } label: {
+                    HStack(spacing: 4) {
+                        if isLive {
+                            Circle().fill(ProShowTheme.liveRed).frame(width: 6, height: 6)
+                        }
+                        Text(isLive ? "Live" : "Preview")
+                            .font(.system(size: 10, weight: .semibold))
+                            .lineLimit(1)
+                    }
+                    .foregroundStyle(isLive ? ProShowTheme.liveRed : ThemeTokens.accentSystem)
+                    .padding(.horizontal, 8)
+                    .frame(height: 22)
+                    .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .modifier(DeskChromeGlass(shape: Capsule(), interactive: true))
+                .help(isLive ? "Showing Live. Click for Preview." : "Showing Preview. Click for Live.")
+                .accessibilityLabel("Monitor")
+                .accessibilityValue(isLive ? "Live" : "Preview")
+
+                if phoneAvailable {
+                    Button {
+                        phoneSelected.toggle()
+                    } label: {
+                        Image(systemName: "iphone")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(phoneSelected ? ThemeTokens.accentSystem : ProShowTheme.lyricWhite)
+                            .frame(width: 22, height: 22)
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .modifier(DeskChromeGlass(shape: Circle(), interactive: true))
+                    .help("Phone view")
+                    .accessibilityLabel("Phone view")
+                    .accessibilityAddTraits(phoneSelected ? .isSelected : [])
+                }
+            }
+        }
+        .onChange(of: phoneAvailable) { _, available in
+            if !available { phoneSelected = false }
+        }
     }
 }

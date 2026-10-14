@@ -18,18 +18,16 @@ struct PhoneCanvasMonitorChrome: View {
             PhoneCanvasPicture(
                 controller: controller,
                 feed: controller.inspector.phonePreviewFeed,
-                playsCueAudio: true
+                playsCueAudio: true,
+                showsCueLabel: false
             )
             .aspectRatio(9.0 / 16.0, contentMode: .fit)
             .frame(width: size.width, height: size.height, alignment: .top)
         }
         .frame(width: size.width, height: size.height, alignment: .top)
         .overlay(alignment: .topTrailing) {
-            HStack(spacing: 6) {
-                PhonePreviewFeedButton(controller: controller)
-                PhonePreviewExpandButton()
-            }
-            .padding(8)
+            PhonePreviewExpandButton()
+                .padding(8)
         }
         .overlay(alignment: .bottomLeading) {
             PhoneDualChannelMeter(
@@ -61,6 +59,7 @@ struct PhoneCanvasPicture: View {
     @Bindable var controller: ShowController
     var feed: PreviewFeed
     var playsCueAudio: Bool = false
+    var showsCueLabel: Bool = true
 
     var body: some View {
         ZStack {
@@ -74,7 +73,7 @@ struct PhoneCanvasPicture: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .topLeading) {
-            if feed == .audience {
+            if feed == .audience, showsCueLabel {
                 Text(cueLabel)
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(ProShowTheme.lyricWhite)
