@@ -247,36 +247,17 @@ private struct PhoneFromStreamLetterbox: View {
     }
 }
 
+/// Same program master meter as the stream monitor overlay and the Audio tab Program strip.
 fileprivate struct PhoneDualChannelMeter: View {
     var controller: ShowController
     var barHeight: CGFloat
 
     var body: some View {
         AudioMeterBridgeView(orientation: .vertical) {
-            if controller.inspector.phonePreviewFeed == .audience {
-                let preview = PreviewCueMonitor.shared
-                return [
-                    AudioMeterSample(id: "L", name: "L", db: preview.leftPeakDb, holdDb: preview.leftPeakDb, isMuted: false),
-                    AudioMeterSample(id: "R", name: "R", db: preview.rightPeakDb, holdDb: preview.rightPeakDb, isMuted: false)
-                ]
-            }
-            let monitor = AudioMonitoringEngine.shared
-            if monitor.monitorMode == .programMix {
-                return [
-                    AudioMeterSample(id: "L", name: "L", db: monitor.leftPeakDb, holdDb: monitor.leftPeakDb, isMuted: false),
-                    AudioMeterSample(id: "R", name: "R", db: monitor.rightPeakDb, holdDb: monitor.rightPeakDb, isMuted: false)
-                ]
-            }
-            let fallback = controller.playback.outputLevel
-            let left = AudioMeterBridgeView.decibels(fromLinear: controller.compositor.lastFrame?.leftMeter ?? fallback)
-            let right = AudioMeterBridgeView.decibels(fromLinear: controller.compositor.lastFrame?.rightMeter ?? fallback)
-            return [
-                AudioMeterSample(id: "L", name: "L", db: left, holdDb: left, isMuted: false),
-                AudioMeterSample(id: "R", name: "R", db: right, holdDb: right, isMuted: false)
-            ]
+            DualChannelMeter.programSamples(matrix: controller.audioMatrix)
         }
         .frame(width: InspectorPreviewLayout.meterWidth, height: barHeight)
-        .accessibilityLabel(controller.inspector.phonePreviewFeed == .audience ? "Phone preview levels" : "Phone program levels")
+        .accessibilityLabel("Program levels")
     }
 }
 
