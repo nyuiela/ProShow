@@ -738,9 +738,8 @@ final class ProShowAppDelegate: NSObject, NSApplicationDelegate {
     var sessionProvider: (() -> AppSession?)?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        if let image = NSImage(named: "ProShowLogo") {
-            NSApp.applicationIconImage = image
-        }
+        // Keep the bundle AppIcon in the Dock. Overriding it at runtime with
+        // ProShowLogo swapped the look (inverted colors, larger mark) right after launch.
     }
 
     func applicationWillTerminate(_ notification: Notification) {
