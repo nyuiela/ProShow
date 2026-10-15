@@ -58,6 +58,7 @@ enum ControlHTTP {
         case 403: return "Forbidden"
         case 404: return "Not Found"
         case 405: return "Method Not Allowed"
+        case 409: return "Conflict"
         default: return "Error"
         }
     }
@@ -71,6 +72,9 @@ enum ControlHTTP {
             return method == "POST" || method == "GET"
         }
         if parts.contains("soundboard"), parts.last == "play" {
+            return method == "POST"
+        }
+        if parts == ["v1", "ai", "compose"] || parts == ["v1", "ai", "apply"] {
             return method == "POST"
         }
         if parts == ["v1", "chat", "overlay"]

@@ -1,0 +1,378 @@
+{
+  "schemaVersion": 1,
+  "recipeId": "talk_section",
+  "summary": "Saturday Demo Day: NANDA + XOXNO title, lower third, Q&A, chapter CTA",
+  "slides": [
+    {
+      "id": "6F749ED3-745D-41B0-B7D1-62F1CD01DD2F",
+      "title": "Demo Day",
+      "lines": [
+        "The Foundry \u00b7 Stellar 14",
+        "Sat 17 Oct \u00b7 12:00 GMT \u00b7 Payaza Labone"
+      ],
+      "notes": "Open bumper",
+      "isBlank": false,
+      "alignment": "center",
+      "elements": [
+        {
+          "id": "90744637-DC3C-4D90-9CD7-64544691A0DF",
+          "text": "Demo Day",
+          "alignment": "center",
+          "x": 0.5,
+          "y": 0.4
+        },
+        {
+          "id": "1D91CAC7-644A-4924-B730-AD67A71EE751",
+          "text": "The Foundry \u00b7 Stellar 14",
+          "alignment": "center",
+          "x": 0.5,
+          "y": 0.52
+        },
+        {
+          "id": "B781FFAE-446A-4AC3-808D-AED733AD350D",
+          "text": "Sat 17 Oct \u00b7 12:00 GMT \u00b7 Payaza Labone",
+          "alignment": "center",
+          "x": 0.5,
+          "y": 0.64
+        }
+      ],
+      "canvas": [],
+      "isDisabled": false,
+      "theme": "Default",
+      "themeVariantID": null,
+      "themeApplication": "auto",
+      "transition": "Cut",
+      "hotKey": "",
+      "label": "title",
+      "actions": [],
+      "nextTimer": "",
+      "backgroundEnabled": true,
+      "backgroundHex": "#121214",
+      "mediaAction": null,
+      "forceResetMedia": false,
+      "editorCanvases": []
+    },
+    {
+      "id": "0BDF31EA-66D1-4A3A-920E-72A9A000BE0E",
+      "title": "NANDA",
+      "lines": [
+        "Ansh Mathur",
+        "MIT Media Lab \u00b7 Project NANDA"
+      ],
+      "notes": "14:00 talk open",
+      "isBlank": false,
+      "alignment": "center",
+      "elements": [
+        {
+          "id": "C6BC49C4-1B65-4D06-BC72-038F83E15BC0",
+          "text": "Project NANDA",
+          "alignment": "center",
+          "x": 0.5,
+          "y": 0.38
+        },
+        {
+          "id": "357873EE-6537-4D9D-8F84-152E6495887D",
+          "text": "Internet of AI Agents",
+          "alignment": "center",
+          "x": 0.5,
+          "y": 0.5
+        },
+        {
+          "id": "9F21CBBD-E53B-4EDB-801A-3E7786A3A3F6",
+          "text": "Ansh Mathur \u00b7 MIT Media Lab",
+          "alignment": "center",
+          "x": 0.5,
+          "y": 0.62
+        }
+      ],
+      "canvas": [],
+      "isDisabled": false,
+      "theme": "Default",
+      "themeVariantID": null,
+      "themeApplication": "auto",
+      "transition": "Cut",
+      "hotKey": "",
+      "label": "title",
+      "actions": [],
+      "nextTimer": "",
+      "backgroundEnabled": true,
+      "backgroundHex": "#121214",
+      "mediaAction": null,
+      "forceResetMedia": false,
+      "editorCanvases": []
+    },
+    {
+      "id": "5C88292A-7F43-41BB-86FB-94E0B52AAE2C",
+      "title": "Ansh Mathur",
+      "lines": [
+        "MIT Media Lab, Project NANDA"
+      ],
+      "notes": "Lower third during talk",
+      "isBlank": false,
+      "alignment": "center",
+      "elements": [
+        {
+          "id": "C53BBB3C-3954-4879-98DE-14B103817CBB",
+          "text": "Ansh Mathur",
+          "alignment": "left",
+          "x": 0.22,
+          "y": 0.86
+        },
+        {
+          "id": "32DDD9F1-7359-4ED6-97ED-39220D9EEF3D",
+          "text": "MIT Media Lab, Project NANDA",
+          "alignment": "left",
+          "x": 0.22,
+          "y": 0.91
+        }
+      ],
+      "canvas": [],
+      "isDisabled": false,
+      "theme": "Default",
+      "themeVariantID": null,
+      "themeApplication": "auto",
+      "transition": "Cut",
+      "hotKey": "",
+      "label": "lower_third",
+      "actions": [],
+      "nextTimer": "",
+      "backgroundEnabled": true,
+      "backgroundHex": "#121214",
+      "mediaAction": null,
+      "forceResetMedia": false,
+      "editorCanvases": []
+    },
+    {
+      "id": "0C63BAB3-CB5B-416B-ADF9-95ADB8DDC62D",
+      "title": "Q&A",
+      "lines": [
+        "Ask Ansh anything on NANDA"
+      ],
+      "notes": "14:22",
+      "isBlank": false,
+      "alignment": "center",
+      "elements": [
+        {
+          "id": "F3134C80-960E-4163-B4E9-2E918D3ED50F",
+          "text": "Q&A",
+          "alignment": "center",
+          "x": 0.5,
+          "y": 0.42
+        },
+        {
+          "id": "A2F56243-8A98-48F0-A5B5-14F13A32E25E",
+          "text": "Ask Ansh anything on NANDA",
+          "alignment": "center",
+          "x": 0.5,
+          "y": 0.56
+        }
+      ],
+      "canvas": [],
+      "isDisabled": false,
+      "theme": "Default",
+      "themeVariantID": null,
+      "themeApplication": "auto",
+      "transition": "Cut",
+      "hotKey": "",
+      "label": "qa",
+      "actions": [],
+      "nextTimer": "",
+      "backgroundEnabled": true,
+      "backgroundHex": "#121214",
+      "mediaAction": null,
+      "forceResetMedia": false,
+      "editorCanvases": []
+    },
+    {
+      "id": "D5FD02E0-CD43-4F1E-A7CC-AEB37299F298",
+      "title": "Join the chapter",
+      "lines": [
+        "projectnanda.org",
+        "Ghana NANDA Chapter"
+      ],
+      "notes": "CTA after NANDA",
+      "isBlank": false,
+      "alignment": "center",
+      "elements": [
+        {
+          "id": "60E94819-E0CC-4930-A646-7D58982F4C10",
+          "text": "Join the Ghana NANDA Chapter",
+          "alignment": "center",
+          "x": 0.5,
+          "y": 0.4
+        },
+        {
+          "id": "460E807C-8199-472D-A892-84C48BDF2BC3",
+          "text": "projectnanda.org",
+          "alignment": "center",
+          "x": 0.5,
+          "y": 0.54
+        },
+        {
+          "id": "ACAA0305-B0BC-4FE6-9C79-4F7FFFDBED3B",
+          "text": "Link in chat",
+          "alignment": "center",
+          "x": 0.5,
+          "y": 0.66
+        }
+      ],
+      "canvas": [],
+      "isDisabled": false,
+      "theme": "Default",
+      "themeVariantID": null,
+      "themeApplication": "auto",
+      "transition": "Cut",
+      "hotKey": "",
+      "label": "chapter_cta",
+      "actions": [],
+      "nextTimer": "",
+      "backgroundEnabled": true,
+      "backgroundHex": "#121214",
+      "mediaAction": null,
+      "forceResetMedia": false,
+      "editorCanvases": []
+    },
+    {
+      "id": "B1A4B35B-9999-4B98-ACF4-711E83101911",
+      "title": "XOXNO",
+      "lines": [
+        "Guest talk",
+        "What they build \u00b7 how to plug in"
+      ],
+      "notes": "14:30 open",
+      "isBlank": false,
+      "alignment": "center",
+      "elements": [
+        {
+          "id": "9C4EC501-52BE-4D67-8BEB-722D7CD66373",
+          "text": "XOXNO",
+          "alignment": "center",
+          "x": 0.5,
+          "y": 0.4
+        },
+        {
+          "id": "56973C3B-7888-487D-AA07-839E3EC7E0CE",
+          "text": "Guest talk",
+          "alignment": "center",
+          "x": 0.5,
+          "y": 0.52
+        },
+        {
+          "id": "58504F54-E406-450D-921F-C6335171352F",
+          "text": "What they build \u00b7 how to plug in",
+          "alignment": "center",
+          "x": 0.5,
+          "y": 0.64
+        }
+      ],
+      "canvas": [],
+      "isDisabled": false,
+      "theme": "Default",
+      "themeVariantID": null,
+      "themeApplication": "auto",
+      "transition": "Cut",
+      "hotKey": "",
+      "label": "title",
+      "actions": [],
+      "nextTimer": "",
+      "backgroundEnabled": true,
+      "backgroundHex": "#121214",
+      "mediaAction": null,
+      "forceResetMedia": false,
+      "editorCanvases": []
+    },
+    {
+      "id": "A2823711-CEEB-4EAB-BF9A-71B055D2C02E",
+      "title": "XOXNO speaker",
+      "lines": [
+        "Speaker TBD"
+      ],
+      "notes": "Lower third; replace when named",
+      "isBlank": false,
+      "alignment": "center",
+      "elements": [
+        {
+          "id": "F44F95D6-DD75-4B61-88B3-7FDF38679362",
+          "text": "XOXNO",
+          "alignment": "left",
+          "x": 0.22,
+          "y": 0.86
+        },
+        {
+          "id": "7802AE4F-FD40-4252-9EF2-E3AC9550FDA5",
+          "text": "Speaker TBD",
+          "alignment": "left",
+          "x": 0.22,
+          "y": 0.91
+        }
+      ],
+      "canvas": [],
+      "isDisabled": false,
+      "theme": "Default",
+      "themeVariantID": null,
+      "themeApplication": "auto",
+      "transition": "Cut",
+      "hotKey": "",
+      "label": "lower_third",
+      "actions": [],
+      "nextTimer": "",
+      "backgroundEnabled": true,
+      "backgroundHex": "#121214",
+      "mediaAction": null,
+      "forceResetMedia": false,
+      "editorCanvases": []
+    },
+    {
+      "id": "4A3B8B38-361A-4578-B6D7-573B7CD0C361",
+      "title": "Q&A",
+      "lines": [
+        "Ask our XOXNO guest"
+      ],
+      "notes": "14:52",
+      "isBlank": false,
+      "alignment": "center",
+      "elements": [
+        {
+          "id": "1808C857-0B44-4C9F-AA8D-F97B3CBDF5C2",
+          "text": "Q&A",
+          "alignment": "center",
+          "x": 0.5,
+          "y": 0.42
+        },
+        {
+          "id": "AACF3942-9E5B-4ABB-8A0B-5D3375E6B174",
+          "text": "Ask our XOXNO guest",
+          "alignment": "center",
+          "x": 0.5,
+          "y": 0.56
+        }
+      ],
+      "canvas": [],
+      "isDisabled": false,
+      "theme": "Default",
+      "themeVariantID": null,
+      "themeApplication": "auto",
+      "transition": "Cut",
+      "hotKey": "",
+      "label": "qa",
+      "actions": [],
+      "nextTimer": "",
+      "backgroundEnabled": true,
+      "backgroundHex": "#121214",
+      "mediaAction": null,
+      "forceResetMedia": false,
+      "editorCanvases": []
+    }
+  ],
+  "rundownBlocks": [],
+  "designMeta": {
+    "canvases": [
+      "stream"
+    ],
+    "tokenSet": "proshow-desk-v1",
+    "grid": "4/8",
+    "backgroundToken": "canvas",
+    "accentToken": "accent",
+    "notes": "Stream only. Phone Fit-from-Stream until dual authored. Colors #121214 bg; accents via theme."
+  }
+}

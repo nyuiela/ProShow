@@ -1707,6 +1707,16 @@ final class ShowController {
         return slide
     }
 
+    /// Appends slides to a named group, creating it at the end if missing. Used by AI apply.
+    func appendSlides(_ slides: [Slide], toGroupNamed name: String, colorHex: String) {
+        if let index = show.groups.firstIndex(where: { $0.name == name }) {
+            show.groups[index].slides.append(contentsOf: slides)
+        } else {
+            show.groups.append(SlideGroup(name: name, colorHex: colorHex, slides: slides))
+        }
+        persistCurrentShow()
+    }
+
     func addEditorSlide() {
         rehydrateFromEditor(persist: true)
         _ = addSlide(named: "Slide \(show.allSlides.count + 1)")
@@ -7512,6 +7522,9 @@ final class ShowController {
             return RemoteControlBridge.apply(remote, to: self)
         }
         let parts = path.split(separator: "/").map(String.init)
+        if let ai = handleAICompose(method: method, parts: parts, body: body) {
+            return ai
+        }
         if method == "GET", path == "/docs" || path == "/docs/" {
             return (200, ControlAPIOpenAPI.html(port: ControlAPIServer.defaultPort))
         }
