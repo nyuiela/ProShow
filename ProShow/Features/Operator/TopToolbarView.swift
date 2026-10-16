@@ -407,7 +407,7 @@ private struct CompactLiveStreamTelemetry: View {
     private var telemetry: StreamTelemetryMonitor { controller.streaming.telemetry }
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1.0)) { _ in
+        TimelineView(.periodic(from: TimelineAnchor.start, by: 1.0)) { _ in
             HStack(spacing: 6) {
                 Text("\(telemetry.measuredVideoBitrateKbps) Kbps")
                     .font(DeskType.micro.monospacedDigit())
@@ -430,7 +430,7 @@ private struct LiveStreamTelemetryStrip: View {
     private var preset: StreamEncoderConfig { controller.streaming.streamEncoderConfig }
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 0.5)) { context in
+        TimelineView(.periodic(from: TimelineAnchor.start, by: 0.5)) { context in
             let _ = context.date
             let _ = telemetry.refreshMeasurementWindowIfNeeded()
             HStack(spacing: 10) {
@@ -823,7 +823,7 @@ private struct TaskMenuToolbarButton: View {
     @ViewBuilder
     private var toolbarTitle: some View {
         if item == .live, controller.streaming.isLive {
-            TimelineView(.periodic(from: .now, by: 1)) { context in
+            TimelineView(.periodic(from: TimelineAnchor.start, by: 1)) { context in
                 Text(ProShowCopy.liveClock(StreamingEngine.broadcastTimecode(from: controller.streaming.startedAt, now: context.date)))
                     .monospacedDigit()
             }
@@ -1049,7 +1049,7 @@ private struct TaskMenuGlyph: View {
         if item != .live {
             Text(item.title)
         } else if controller.streaming.isLive {
-            TimelineView(.periodic(from: .now, by: 1)) { context in
+            TimelineView(.periodic(from: TimelineAnchor.start, by: 1)) { context in
                 Text(ProShowCopy.liveClock(StreamingEngine.broadcastTimecode(from: controller.streaming.startedAt, now: context.date)))
                     .monospacedDigit()
             }

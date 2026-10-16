@@ -1137,7 +1137,9 @@ final class VideoIngestEngine {
         pendingLanePublish = publish
         guard !lanePublishCoalesced else { return }
         lanePublishCoalesced = true
-        DispatchQueue.main.async { [weak self] in
+        // Perf: lane state drives SwiftUI; cap UI publishes at ~10 Hz. Preview pixels
+        // go through the layer-backed monitors, not this path.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             guard let self else { return }
             self.lanePublishCoalesced = false
             self.pendingLanePublish?()

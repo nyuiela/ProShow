@@ -667,7 +667,7 @@ struct LiveStageView: View {
     }
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
+        TimelineView(.periodic(from: TimelineAnchor.start, by: 1)) { context in
             let document = controller.liveStageDocument
             let payload = StagePayload.make(controller: controller)
             let clock = StageLiveBinder.clockString(from: context.date)
@@ -1098,7 +1098,9 @@ struct ProgramSlideCanvas: View {
     var body: some View {
         let rest = resolvedEvaluationMode.usesSettledRestState
         let clock = rest ? BuildClock.idle : (buildClockOverride ?? buildClock)
-        PulsedBuildEnvironment(isActive: !rest, clock: { clock }) {
+        // Perf: the clock here is a captured constant, so a 30 fps pulse only re-evaluated the whole canvas
+        // (every program/preview/thumbnail monitor) for nothing; BuildAnimated runs its own per-object timeline.
+        PulsedBuildEnvironment(isActive: false, clock: { clock }) {
         GeometryReader { proxy in
             let scale = min(
                 proxy.size.width / max(canvasWidth, 1),
@@ -1149,9 +1151,10 @@ struct ProgramSlideThumbnailPreview: View {
     }
 
     var body: some View {
+        // Live thumbnails are throttled to 5 fps (program monitor stays full-rate); static ones don't tick.
         // Static thumbnails don't need a 15 fps timeline. Before, every thumbnail in the grid re-rendered its
         // whole canvas 15x/s regardless of content, which pegged the main thread and lagged editing.
-        TimelineView(.animation(minimumInterval: 1.0 / 15.0, paused: reduceMotion || !hasLiveContent)) { _ in
+        TimelineView(.animation(minimumInterval: 1.0 / 5.0, paused: reduceMotion || !hasLiveContent)) { _ in
             let videoInput = controller.previewVideoInput(for: slide, forThumbnail: true)
             ProgramSlideCanvas(
                 objects: objects,
@@ -1251,7 +1254,7 @@ private struct ProgramCanvasObjectView: View {
         if textTimelineInterval >= 60 {
             objectLabelTextContent(at: Date(), state)
         } else {
-            TimelineView(.periodic(from: .now, by: textTimelineInterval)) { timeline in
+            TimelineView(.periodic(from: TimelineAnchor.start, by: textTimelineInterval)) { timeline in
                 objectLabelTextContent(at: timeline.date, state)
             }
         }

@@ -1372,7 +1372,7 @@ private struct TimerActionPane: View {
                                 .font(.system(size: 12))
                                 .foregroundStyle(ShowSidebarPalette.subtitle)
                         }
-                        TimelineView(.periodic(from: .now, by: 0.25)) { _ in
+                        TimelineView(.periodic(from: TimelineAnchor.start, by: 0.25)) { _ in
                             let live = inspector.timer(id: timer.id) ?? timer
                             Text(ProgramTimecode.format(TimeInterval(live.displaySeconds)))
                                 .font(.system(size: 20, weight: .semibold, design: .monospaced))

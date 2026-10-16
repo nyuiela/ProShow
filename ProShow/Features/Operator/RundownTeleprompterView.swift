@@ -429,7 +429,7 @@ struct RundownTeleprompterView: View {
                 if surface == .compact {
                     compactPauseCue
                 } else if settings.style.showsLongPauseBanner {
-                    TimelineView(.periodic(from: .now, by: 0.1)) { _ in
+                    TimelineView(.periodic(from: TimelineAnchor.start, by: 0.1)) { _ in
                         if let pause = engine.activeLongPause {
                             LongPauseBanner(remaining: pause.remaining, total: pause.total)
                                 .padding(.top, 12)
@@ -602,7 +602,7 @@ struct RundownTeleprompterView: View {
     }
 
     private var compactPauseCue: some View {
-        TimelineView(.periodic(from: .now, by: 0.1)) { _ in
+        TimelineView(.periodic(from: TimelineAnchor.start, by: 0.1)) { _ in
             if let pause = engine.activeLongPause {
                 CompactPauseCue(remaining: pause.remaining, total: pause.total)
                     .padding(.horizontal, 8)

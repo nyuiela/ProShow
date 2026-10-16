@@ -82,7 +82,8 @@ enum AgentHistoryStore {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
         guard let data = try? encoder.encode(doc) else { return }
-        try? data.write(to: url, options: [.atomic])
+        // Perf: disk write off the caller (usually main).
+        AgentFileIO.queue.async { try? data.write(to: url, options: [.atomic]) }
     }
 
     static func clear(projectKey: String) {
@@ -113,4 +114,10 @@ struct AgentSlidePlacement: Hashable, Sendable {
         }
         return "Created in \(groupName) · \(slideIDs.count) slides · \(first)"
     }
+}
+
+
+/// Serial background queue for agent history / tool-log writes (keeps disk I/O off main).
+enum AgentFileIO {
+    static let queue = DispatchQueue(label: "proshow.agent.fileio", qos: .utility)
 }

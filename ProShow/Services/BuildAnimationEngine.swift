@@ -562,7 +562,7 @@ struct BuildAnimated<Content: View>: View {
     var body: some View {
         Group {
             if shouldTickLive && onScreen {
-                TimelineView(.periodic(from: .now, by: reduceMotion ? 1.0 / 15.0 : 1.0 / 30.0)) { timeline in
+                TimelineView(.periodic(from: TimelineAnchor.start, by: reduceMotion ? 1.0 / 15.0 : 1.0 / 30.0)) { timeline in
                     built(at: timeline.date)
                 }
             } else {
@@ -636,3 +636,10 @@ struct BuildAnimated<Content: View>: View {
     }
 }
 #endif
+
+/// Perf: fixed start for every `.periodic` TimelineView. A schedule built from `.now` is a new value on each
+/// parent update, so SwiftUI treats it as changed and re-renders the timeline content on every update
+/// (~26k extra updates per 4 s in the SwiftUI trace).
+enum TimelineAnchor {
+    static let start = Date()
+}

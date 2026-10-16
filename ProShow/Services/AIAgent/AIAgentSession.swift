@@ -1126,7 +1126,10 @@ enum AgentToolLog {
         ]
         guard var data = try? JSONSerialization.data(withJSONObject: entry, options: [.sortedKeys]) else { return }
         data.append(0x0A)
-        if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(data); try? h.close() }
-        else { try? data.write(to: url) }
+        let payload = data
+        AgentFileIO.queue.async {
+            if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(payload); try? h.close() }
+            else { try? payload.write(to: url) }
+        }
     }
 }

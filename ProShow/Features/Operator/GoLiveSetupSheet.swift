@@ -156,7 +156,7 @@ struct GoLiveSetupSheet: View {
     private var headerSubtitle: some View {
         switch controller.streaming.state {
         case .live:
-            TimelineView(.periodic(from: .now, by: 1)) { context in
+            TimelineView(.periodic(from: TimelineAnchor.start, by: 1)) { context in
                 Text(ProShowCopy.liveClock(StreamingEngine.broadcastTimecode(from: controller.streaming.startedAt, now: context.date)))
                     .font(.system(size: 13))
                     .foregroundStyle(ShowSidebarPalette.subtitle)

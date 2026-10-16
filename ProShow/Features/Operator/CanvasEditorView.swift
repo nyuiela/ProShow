@@ -2329,7 +2329,7 @@ private struct CanvasObjectView: View {
         if textTimelineInterval >= 60 {
             objectLabelLiveTextContent(at: Date(), state)
         } else {
-            TimelineView(.periodic(from: .now, by: textTimelineInterval)) { timeline in
+            TimelineView(.periodic(from: TimelineAnchor.start, by: textTimelineInterval)) { timeline in
                 objectLabelLiveTextContent(at: timeline.date, state)
             }
         }

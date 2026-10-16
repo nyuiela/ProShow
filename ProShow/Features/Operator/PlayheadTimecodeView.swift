@@ -50,7 +50,7 @@ struct PulsedBuildEnvironment<Content: View>: View {
     var body: some View {
         Group {
             if isActive && onScreen {
-                TimelineView(.periodic(from: .now, by: 1.0 / 30.0)) { context in
+                TimelineView(.periodic(from: TimelineAnchor.start, by: 1.0 / 30.0)) { context in
                     let _ = context.date
                     content()
                         .environment(\.buildClock, clock())
@@ -267,7 +267,7 @@ private struct PlayheadTimecodeRepresentable: View {
     var color: Color
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 0.25)) { _ in
+        TimelineView(.periodic(from: TimelineAnchor.start, by: 0.25)) { _ in
             Text(ProgramTimecode.format(showsRemaining ? playback.remaining : playback.playhead))
                 .font(.system(size: fontSize).monospacedDigit())
                 .foregroundStyle(color)
@@ -280,7 +280,7 @@ private struct PlayheadScrubberRepresentable: View {
     var onSeek: (TimeInterval) -> Void
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 0.25)) { _ in
+        TimelineView(.periodic(from: TimelineAnchor.start, by: 0.25)) { _ in
             Slider(
                 value: Binding(
                     get: {

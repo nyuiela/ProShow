@@ -312,7 +312,7 @@ struct RundownMiniOutlinePanel: View {
     }
 
     private var itemRunTimeRow: some View {
-        TimelineView(.periodic(from: .now, by: 0.25)) { _ in
+        TimelineView(.periodic(from: TimelineAnchor.start, by: 0.25)) { _ in
             HStack(alignment: .firstTextBaseline) {
                 Text("Item run time")
                     .font(.system(size: 10, weight: .bold))

@@ -190,7 +190,7 @@ struct StudioAudioGlass: View {
     private var matrix: AudioMatrixEngine { controller.audioMatrix }
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 0.5)) { context in
+        TimelineView(.periodic(from: TimelineAnchor.start, by: 0.5)) { context in
             StudioAudioGlassBody(
                 controller: controller,
                 page: $page,

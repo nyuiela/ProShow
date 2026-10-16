@@ -157,7 +157,7 @@ struct RundownWorkspaceView: View {
 
             driftSummary
 
-            TimelineView(.periodic(from: .now, by: 0.5)) { context in
+            TimelineView(.periodic(from: TimelineAnchor.start, by: 0.5)) { context in
                 HStack(spacing: 20) {
                     clockColumn(
                         title: "Item run time",
