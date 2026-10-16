@@ -237,7 +237,7 @@ final class ShowController {
     /// Bumps when `liveQuotes` mutates so output surfaces refresh `dynamicText` (nested engine is not always tracked).
     private(set) var liveQuotePresentationStamp: UInt64 = 0
     /// Latest single-pass dynamic text + revision for program outputs.
-    var latestProgramRenderSnapshot: ProgramRenderSnapshot?
+    @ObservationIgnored var latestProgramRenderSnapshot: ProgramRenderSnapshot?
     /// Bumps when `FrameRevisionClock` advances (SwiftUI monitor `.id` + invalidation).
     var programFrameRevisionStamp: UInt64 = 0
     /// Bumps when project save/dirty state changes so desk chrome can refresh the ⚪ indicator.
@@ -2433,11 +2433,9 @@ final class ShowController {
         }
         tickPlaceholderFailover()
         syncTextFieldsFromCanvas()
-        if isoRecorder.isRecording && !streaming.isLive {
-            liveQuoteRefreshMinInterval = 1.25
-        } else {
-            liveQuoteRefreshMinInterval = 0.5
-        }
+        // @Observable notifies on every set, even with an equal value; only write on change.
+        let quoteInterval = isoRecorder.isRecording && !streaming.isLive ? 1.25 : 0.5
+        if liveQuoteRefreshMinInterval != quoteInterval { liveQuoteRefreshMinInterval = quoteInterval }
         refreshLiveQuotes(now: now)
         ensureProgramMarketTickerFeeds(now: now)
         refreshRundownTick()
@@ -2485,13 +2483,13 @@ final class ShowController {
                 snapshot: renderSnapshot
             )
         }
-        isMediaPlaying = playback.isPlaying
+        if isMediaPlaying != playback.isPlaying { isMediaPlaying = playback.isPlaying }
         evaluateProgramClockState(now: now)
         syncStreamCapturePrivacyIfNeeded()
         programFrame &+= 1
         transportClock.programFrame = programFrame
-        transportClock.liveBuildStartedAt = liveBuildStartedAt
-        transportClock.boundSlideID = liveSlideID
+        if transportClock.liveBuildStartedAt != liveBuildStartedAt { transportClock.liveBuildStartedAt = liveBuildStartedAt }
+        if transportClock.boundSlideID != liveSlideID { transportClock.boundSlideID = liveSlideID }
     }
 
     /// The minute's page, snapshotted so the stream matches the audience picture.

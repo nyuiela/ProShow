@@ -403,6 +403,10 @@ enum CoreTextRasterizer {
     }
 
     /// Parity with SwiftUI `LoopingTextFit.minimumScaleFactor(0.2)` on program text (not marquees).
+    private static let fitCache: NSCache<NSString, NSNumber> = { let c = NSCache<NSString, NSNumber>(); c.countLimit = 4000; return c }()
+
+    /// Cached per text/font/box/scale: the 16-pass search used to run for every text object on every
+    /// redraw of the canvas, program monitor and each thumbnail.
     static func calculateFittedFontSize(
         object: CanvasObject,
         style: SlideTextAttributes,
@@ -411,6 +415,21 @@ enum CoreTextRasterizer {
         minimumScaleFactor: CGFloat = 0.2
     ) -> CGFloat {
         guard textRect.width > 1, textRect.height > 1 else { return style.font.pointSize }
+        let t = object.typography
+        let key = "\(t.hashValue)|\(object.textLayout.hashValue)|\(style.font.fontName)|\(Int(textRect.width * 4))x\(Int(textRect.height * 4))|\(scale)|\(minimumScaleFactor)|\(style.text)" as NSString
+        if let hit = fitCache.object(forKey: key) { return CGFloat(hit.doubleValue) }
+        let value = fittedFontSizeUncached(object: object, style: style, in: textRect, scale: scale, minimumScaleFactor: minimumScaleFactor)
+        fitCache.setObject(NSNumber(value: Double(value)), forKey: key)
+        return value
+    }
+
+    private static func fittedFontSizeUncached(
+        object: CanvasObject,
+        style: SlideTextAttributes,
+        in textRect: CGRect,
+        scale: CGFloat,
+        minimumScaleFactor: CGFloat
+    ) -> CGFloat {
         let initial = max(1, object.typography.fontSize * scale)
         // Floor must scale with the render (no absolute 8pt): an absolute floor made text in
         // thumbnails / small monitors (scale ≈ 0.05–0.2) render far larger than its plates.

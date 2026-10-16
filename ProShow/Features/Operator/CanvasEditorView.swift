@@ -2324,8 +2324,20 @@ private struct CanvasObjectView: View {
 
     @ViewBuilder
     private func objectLabelLiveText(_ state: TransformedRenderState) -> some View {
-        TimelineView(.periodic(from: .now, by: textTimelineInterval)) { timeline in
-            let context = countdownContext(at: timeline.date)
+        // Static text (60 s interval) skips TimelineView: a periodic schedule built from `.now` restarts on every
+        // parent update, so each text object re-rendered continuously (main thread pegged, editor lag).
+        if textTimelineInterval >= 60 {
+            objectLabelLiveTextContent(at: Date(), state)
+        } else {
+            TimelineView(.periodic(from: .now, by: textTimelineInterval)) { timeline in
+                objectLabelLiveTextContent(at: timeline.date, state)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func objectLabelLiveTextContent(at date: Date, _ state: TransformedRenderState) -> some View {
+            let context = countdownContext(at: date)
             let resolved = DynamicTextEngine.resolve(object, context: context)
             if object.textLayout.isLooping {
                 MarqueeTextLoopView(
@@ -2351,7 +2363,7 @@ private struct CanvasObjectView: View {
                     .allowsHitTesting(true)
             }
         }
-    }
+    
 
     private var textTimelineInterval: TimeInterval {
         if object.textLayout.isLooping, !editing {

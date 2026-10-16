@@ -94,7 +94,19 @@ enum FontWeightToken: String, CaseIterable, Identifiable, Codable, Sendable {
 
 #if canImport(AppKit)
 enum CanvasTypeface {
+    private static let fontCache: NSCache<NSString, NSFont> = { let c = NSCache<NSString, NSFont>(); c.countLimit = 2000; return c }()
+
+    /// Cached: building an NSFont through NSFontManager every frame made CoreText re-run shaping-glyph
+    /// setup for each new font instance (a background thread pegged at ~75% CPU while idle).
     static func nsFont(family: String, size: CGFloat, weight: FontWeightToken, bold: Bool, italic: Bool) -> NSFont {
+        let key = "\(family)|\(size)|\(weight.rawValue)|\(bold)|\(italic)" as NSString
+        if let hit = fontCache.object(forKey: key) { return hit }
+        let font = makeNSFont(family: family, size: size, weight: weight, bold: bold, italic: italic)
+        fontCache.setObject(font, forKey: key)
+        return font
+    }
+
+    private static func makeNSFont(family: String, size: CGFloat, weight: FontWeightToken, bold: Bool, italic: Bool) -> NSFont {
         let name = family.trimmingCharacters(in: .whitespacesAndNewlines)
         if name.isEmpty {
             let fallback = NSFont.systemFont(ofSize: size, weight: nsSystemWeight(weight, bold: bold))

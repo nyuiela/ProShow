@@ -1140,8 +1140,18 @@ struct ProgramSlideThumbnailPreview: View {
     var canvasHeight: Double = CanvasConfig.height
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    private var hasLiveContent: Bool {
+        objects.contains { o in
+            let k = o.kind.rawValue.lowercased()
+            return k.contains("video") || k.contains("web") || k.contains("browser") || k.contains("media")
+                || o.kind.usesLiveText || o.textLayout.isLooping
+        }
+    }
+
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 15.0, paused: reduceMotion)) { _ in
+        // Static thumbnails don't need a 15 fps timeline. Before, every thumbnail in the grid re-rendered its
+        // whole canvas 15x/s regardless of content, which pegged the main thread and lagged editing.
+        TimelineView(.animation(minimumInterval: 1.0 / 15.0, paused: reduceMotion || !hasLiveContent)) { _ in
             let videoInput = controller.previewVideoInput(for: slide, forThumbnail: true)
             ProgramSlideCanvas(
                 objects: objects,
@@ -1236,8 +1246,20 @@ private struct ProgramCanvasObjectView: View {
 
     @ViewBuilder
     private func objectLabelText(_ state: TransformedRenderState) -> some View {
-        TimelineView(.periodic(from: .now, by: textTimelineInterval)) { timeline in
-            let context = countdownContext(at: timeline.date)
+        // Static text (60 s interval) skips TimelineView: a periodic schedule built from `.now` restarts on every
+        // parent update, so each text object re-rendered continuously (main thread pegged, editor lag).
+        if textTimelineInterval >= 60 {
+            objectLabelTextContent(at: Date(), state)
+        } else {
+            TimelineView(.periodic(from: .now, by: textTimelineInterval)) { timeline in
+                objectLabelTextContent(at: timeline.date, state)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func objectLabelTextContent(at date: Date, _ state: TransformedRenderState) -> some View {
+            let context = countdownContext(at: date)
             if DynamicTextEngine.shouldDeferProgramLiveQuoteOutput(
                 object: object,
                 context: context,
@@ -1268,7 +1290,7 @@ private struct ProgramCanvasObjectView: View {
             }
             }
         }
-    }
+    
 
     private var textTimelineInterval: TimeInterval {
         if object.textLayout.isLooping { return object.kind.usesLiveText ? 1 : 60 }
