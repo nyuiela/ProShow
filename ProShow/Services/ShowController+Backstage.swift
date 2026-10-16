@@ -45,6 +45,19 @@ extension ShowController {
         liveKitDesk.connect(roomSlug: backstage.room.roomSlug)
     }
 
+    /// Per-project custom room name. Reconnects the desk to the new LiveKit room if one is active.
+    @discardableResult
+    func setBackstageRoomName(_ raw: String?) -> Bool {
+        let before = backstage.room.roomSlug
+        guard backstage.setCustomRoomName(raw) else { return false }
+        if backstage.room.roomSlug != before, liveKitDesk.hasStartedConnection {
+            backstage.guests.removeAll { $0.cameraEndpoint.hasPrefix("livekit://") }
+            audioMatrix.pruneGuestChannels(keeping: [])
+            liveKitDesk.connect(roomSlug: backstage.room.roomSlug)
+        }
+        return true
+    }
+
     func newGuestRoom() {
         backstage.guests.removeAll { $0.cameraEndpoint.hasPrefix("livekit://") }
         audioMatrix.pruneGuestChannels(keeping: [])
