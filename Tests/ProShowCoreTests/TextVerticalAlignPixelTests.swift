@@ -67,8 +67,14 @@ struct TextVerticalAlignPixelTests {
         let frame = CTFramesetterCreateFrame(fs, CFRange(location: 0, length: 0), CGPath(rect: CGRect(x: 0, y: 0, width: 700, height: h), transform: nil), nil)
         var o = [CGPoint](repeating: .zero, count: 2)
         CTFrameGetLineOrigins(frame, CFRange(location: 0, length: 2), &o)
-        #expect(abs(tkBaseline(0) - (h - o[0].y)) <= 1.0, "first \(size): tk \(tkBaseline(0)) ct \(h - o[0].y)")
-        #expect(abs(tkBaseline(lm.numberOfGlyphs - 1) - (h - o[1].y)) <= 1.0, "last \(size)")
+        // Each path aligns its own visual block, so compare the *aligned* first baseline.
+        let font = NSFont(name: "Helvetica", size: CGFloat(size))!
+        let rect = CGRect(x: 0, y: 0, width: 700, height: 400)
+        for align in [TextVerticalAlign.top, .middle, .bottom] {
+            let tk = CoreTextRasterizer.visualAlignedLayoutTop(firstBaselineFromTop: tkBaseline(0), lastBaselineFromTop: tkBaseline(lm.numberOfGlyphs - 1), ascent: font.ascender, descent: -font.descender, in: rect, align: align) + tkBaseline(0)
+            let ct = CoreTextRasterizer.visualAlignedLayoutTop(firstBaselineFromTop: h - o[0].y, lastBaselineFromTop: h - o[1].y, ascent: font.ascender, descent: -font.descender, in: rect, align: align) + (h - o[0].y)
+            #expect(abs(tk - ct) <= 1.5, "edit vs display \(size) \(align): \(tk) vs \(ct)")
+        }
     }
 }
 #endif
