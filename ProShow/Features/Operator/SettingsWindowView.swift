@@ -330,13 +330,24 @@ struct SettingsWindowView: View {
                 SettingsHairline()
                 AISettingsKeyRow()
                 SettingsHairline()
-                SettingsRow(title: "Model", detail: "Default grok-4. Stored in UserDefaults.") {
-                    TextField("grok-4", text: Binding(
+                SettingsRow(title: "Model", detail: "Default grok-4.3 (low effort, cheapest current). Stored in UserDefaults.") {
+                    TextField("grok-4.3", text: Binding(
                         get: { XAIConfig.model },
                         set: { XAIConfig.model = $0 }
                     ))
                     .textFieldStyle(.roundedBorder)
                     .frame(maxWidth: 180)
+                }
+                SettingsHairline()
+                SettingsRow(title: "Reasoning effort", detail: "none is cheapest and fastest; low is the default.") {
+                    Picker("", selection: Binding(
+                        get: { XAIConfig.reasoningEffort },
+                        set: { XAIConfig.reasoningEffort = $0 }
+                    )) {
+                        ForEach(["none", "low", "medium", "high"], id: \.self) { Text($0).tag($0) }
+                    }
+                    .labelsHidden()
+                    .frame(maxWidth: 140)
                 }
             }
 

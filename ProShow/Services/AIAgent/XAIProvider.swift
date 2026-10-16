@@ -20,15 +20,25 @@ enum XAIKeyStore {
 enum XAIConfig {
     static let modelKey = "proshow.xai.model"
     static let providerKey = "proshow.ai.provider"
-    static let defaultModel = "grok-4"
+    /// grok-4 / grok-4-fast slugs were retired 2026-05-15 and redirect to grok-4.3; use it directly with low effort.
+    static let defaultModel = "grok-4.3"
+    static let effortKey = "proshow.xai.reasoningEffort"
+    static let defaultEffort = "low"
+    static var reasoningEffort: String {
+        get { UserDefaults.standard.string(forKey: effortKey).flatMap { $0.isEmpty ? nil : $0 } ?? defaultEffort }
+        set { UserDefaults.standard.set(newValue, forKey: effortKey) }
+    }
+    static let modelsEndpoint = URL(string: "https://api.x.ai/v1/models")!
     /// Room for multi-slide ComposePatch JSON in one tool call.
-    static let maxOutputTokens = 32_000
+    static let maxOutputTokens = 8_000
     static let endpoint = URL(string: "https://api.x.ai/v1/chat/completions")!
 
     static var model: String {
         get {
             let value = UserDefaults.standard.string(forKey: modelKey) ?? ""
-            return value.isEmpty ? defaultModel : value
+            // Old default (and retired fast slugs) → cheaper current default.
+            let retired: Set<String> = ["grok-4", "grok-4-0709", "grok-4-fast", "grok-4-fast-reasoning", "grok-4-fast-non-reasoning", "grok-4-1-fast-reasoning", "grok-4-1-fast-non-reasoning"]
+            return value.isEmpty || retired.contains(value) ? defaultModel : value
         }
         set {
             let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -82,6 +92,7 @@ struct XAIProvider: AgentChatProvider {
                         "model": model,
                         "stream": true,
                         "max_tokens": XAIConfig.maxOutputTokens,
+                        "reasoning_effort": XAIConfig.reasoningEffort,
                         "messages": messages.map(\.wire),
                     ]
                     if !tools.isEmpty {
@@ -143,6 +154,18 @@ struct XAIProvider: AgentChatProvider {
         }
     }
 
+    /// Model ids available to this key (GET /v1/models). Never returns or logs the key.
+    static func listModels(session: URLSession = .shared) async throws -> [String] {
+        guard let key = XAIKeyStore.load() else { throw ProviderError.missingKey }
+        var request = URLRequest(url: XAIConfig.modelsEndpoint)
+        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        let (data, response) = try await session.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard status == 200 else { throw ProviderError.http(status, errorMessage(String(decoding: data, as: UTF8.self))) }
+        let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        return ((object?["data"] as? [[String: Any]]) ?? []).compactMap { $0["id"] as? String }.sorted()
+    }
+
     private static func errorMessage(_ text: String) -> String {
         if let data = text.data(using: .utf8),
            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
@@ -198,6 +221,19 @@ struct ScriptedAgentProvider: AgentChatProvider {
             if tools.isEmpty { continuation.yield(.delta("Done.")); continuation.finish(); return }
             if script == "broken" {
                 if step == 0 { call("get_project_context", "{}") } else { call("compose_patch_apply_preview", "{}") }
+                continuation.finish(); return
+            }
+            if script == "original" {
+                let steps: [(String, String)] = [
+                    ("get_project_context", ##"{}"##),
+                    ("template_instantiate", ##"{"templateId": "blank", "title": "Cold Open", "addElements": [{"kind": "text", "name": "Label", "x": 0.0417, "y": 0.0556, "w": 0.5, "h": 0.05, "phone": {"x": 0.056, "y": 0.04, "w": 0.8, "h": 0.03, "size": 36}, "text": "MORAPAY LIVE \u00b7 EP 1", "size": 48, "weight": "semibold", "color": "#9AA3B2"}, {"kind": "rect", "name": "Rule", "x": 0.0417, "y": 0.42, "w": 0.083, "h": 0.006, "phone": {"x": 0.056, "y": 0.4, "w": 0.15, "h": 0.003}, "fill": "#6B9FE0"}, {"kind": "text", "name": "Headline", "x": 0.0417, "y": 0.44, "w": 0.8, "h": 0.2, "phone": {"x": 0.056, "y": 0.42, "w": 0.89, "h": 0.16, "size": 150}, "text": "Stablecoin Rails for Africa", "size": 200, "weight": "bold"}, {"kind": "text", "name": "Host", "x": 0.0417, "y": 0.86, "w": 0.5, "h": 0.06, "phone": {"x": 0.056, "y": 0.9, "w": 0.8, "h": 0.03, "size": 36}, "text": "Kaleel, Founder, Morapay", "size": 48, "weight": "semibold", "color": "#9AA3B2"}], "groupName": "Agent Original Test"}"##),
+                    ("template_instantiate", ##"{"templateId": "blank", "title": "Agenda", "addElements": [{"kind": "text", "name": "Label", "x": 0.0417, "y": 0.0556, "w": 0.3, "h": 0.05, "phone": {"x": 0.056, "y": 0.04, "w": 0.8, "h": 0.03, "size": 36}, "text": "TODAY", "size": 48, "weight": "semibold", "color": "#6B9FE0"}, {"kind": "text", "name": "Headline", "x": 0.0417, "y": 0.12, "w": 0.28, "h": 0.4, "phone": {"x": 0.056, "y": 0.08, "w": 0.89, "h": 0.1, "size": 90}, "text": "Three things to know", "size": 120, "weight": "bold"}, {"kind": "rect", "name": "Divider", "x": 0.375, "y": 0.0556, "w": 0.0021, "h": 0.89, "phone": {"x": 0.056, "y": 0.2, "w": 0.89, "h": 0.002}, "fill": "#25252A"}, {"kind": "text", "name": "Item 1", "x": 0.4167, "y": 0.12, "w": 0.54, "h": 0.2, "phone": {"x": 0.056, "y": 0.26, "w": 0.89, "h": 0.15, "size": 90}, "text": "01  Why payments stall", "size": 120, "weight": "bold"}, {"kind": "text", "name": "Item 2", "x": 0.4167, "y": 0.4, "w": 0.54, "h": 0.2, "phone": {"x": 0.056, "y": 0.46, "w": 0.89, "h": 0.15, "size": 90}, "text": "02  How settlement works", "size": 120, "weight": "bold"}, {"kind": "text", "name": "Item 3", "x": 0.4167, "y": 0.68, "w": 0.54, "h": 0.2, "phone": {"x": 0.056, "y": 0.66, "w": 0.89, "h": 0.15, "size": 90}, "text": "03  Live questions", "size": 120, "weight": "bold"}]}"##),
+                    ("template_instantiate", ##"{"templateId": "blank", "title": "The Gap", "addElements": [{"kind": "text", "name": "Label", "x": 0.0417, "y": 0.0556, "w": 0.4, "h": 0.05, "phone": {"x": 0.056, "y": 0.04, "w": 0.8, "h": 0.03, "size": 36}, "text": "THE PROBLEM", "size": 48, "weight": "semibold", "color": "#9AA3B2"}, {"kind": "text", "name": "Big Number", "x": 0.0417, "y": 0.2, "w": 0.5, "h": 0.45, "phone": {"x": 0.056, "y": 0.12, "w": 0.89, "h": 0.25, "size": 300}, "text": "3 days", "size": 400, "weight": "bold", "color": "#6B9FE0"}, {"kind": "text", "name": "Caption", "x": 0.0417, "y": 0.7, "w": 0.45, "h": 0.1, "phone": {"x": 0.056, "y": 0.4, "w": 0.89, "h": 0.06, "size": 90}, "text": "Average cross-border settlement", "size": 120, "weight": "semibold"}, {"kind": "rect", "name": "Panel", "x": 0.5833, "y": 0.0556, "w": 0.375, "h": 0.89, "phone": {"x": 0.056, "y": 0.52, "w": 0.89, "h": 0.42}, "fill": "#1B1B1F"}, {"kind": "text", "name": "Panel Note", "x": 0.6042, "y": 0.12, "w": 0.33, "h": 0.3, "phone": {"x": 0.08, "y": 0.55, "w": 0.84, "h": 0.2, "size": 90}, "text": "Fees average 6 percent", "size": 120, "weight": "semibold"}]}"##),
+                    ("template_instantiate", ##"{"templateId": "blank", "title": "Flow", "addElements": [{"kind": "text", "name": "Label", "x": 0.0417, "y": 0.0556, "w": 0.4, "h": 0.05, "phone": {"x": 0.056, "y": 0.04, "w": 0.8, "h": 0.03, "size": 36}, "text": "HOW IT WORKS", "size": 48, "weight": "semibold", "color": "#9AA3B2"}, {"kind": "text", "name": "Headline", "x": 0.0417, "y": 0.12, "w": 0.7, "h": 0.14, "phone": {"x": 0.056, "y": 0.08, "w": 0.89, "h": 0.08, "size": 90}, "text": "Send to settle in seconds", "size": 120, "weight": "bold"}, {"kind": "rect", "name": "Track", "x": 0.0417, "y": 0.55, "w": 0.9167, "h": 0.004, "phone": {"x": 0.11, "y": 0.22, "w": 0.003, "h": 0.7}, "fill": "#6B9FE0"}, {"kind": "text", "name": "Step 1", "x": 0.0417, "y": 0.6, "w": 0.2, "h": 0.1, "phone": {"x": 0.15, "y": 0.24, "w": 0.7, "h": 0.06, "size": 36}, "text": "Send", "size": 48, "weight": "semibold"}, {"kind": "text", "name": "Step 2", "x": 0.2917, "y": 0.6, "w": 0.2, "h": 0.1, "phone": {"x": 0.15, "y": 0.42, "w": 0.7, "h": 0.06, "size": 36}, "text": "Convert", "size": 48, "weight": "semibold"}, {"kind": "text", "name": "Step 3", "x": 0.5417, "y": 0.6, "w": 0.2, "h": 0.1, "phone": {"x": 0.15, "y": 0.6, "w": 0.7, "h": 0.06, "size": 36}, "text": "Settle", "size": 48, "weight": "semibold"}, {"kind": "text", "name": "Step 4", "x": 0.7917, "y": 0.6, "w": 0.2, "h": 0.1, "phone": {"x": 0.15, "y": 0.78, "w": 0.7, "h": 0.06, "size": 36}, "text": "Receive", "size": 48, "weight": "semibold"}]}"##),
+                    ("template_instantiate", ##"{"templateId": "blank", "title": "Guest", "addElements": [{"kind": "video", "name": "Camera", "x": 0, "y": 0, "w": 0.625, "h": 1, "phone": {"x": 0, "y": 0, "w": 1, "h": 0.55}}, {"kind": "rect", "name": "Info Panel", "x": 0.625, "y": 0, "w": 0.375, "h": 1, "phone": {"x": 0, "y": 0.55, "w": 1, "h": 0.45}, "fill": "#1B1B1F"}, {"kind": "text", "name": "Name", "x": 0.6667, "y": 0.6, "w": 0.3, "h": 0.08, "phone": {"x": 0.056, "y": 0.62, "w": 0.89, "h": 0.05, "size": 90}, "text": "Kaleel", "size": 120, "weight": "bold"}, {"kind": "text", "name": "Role", "x": 0.6667, "y": 0.7, "w": 0.3, "h": 0.06, "phone": {"x": 0.056, "y": 0.68, "w": 0.89, "h": 0.03, "size": 36}, "text": "Founder, Morapay", "size": 48, "weight": "semibold", "color": "#6B9FE0"}]}"##)
+                ]
+                let step = messages[(messages.lastIndex { $0.role == .user } ?? 0)...].filter { $0.role == .tool }.count
+                if step < steps.count, !tools.isEmpty { call(steps[step].0, steps[step].1) } else { continuation.yield(.delta("Staged 5 original slides.")) }
                 continuation.finish(); return
             }
             if script == "templates" {

@@ -40,6 +40,12 @@ final class AIAgentSession {
     private var turnLastComposeError: String?
     private var turnComposeFailures = 0
     private var turnPrompt = ""
+    private var turnLayoutSignatures = Set<String>()
+
+    private func existingLayoutSignatures() -> Set<String> {
+        guard let controller else { return [] }
+        return Set(controller.show.allSlides.filter { $0.canvas.count >= 3 }.map { AgentDesignLint.layoutSignature($0.canvas) })
+    }
     private(set) var keyConnected = XAIKeyStore.isConnected
     private(set) var packVersion = ""
     /// Persisted display history for Ask overlay / Settings (survives relaunch).
@@ -198,6 +204,7 @@ final class AIAgentSession {
         turnLastComposeError = nil
         turnComposeFailures = 0
         turnPrompt = prompt
+        turnLayoutSignatures = []
 
         let pack = currentPack()
         packVersion = pack.version
@@ -334,40 +341,19 @@ final class AIAgentSession {
         for slide in slides { for object in slide.canvas { fonts.insert(object.typography.fontFamily) } }
         if fonts.isEmpty { fonts.insert("Inter") }
         let w = Double(settings.resolution.width), h = Double(settings.resolution.height)
+        _ = w; _ = h
+        // Slim by design: sent on every call. Details come from tools on demand.
         return [
             "project": settings.name,
             "show": show.name,
-            "stream": [
-                "aspect": "16:9", "designWidth": CanvasConfig.width, "designHeight": CanvasConfig.height,
-                "encodeWidth": w, "encodeHeight": h,
-                "safeMarginFraction": 0.05, "lowerThirdBand": [0.72, 0.92], "headerBand": [0.04, 0.14], "footerTicker": [0.93, 0.99],
-            ],
-            "phone": [
-                "enabled": true,
-                "presentInShow": hasPhone,
-                "aspect": "9:16",
-                "designWidth": 2160,
-                "designHeight": 3840,
-                "policy": "author_both_by_default",
-                "note": "Always author Phone unless the operator says Stream-only. Apply creates a Phone board when missing.",
-            ],
-            "canvasDefault": ["stream", "phone"],
-            "targetAspect": settings.targetAspect.rawValue,
-            "frameRate": "\(settings.frameRate)",
-            "theme": [
-                "background": "#121214", "surface": "#1B1B1F", "raised": "#25252A", "accent": "#6B9FE0",
-                "allowedBackgrounds": Array(ComposeDesignValidator.allowedBackgrounds).sorted(),
-                "floats": "transparent",
-            ],
-            "fonts": Array(fonts).sorted(),
-            "groups": show.groups.map { ["name": $0.name, "slides": $0.slides.count] },
+            "stream": ["w": CanvasConfig.width, "h": CanvasConfig.height, "margins": ["x": 160, "y": 120]],
+            "phone": ["w": 2160, "h": 3840, "margins": 120, "inShow": hasPhone, "default": true],
+            "theme": ["bg": "#121214", "surface": "#1B1B1F", "raised": "#25252A", "accent": "#6B9FE0", "text": "#FFFFFF", "muted": "#9AA3B2"],
+            "fonts": Array(fonts).sorted().prefix(4).map { $0 },
+            "groups": show.groups.prefix(12).map { "\($0.name) (\($0.slides.count))" },
             "slideCount": slides.count,
-            "recipes": ComposeRecipe.all.map(\.id),
-            "templates": AgentTemplateCatalog.compactSummary,
-            "templateTools": "templates_list, template_instantiate (dual Stream+Phone, slots, style, edits, addElements)",
-            "designBar": "Rich multi-element slides: header strip, headline hierarchy, plates, stat cards, accent rules, footer ticker. No single-text slides unless asked for minimal.",
-            "roles": ["operator": "applies drafts, takes, holds, arms destinations", "agent": "drafts to preview only"],
-            "patchSchema": "ComposePatch v1. Slide fields: title, lines, notes, label, backgroundHex, elements[{text, alignment, x, y}] with x,y fractions 0 to 1.",
+            "existingLayouts": existingLayoutSignatures().count,
+            "addElements": "{kind:text|rect|video,name,text,x,y,w,h fractions of 3840x2160,size px,weight,color,fill,radius,border,phone:{x,y,w,h fractions of 2160x3840,size}}",
         ]
     }
 
@@ -409,6 +395,8 @@ final class AIAgentSession {
             return AgentToolOutcome(result: json(["assets": items]), ok: true, summary: "\(items.count) assets")
         case "list_templates":
             return AgentToolOutcome(result: json(["note": "Inspiration only", "recipes": ComposeRecipe.all.map { ["id": $0.id, "name": $0.name] }, "packs": ["Rollup", "Bloomberg nameplate", "Guest mosaic 2/3/5", "Cam + Slide", "Milk Road"]]), ok: true, summary: "Templates listed")
+        case "design_guide":
+            return AgentToolOutcome(result: json(["guide": String(AgentPromptPacks.designBrief().prefix(24_000))]), ok: true, summary: "Design guide")
         case "templates_list":
             if let id = args["id"] as? String, let t = AgentTemplateCatalog.template(id) {
                 return AgentToolOutcome(result: json(["id": t.id, "name": t.name, "description": t.description, "regions": t.regions, "bestFor": t.bestFor, "slots": AgentTemplateCatalog.slots(t.id), "canvases": ["stream", "phone"]]), ok: true, summary: "Template \(t.id)")
@@ -442,6 +430,24 @@ final class AIAgentSession {
         let id = (args["templateId"] as? String ?? "").trimmingCharacters(in: .whitespaces)
         do {
             let (slide, notes) = try AgentTemplateCatalog.instantiate(id, args: args)
+            if id == "blank" {
+                if slide.canvas.filter({ $0.name != "Background" }).count < 2, plainSlideTitles(ComposePatch(schemaVersion: 1, recipeId: "freeform", summary: "", slides: [slide], rundownBlocks: nil, designMeta: ComposeDesignMeta(canvases: ["stream"]))).count > 0 {
+                    return AgentToolOutcome(result: json(["ok": false, "error": "too_plain", "message": "Add hierarchy: label, headline, rules/plates/cards."]), ok: false, summary: "too_plain")
+                }
+                let issues = AgentDesignLint.hardIssues(slide.canvas)
+                if !issues.isEmpty {
+                    return AgentToolOutcome(result: json(["ok": false, "error": "design_rules", "issues": issues, "retry": "Fix these and call template_instantiate again."]), ok: false, summary: "design_rules")
+                }
+                let signature = AgentDesignLint.layoutSignature(slide.canvas)
+                if turnLayoutSignatures.contains(signature) {
+                    return AgentToolOutcome(result: json(["ok": false, "error": "duplicate_layout", "message": "Same layout structure as an earlier slide in this request. Change the column split, card count, alignment axis or image/text ratio."]), ok: false, summary: "duplicate_layout")
+                }
+                if existingLayoutSignatures().contains(signature) {
+                    return AgentToolOutcome(result: json(["ok": false, "error": "copies_existing_slide", "message": "Matches a slide already in the show. Compose a different structure."]), ok: false, summary: "copies_existing_slide")
+                }
+                turnLayoutSignatures.insert(signature)
+            }
+            let lint = AgentDesignLint.warnings(slide.canvas)
             let streamOnly = (args["streamOnly"] as? Bool) == true
             let patch = ComposePatch(
                 schemaVersion: ComposePatch.currentSchemaVersion,
@@ -459,6 +465,7 @@ final class AIAgentSession {
                                           "streamElements": slide.canvas.count, "phoneElements": phoneCount,
                                           "elementNames": slide.canvas.map(\.name)]
             if !notes.isEmpty { payload["notes"] = notes }
+            if !lint.isEmpty { payload["lint"] = lint }
             if (args["stage"] as? Bool) ?? true {
                 if let name = (args["groupName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
                     draftGroupName = String(name.prefix(80))
@@ -730,6 +737,16 @@ extension ShowController {
         }
         guard method == "GET" else { return (405, #"{"ok":false,"error":"method_not_allowed"}"#) }
         switch parts[3] {
+        case "models":
+            // Ids only; the key never leaves the vault.
+            let box = ModelsBox()
+            let semaphore = DispatchSemaphore(value: 0)
+            Task.detached {
+                do { box.ids = try await XAIProvider.listModels() } catch { box.error = (error as? LocalizedError)?.errorDescription ?? "\(error)" }
+                semaphore.signal()
+            }
+            _ = semaphore.wait(timeout: .now() + 15)
+            return (200, ControlJSON.encode(["ok": box.error == nil, "models": box.ids, "error": box.error ?? "", "selected": XAIConfig.model, "effort": XAIConfig.reasoningEffort]))
         case "status":
             return (200, ControlJSON.encode([
                 "ok": true,
@@ -749,5 +766,58 @@ extension ShowController {
         default:
             return nil
         }
+    }
+}
+
+
+private final class ModelsBox: @unchecked Sendable {
+    var ids: [String] = []
+    var error: String?
+}
+
+/// Built-in design rule checks for agent-composed (blank) slides. Stream design space 3840x2160.
+enum AgentDesignLint {
+    static let accentish: Set<String> = ["#6B9FE0", "#C6FF3D", "#F5C518", "#FFD60A", "#E5322D"]
+
+    static func hardIssues(_ objects: [CanvasObject]) -> [String] {
+        var issues: [String] = []
+        let texts = objects.filter { $0.kind == .text && !$0.text.isEmpty }
+        let sizes = Set(texts.map { Int($0.typography.fontSize.rounded()) })
+        if sizes.count > 3 { issues.append("\(sizes.count) font sizes (max 3): \(sizes.sorted())") }
+        let weights = Set(texts.map(\.typography.fontWeight.rawValue))
+        if weights.count > 2 { issues.append("\(weights.count) font weights (max 2): \(weights.sorted())") }
+        let accents = objects.filter { o in
+            let colors = [o.kind == .text ? o.typography.color : o.fill.color, o.stroke.style == .none ? "" : o.stroke.color]
+            return colors.contains { accentish.contains($0.uppercased()) }
+        }
+        if accents.count > 2 { issues.append("accent on \(accents.count) elements (max 2): \(accents.map(\.name).joined(separator: ", "))") }
+        if texts.contains(where: { $0.text.unicodeScalars.contains { $0.properties.isEmojiPresentation } }) { issues.append("emoji in text") }
+        return issues
+    }
+
+    static func warnings(_ objects: [CanvasObject]) -> [String] {
+        var out: [String] = []
+        let texts = objects.filter { $0.kind == .text && !$0.text.isEmpty }
+        if let headline = texts.max(by: { $0.typography.fontSize < $1.typography.fontSize }),
+           headline.text.split(whereSeparator: \.isWhitespace).count >= 7 {
+            out.append("headline '\(headline.name)' has 7+ words")
+        }
+        for o in objects where o.name != "Background" && o.transform.width < 3800 {
+            if o.transform.x < 159 || o.transform.x + o.transform.width > 3840 - 159 { out.append("\(o.name) outside 160px side margins") }
+        }
+        if texts.contains(where: { $0.textLayout.horizontalAlign == .center || $0.textLayout.horizontalAlign == .right }) { out.append("non flush-left text") }
+        let buzz = ["revolutionary", "synergy", "game-changer", "disrupt", "next-gen", "cutting-edge", "seamless", "leverage"]
+        if texts.contains(where: { t in buzz.contains { t.text.lowercased().contains($0) } }) { out.append("buzzword in copy") }
+        return Array(out.prefix(8))
+    }
+
+    /// Structure fingerprint: non-text blocks snapped to a 12-col / 6-row grid, plus text block count.
+    static func layoutSignature(_ objects: [CanvasObject]) -> String {
+        let blocks = objects.filter { $0.name != "Background" && $0.kind != .text }.map { o -> String in
+            let c = { (v: Double, span: Double, n: Double) in Int((v / span * n).rounded()) }
+            return "\(c(o.transform.x, 3840, 12)),\(c(o.transform.y, 2160, 6)),\(c(o.transform.width, 3840, 12)),\(c(o.transform.height, 2160, 6))"
+        }.sorted()
+        let textCount = objects.filter { $0.kind == .text }.count
+        return blocks.joined(separator: "|") + "#t\(min(textCount, 12) / 3)"
     }
 }

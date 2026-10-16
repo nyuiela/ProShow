@@ -130,6 +130,7 @@ enum AgentToolRegistry {
         .init(name: "get_context_pack_status", description: "Context pack version for this session vs live. Use when history may describe stale tools or settings.", parametersJSON: empty),
         .init(name: "list_assets", description: "Images and media already in the project, with slide and group names.", parametersJSON: empty),
         .init(name: "list_templates", description: "Template and recipe ids for inspiration only. You may invent layouts that follow the guide.", parametersJSON: empty),
+        .init(name: "design_guide", description: "Full ProShow creative design guide (long). Only call when the built-in rules are not enough.", parametersJSON: empty),
         .init(name: "templates_list", description: "Broadcast/news template catalog: id, name, description, layout regions, editable text slots with defaults, canvases (Stream 16:9 + Phone 9:16). Starting points, not limits.", parametersJSON: #"{"type":"object","properties":{"id":{"type":"string","description":"Optional: one template id to get its full slot list"}}}"#),
         .init(name: "template_instantiate", description: "Build one rich dual-canvas slide (Stream + Phone reflow) from a template, fill slots, restyle, edit/remove/add elements. By default stages it straight into the draft (append). Use templateId blank + addElements for fully custom layouts.", parametersJSON: #"{"type":"object","properties":{"templateId":{"type":"string"},"title":{"type":"string"},"slots":{"type":"object","description":"slot name -> text, e.g. {\"Headline\":\"...\",\"Host Name\":\"Kaleel\"}"},"style":{"type":"object","properties":{"accent":{"type":"string"},"background":{"type":"string"},"text":{"type":"string"}}},"edits":{"type":"object","description":"element name -> {text,color,fill,fontSize,opacity,frame:{x,y,w,h fractions}}"},"remove":{"type":"array","items":{"type":"string"},"description":"element names to delete"},"addElements":{"type":"array","items":{"type":"object","description":"{kind: text|rect|video, name, text, x,y,w,h (fractions of Stream 16:9), fill, color, size (px at 3840 wide), weight, align, radius, border, phone:{x,y,w,h,size} optional}"}},"notes":{"type":"string"},"streamOnly":{"type":"boolean"},"stage":{"type":"boolean","description":"default true: append to the draft now"},"groupName":{"type":"string"}},"required":["templateId"]}"#),
         .init(name: "compose_patch_validate", description: "Validate a ComposePatch against schema, tokens and canvas rules. Returns errors to fix.", parametersJSON: patchArg),
@@ -170,6 +171,8 @@ enum AgentPromptPacks {
         return fallbackBrief
     }
 
+    static func readOverrideDesign() -> String? { readOverride("design.md") }
+
     static func toolsGuide() -> String { readOverride("tools.md") ?? defaultToolsGuide }
     static func releaseNotes() -> String? { readOverride("release-notes.md") }
 
@@ -189,12 +192,35 @@ enum AgentPromptPacks {
     Genres (news desk, lower third, mosaic, keynote, workshop) are vocabulary, not a menu. Explain bends in `summary`.
     """
 
+    /// Built-in design rules (kept short: sent every call). Full guide via design_guide tool.
+    static let designRules = """
+    # ProShow design agent
+    You design ORIGINAL broadcast slides. Default path: template_instantiate with templateId "blank" + addElements (one call per slide), or a raw ComposePatch.
+    Templates (templates_list) are optional inspiration. Use one ONLY when the operator names a template or asks for one. Never copy a template or an existing slide in the show.
+    References: Bloomberg TV graphics, Apple HIG, Swiss/International grid, FT, Stripe. Restraint over decoration.
+
+    ## Rules (defaults unless the operator overrides)
+    - 12-column grid. Margins: Stream 160 px left/right, 120 px top/bottom (3840x2160). Phone 120 px (2160x3840).
+    - Spacing scale only: 8, 16, 24, 48, 96 px (multiples allowed for big gaps).
+    - Per slide: max 2 font weights, max 3 font sizes. Clear hierarchy: label < body < headline.
+    - Accent color on at most 2 elements per slide. Everything else graphite/white/gray.
+    - Flush left. No centered body text. No gradients, shadows, emoji, buzzwords.
+    - Headlines under 7 words.
+    - Variety: within one request no two slides share the same layout structure (vary column split, card count, alignment axis, image/text ratio). Don't reproduce slides already in the show.
+    - Dual canvas by default: give every addElements item a `phone` frame designed for 9:16 (stack, don't shrink).
+    - Graphite #121214 background, accent #6B9FE0 unless the theme or operator says otherwise.
+
+    ## Self-check before replying
+    For each slide confirm: grid + margins, spacing scale, ≤2 weights, ≤3 sizes, ≤2 accents, headline <7 words, flush left, unique layout, phone frames present. Fix and re-stage anything that fails; tools also return `lint` issues.
+    """
+
     static let defaultToolsGuide = """
     # Tools
     1. Call get_project_context before you design.
     2. Draft a ComposePatch. Element x and y are fractions of the canvas (0 to 1). Fonts and sizes come from context.
-    2a. Prefer rich compositions: call templates_list, then template_instantiate per slide (fill slots, restyle, edit, add elements freely). Each call stages one dual-canvas slide; no giant JSON. Mix templates or start from "blank" + addElements when nothing fits.
-    2b. Every build slide needs hierarchy: header/label, headline, supporting plates/cards/rules, footer or ticker. A slide with a single text element is rejected unless the operator asked for minimal.
+    2a. Default: template_instantiate {templateId:"blank", title, addElements:[...]} per slide. Each call stages one dual-canvas slide; no giant JSON.
+    2b. Every build slide needs hierarchy (label, headline, supporting rules/plates/cards). A single text element is rejected unless the operator asked for minimal.
+    2c. templates_list / named templates only when the operator asks. design_guide returns the full creative guide if you need it.
     3. (Raw patches) compose_patch_validate, fix every error, then compose_patch_apply_preview (pass the same patch, or just {"patchId": id} from validate).
     3a. More than 3 slides: build in batches. Validate and stage 1-3 slides per call with "append": true until every slide is staged. Never put a whole 10-slide show in one call; it gets cut off.
     3b. If a tool returns ok false, fix the error and call it again. Never say done until apply_preview returned staged true for every slide.
@@ -221,7 +247,7 @@ struct AgentContextPack: Sendable {
 
     /// Version covers teaching packs, tool catalog and project settings. Show content is excluded so edits do not thrash it.
     static func build(context: [String: Any], settingsKey: String) -> AgentContextPack {
-        let brief = AgentPromptPacks.designBrief()
+        let brief = AgentPromptPacks.readOverrideDesign() ?? AgentPromptPacks.designRules
         let tools = AgentPromptPacks.toolsGuide()
         let notes = AgentPromptPacks.releaseNotes()
         let version = shortHash([shortHash(brief), shortHash(tools), notes ?? "", AgentToolRegistry.catalogDigest, settingsKey].joined(separator: "|"))
@@ -231,7 +257,7 @@ struct AgentContextPack: Sendable {
 
     func systemPrompt() -> String {
         """
-        \(AgentPromptPacks.designBrief())
+        \(AgentPromptPacks.readOverrideDesign() ?? AgentPromptPacks.designRules)
 
         \(AgentPromptPacks.toolsGuide())
 
