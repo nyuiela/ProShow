@@ -155,6 +155,19 @@ enum ComposeCodec {
         } else {
             try checkKeys(object)
         }
+        // Models don't send ids; Apply assigns fresh ones anyway. Fill them so decoding never fails.
+        if var slides = object["slides"] as? [[String: Any]] {
+            var filled = 0
+            for index in slides.indices {
+                if slides[index]["id"] == nil { slides[index]["id"] = UUID().uuidString; filled += 1 }
+                if var elements = slides[index]["elements"] as? [[String: Any]] {
+                    for e in elements.indices where elements[e]["id"] == nil { elements[e]["id"] = UUID().uuidString }
+                    slides[index]["elements"] = elements
+                }
+            }
+            if filled > 0 { notes.append("filled_slide_ids:\(filled)") }
+            object["slides"] = slides
+        }
         let cleaned = try JSONSerialization.data(withJSONObject: object)
         let patch = try decodePatchObject(cleaned)
         return (patch, notes)

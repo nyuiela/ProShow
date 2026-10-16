@@ -28,6 +28,15 @@ final class AIAgentSession {
     private(set) var events: [AgentEvent] = []
     private(set) var isRunning = false
     private(set) var draft: ComposePatch?
+    /// Group the staged draft lands in on Apply (model may name it, e.g. the show title).
+    private(set) var draftGroupName: String = AIComposeAPI.draftGroupName
+    /// Last patch that passed compose_patch_validate, so apply_preview can stage it by id / default.
+    private var lastValidated: (id: String, patch: ComposePatch)?
+    // Per-turn compose bookkeeping (reset in runTurn).
+    private var turnStagedSlides = 0
+    private var turnComposeAttempted = false
+    private var turnLastComposeError: String?
+    private var turnComposeFailures = 0
     private(set) var keyConnected = XAIKeyStore.isConnected
     private(set) var packVersion = ""
     /// Persisted display history for Ask overlay / Settings (survives relaunch).
@@ -90,15 +99,16 @@ final class AIAgentSession {
         emit(.cancelled)
     }
 
-    func discardDraft() { draft = nil }
+    func discardDraft() { draft = nil; draftGroupName = AIComposeAPI.draftGroupName }
 
     /// Operator gate. Only path from agent output into the show.
     @discardableResult
     func applyDraft() -> AgentSlidePlacement? {
         guard let draft, let controller else { return nil }
         do {
-            let placement = try controller.applyComposePatch(draft)
+            let placement = try controller.applyComposePatch(draft, groupName: draftGroupName)
             self.draft = nil
+            draftGroupName = AIComposeAPI.draftGroupName
             lastPlacement = placement
             emit(.slidesCreated(
                 groupName: placement.groupName,
@@ -109,7 +119,10 @@ final class AIAgentSession {
             ))
             appendPersisted(
                 role: "assistant",
-                text: placement.label + " · " + placement.deepLink,
+                text: ([placement.label + " · " + placement.deepLink] + zip(placement.slideIDs, placement.slideTitles).enumerated().map { index, pair in
+                    let link = placement.showID.map { "proshow://show/\($0.uuidString)/slide/\(pair.0.uuidString)" } ?? "proshow://slide/\(pair.0.uuidString)"
+                    return "\(index + 1). \(pair.1.isEmpty ? "Slide" : pair.1) · \(link)"
+                }).joined(separator: "\n"),
                 placement: placement
             )
             if let first = placement.slideIDs.first {
@@ -170,12 +183,17 @@ final class AIAgentSession {
     // MARK: - Turn loop
 
     private func chatProvider() -> AgentChatProvider {
-        provider == .xai && XAIKeyStore.isConnected ? XAIProvider() : PracticeAgentProvider()
+        if let script = ScriptedAgentProvider.configured { return ScriptedAgentProvider(script: script) }
+        return provider == .xai && XAIKeyStore.isConnected ? XAIProvider() : PracticeAgentProvider()
     }
 
     private func runTurn(prompt: String, deskNote: String) async {
         defer { isRunning = false; turnTask = nil }
         emit(.turnStarted(turnID: UUID().uuidString))
+        turnStagedSlides = 0
+        turnComposeAttempted = false
+        turnLastComposeError = nil
+        turnComposeFailures = 0
 
         let pack = currentPack()
         packVersion = pack.version
@@ -240,6 +258,23 @@ final class AIAgentSession {
                     context.append(toolMessage)
                     history.append(toolMessage)
                 }
+                if turnComposeFailures >= AgentToolRegistry.maxComposeFailures { break }
+            }
+            // Never report success when nothing was staged or the last compose call failed.
+            let wantedSlides = Self.promptRequestsSlides(prompt)
+            if (turnComposeAttempted || wantedSlides), turnStagedSlides == 0 || turnComposeFailures >= AgentToolRegistry.maxComposeFailures {
+                let reason = turnLastComposeError ?? "the agent never staged a draft"
+                let message = "No slides were created. The design agent could not stage the draft (\(reason)) after \(turnComposeFailures) failed attempt(s). Try again, or ask for fewer slides at a time."
+                history.append(AgentMessage(role: .assistant, content: message))
+                appendPersisted(role: "assistant", text: message)
+                seenPackVersion = pack.version
+                persistHistory()
+                emit(.error(message))
+                return
+            }
+            if let draft, turnStagedSlides > 0 {
+                let list = draft.slides.enumerated().map { "\($0.offset + 1). \($0.element.title.isEmpty ? "Slide" : $0.element.title)" }.joined(separator: "\n")
+                finalText += "\n\nStaged \(draft.slides.count) slide(s) for group \"\(draftGroupName)\":\n\(list)\nTap Apply to create them. Each slide's link is listed after Apply."
             }
             history.append(AgentMessage(role: .assistant, content: finalText))
             if !finalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -368,52 +403,102 @@ final class AIAgentSession {
         case "list_templates":
             return AgentToolOutcome(result: json(["note": "Inspiration only", "recipes": ComposeRecipe.all.map { ["id": $0.id, "name": $0.name] }, "packs": ["Rollup", "Bloomberg nameplate", "Guest mosaic 2/3/5", "Cam + Slide", "Milk Road"]]), ok: true, summary: "Templates listed")
         case "compose_patch_validate", "compose_patch_apply_preview":
-            do {
-                let raw: Any
-                if let value = args["patch"] {
-                    raw = value
-                } else if args.isEmpty, !call.arguments.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    // Entire arguments blob may itself be the patch or a fenced object.
-                    raw = call.arguments
-                } else {
-                    throw ComposeError.missingPatch
-                }
-                let (patch, notes) = try ComposeCodec.decodePatchFlexible(raw, stripUnknownKeys: true)
-                try ComposeDesignValidator.validate(patch)
-                if call.name == "compose_patch_validate" {
-                    var payload: [String: Any] = ["ok": true, "slides": patch.slides.count]
-                    if !notes.isEmpty { payload["notes"] = notes }
-                    return AgentToolOutcome(result: json(payload), ok: true, summary: "Valid, \(patch.slides.count) slides")
-                }
-                let canvases = patch.designMeta.canvases.map { $0.lowercased() }
-                var payload: [String: Any] = [
-                    "ok": true,
-                    "staged": true,
-                    "slides": patch.slides.count,
-                    "group": AIComposeAPI.draftGroupName,
-                    "canvases": canvases,
-                    "locationHint": "After Apply: group \(AIComposeAPI.draftGroupName)",
-                    "next": "Operator reviews and taps Apply, then opens the group link",
-                ]
-                if !notes.isEmpty { payload["notes"] = notes }
-                return AgentToolOutcome(
-                    result: json(payload),
-                    ok: true,
-                    summary: "Draft staged → \(AIComposeAPI.draftGroupName) (\(patch.slides.count))",
-                    draft: patch
-                )
-            } catch {
-                let e = error as? ComposeError ?? .invalidJSON(String(describing: error))
-                let preview = String(call.arguments.prefix(280))
-                NSLog("ProShow AI compose tool \(call.name) failed: \(e.code) \(e.detail) raw=\(preview)")
-                return AgentToolOutcome(
-                    result: json(["ok": false, "error": e.code, "message": e.detail, "rawPreview": preview]),
-                    ok: false,
-                    summary: e.code
-                )
+            turnComposeAttempted = true
+            let outcome = composeTool(call, args: args)
+            if outcome.ok {
+                turnComposeFailures = 0
+            } else {
+                turnComposeFailures += 1
+                turnLastComposeError = outcome.summary
             }
+            return outcome
         default:
             return AgentToolOutcome(result: json(["ok": false, "error": "not_implemented"]), ok: false, summary: "Not implemented")
+        }
+    }
+
+    private func composeTool(_ call: AgentToolCall, args: [String: Any]) -> AgentToolOutcome {
+        let isStage = call.name == "compose_patch_apply_preview"
+        func fail(_ code: String, _ message: String) -> AgentToolOutcome {
+            let preview = String(call.arguments.prefix(280))
+            NSLog("ProShow AI compose tool \(call.name) failed: \(code) \(message) raw=\(preview)")
+            return AgentToolOutcome(
+                result: json(["ok": false, "error": code, "message": message, "rawPreview": preview, "retry": "Fix and call \(call.name) again. Send at most 3 slides per call."]),
+                ok: false,
+                summary: code
+            )
+        }
+        if call.truncated {
+            return fail("output_truncated", "Your tool call was cut off by the output limit. Send 1-3 slides per call and stage batches with append true.")
+        }
+        do {
+            var patch: ComposePatch
+            var notes: [String] = []
+            if let value = args["patch"] {
+                (patch, notes) = try ComposeCodec.decodePatchFlexible(value, stripUnknownKeys: true)
+            } else if args["slides"] != nil {
+                // Model sent the patch itself as the arguments object.
+                var bare = args
+                for key in ["patchId", "append", "groupName"] { bare.removeValue(forKey: key) }
+                (patch, notes) = try ComposeCodec.decodePatchFlexible(bare, stripUnknownKeys: true)
+            } else if args.isEmpty, !call.arguments.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                      call.arguments.contains("\"slides\"") {
+                // Entire arguments blob may itself be the patch or a fenced object.
+                (patch, notes) = try ComposeCodec.decodePatchFlexible(call.arguments, stripUnknownKeys: true)
+            } else if isStage, let last = lastValidated,
+                      (args["patchId"] as? String).map({ $0 == last.id }) ?? true {
+                patch = last.patch
+                notes.append("Staged last validated patch \(last.id)")
+            } else {
+                let hint = lastValidated == nil
+                    ? "Send {\"patch\": {...}}. Call compose_patch_validate first if unsure."
+                    : "Unknown patchId. Last validated id is \(lastValidated!.id). Or send {\"patch\": {...}}."
+                return fail(ComposeError.missingPatch.code, hint)
+            }
+            try ComposeDesignValidator.validate(patch)
+            if !isStage {
+                let id = "p" + String(UUID().uuidString.prefix(8)).lowercased()
+                lastValidated = (id, patch)
+                var payload: [String: Any] = ["ok": true, "slides": patch.slides.count, "patchId": id, "next": "compose_patch_apply_preview with {\"patchId\": \"\(id)\", \"append\": true}"]
+                if !notes.isEmpty { payload["notes"] = notes }
+                return AgentToolOutcome(result: json(payload), ok: true, summary: "Valid, \(patch.slides.count) slides")
+            }
+            if let name = (args["groupName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+                draftGroupName = String(name.prefix(80))
+            }
+            let append = (args["append"] as? Bool) ?? (turnStagedSlides > 0)
+            var staged = patch
+            if append, let existing = draft {
+                staged = existing
+                staged.slides += patch.slides
+                if let blocks = patch.rundownBlocks { staged.rundownBlocks = (staged.rundownBlocks ?? []) + blocks }
+                if !patch.summary.isEmpty, !staged.summary.contains(patch.summary) {
+                    staged.summary = String((staged.summary + " " + patch.summary).prefix(600))
+                }
+                try ComposeDesignValidator.validate(staged)
+            }
+            turnStagedSlides += patch.slides.count
+            let canvases = staged.designMeta.canvases.map { $0.lowercased() }
+            var payload: [String: Any] = [
+                "ok": true,
+                "staged": true,
+                "addedSlides": patch.slides.count,
+                "slides": staged.slides.count,
+                "group": draftGroupName,
+                "canvases": canvases,
+                "locationHint": "After Apply: group \(draftGroupName)",
+                "next": "Stage remaining slides (append true), then reply with the slide list. The operator taps Apply.",
+            ]
+            if !notes.isEmpty { payload["notes"] = notes }
+            return AgentToolOutcome(
+                result: json(payload),
+                ok: true,
+                summary: "Draft staged → \(draftGroupName) (\(staged.slides.count))",
+                draft: staged
+            )
+        } catch {
+            let e = error as? ComposeError ?? .invalidJSON(String(describing: error))
+            return fail(e.code, e.detail)
         }
     }
 
@@ -471,6 +556,14 @@ final class AIAgentSession {
         persistHistory()
     }
 
+    /// Build/design requests must end with staged slides, or the turn reports failure.
+    private static func promptRequestsSlides(_ prompt: String) -> Bool {
+        let lower = prompt.lowercased()
+        let verbs = ["build", "create", "make", "design", "generate", "add", "draft", "compose"]
+        let nouns = ["slide", "show", "deck", "lower third", "template", "screen"]
+        return verbs.contains { lower.contains($0) } && nouns.contains { lower.contains($0) }
+    }
+
     private static func userRequestsStreamOnly(_ prompt: String) -> Bool {
         let lower = prompt.lowercased()
         let needles = [
@@ -484,12 +577,16 @@ final class AIAgentSession {
 
     /// Best-effort parse of model tool arguments. Empty dict on failure (never throws).
     private static func parseToolArguments(_ text: String) -> [String: Any] {
+        // Plain JSON first. `sanitizeJSONData` unwraps {"patch":{...}} to the bare patch, which used to
+        // drop the `patch` key (and patchId/append/groupName) so every well-formed call hit missing_patch.
+        if let object = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any] {
+            return object
+        }
         var notes: [String] = []
         if let data = try? ComposeCodec.sanitizeJSONData(Data(text.utf8), notes: &notes),
            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            return object
-        }
-        if let object = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any] {
+            // Sanitizer may have unwrapped a nested patch; keep it addressable as `patch`.
+            if object["patch"] == nil, object["slides"] != nil { return ["patch": object] }
             return object
         }
         return [:]
@@ -502,9 +599,21 @@ extension ShowController {
     func handleAIAgent(method: String, parts: [String]) -> (Int, String)? {
         guard parts.count == 4, parts[0] == "v1", parts[1] == "ai", parts[2] == "agent" else { return nil }
         guard ProShowFeatureFlags.aiComposeV1 else { return AIComposeAPI.flagOff() }
-        guard method == "GET" else { return (405, #"{"ok":false,"error":"method_not_allowed"}"#) }
         let session = AIAgentSession.shared
         if session.controller == nil { session.attach(self) }
+        // Test hooks only while a scripted mock model is configured (never with a real key path).
+        if method == "POST", ScriptedAgentProvider.configured != nil {
+            switch parts[3] {
+            case "send":
+                session.send("Build a complete 10-slide show (mock run).")
+                return (202, #"{"ok":true}"#)
+            case "apply_draft":
+                guard let placement = session.applyDraft() else { return (409, #"{"ok":false,"error":"no_draft"}"#) }
+                return (200, ControlJSON.encode(["ok": true, "group": placement.groupName, "slides": placement.slideIDs.count, "deepLink": placement.deepLink]))
+            default: break
+            }
+        }
+        guard method == "GET" else { return (405, #"{"ok":false,"error":"method_not_allowed"}"#) }
         switch parts[3] {
         case "status":
             return (200, ControlJSON.encode([

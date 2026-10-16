@@ -74,6 +74,9 @@ enum ControlHTTP {
         if parts.contains("soundboard"), parts.last == "play" {
             return method == "POST"
         }
+        if parts == ["v1", "ai", "agent", "send"] || parts == ["v1", "ai", "agent", "apply_draft"] {
+            return method == "POST"
+        }
         if parts == ["v1", "ai", "compose"] || parts == ["v1", "ai", "apply"] {
             return method == "POST"
         }

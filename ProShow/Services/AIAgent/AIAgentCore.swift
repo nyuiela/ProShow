@@ -67,6 +67,8 @@ struct AgentToolCall: Hashable, Sendable {
     var id: String
     var name: String
     var arguments: String
+    /// Provider stopped mid-call (finish_reason == "length"); arguments are incomplete.
+    var truncated: Bool = false
 }
 
 struct AgentMessage: Hashable, Sendable {
@@ -114,10 +116,13 @@ struct AgentToolOutcome: Sendable {
 }
 
 enum AgentToolRegistry {
-    static let maxToolRounds = 6
+    static let maxToolRounds = 24
+    /// Consecutive failed compose calls before the turn is failed for the operator.
+    static let maxComposeFailures = 4
 
     private static let empty = #"{"type":"object","properties":{},"additionalProperties":false}"#
     private static let patchArg = #"{"type":"object","properties":{"patch":{"type":"object","description":"ComposePatch v1: schemaVersion, recipeId, summary, slides, rundownBlocks, designMeta"}},"required":["patch"]}"#
+    private static let stageArg = #"{"type":"object","properties":{"patch":{"type":"object","description":"ComposePatch v1 with 1-3 slides. Omit to stage the last validated patch."},"patchId":{"type":"string","description":"id returned by compose_patch_validate; stages that patch without resending it"},"append":{"type":"boolean","description":"Add these slides to the draft already staged this turn (default true after the first batch)"},"groupName":{"type":"string","description":"Group the slides land in after Apply, e.g. the show name"}}}"#
 
     static let all: [AgentToolDefinition] = [
         .init(name: "get_project_context", description: "Live project context: canvas sizes, Stream and Phone lanes, theme tokens, fonts in use, groups, assets, roles. Call first.", parametersJSON: empty),
@@ -126,7 +131,7 @@ enum AgentToolRegistry {
         .init(name: "list_assets", description: "Images and media already in the project, with slide and group names.", parametersJSON: empty),
         .init(name: "list_templates", description: "Template and recipe ids for inspiration only. You may invent layouts that follow the guide.", parametersJSON: empty),
         .init(name: "compose_patch_validate", description: "Validate a ComposePatch against schema, tokens and canvas rules. Returns errors to fix.", parametersJSON: patchArg),
-        .init(name: "compose_patch_apply_preview", description: "Stage a validated ComposePatch as the desk draft. The operator reviews and taps Apply. Does not change the show.", parametersJSON: patchArg),
+        .init(name: "compose_patch_apply_preview", description: "Stage a validated ComposePatch as the desk draft. The operator reviews and taps Apply. Does not change the show. Large shows: stage in batches of 1-3 slides with append true, or pass patchId from validate.", parametersJSON: stageArg),
         .init(name: "import_slides", description: "Ask the operator to import a deck (PPTX, Key, PDF) as full-frame slides.", parametersJSON: empty, operatorGated: true),
         .init(name: "take", description: "Send Preview to Program. Operator only.", parametersJSON: empty, operatorGated: true),
         .init(name: "hold", description: "Hold Program. Operator only.", parametersJSON: empty, operatorGated: true),
@@ -186,7 +191,10 @@ enum AgentPromptPacks {
     # Tools
     1. Call get_project_context before you design.
     2. Draft a ComposePatch. Element x and y are fractions of the canvas (0 to 1). Fonts and sizes come from context.
-    3. compose_patch_validate, fix every error, then compose_patch_apply_preview once.
+    3. compose_patch_validate, fix every error, then compose_patch_apply_preview (pass the same patch, or just {"patchId": id} from validate).
+    3a. More than 3 slides: build in batches. Validate and stage 1-3 slides per call with "append": true until every slide is staged. Never put a whole 10-slide show in one call; it gets cut off.
+    3b. If a tool returns ok false, fix the error and call it again. Never say done until apply_preview returned staged true for every slide.
+    3c. For a named show, pass "groupName" so slides land in their own group.
     4. Never call take, hold, arm_destinations. They need the operator and do nothing for you.
     5. Keep replies short. Say what you staged and what the operator should check.
     6. recipeId: use "freeform" for invented layouts.

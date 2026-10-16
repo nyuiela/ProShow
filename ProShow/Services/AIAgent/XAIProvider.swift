@@ -21,6 +21,8 @@ enum XAIConfig {
     static let modelKey = "proshow.xai.model"
     static let providerKey = "proshow.ai.provider"
     static let defaultModel = "grok-4"
+    /// Room for multi-slide ComposePatch JSON in one tool call.
+    static let maxOutputTokens = 32_000
     static let endpoint = URL(string: "https://api.x.ai/v1/chat/completions")!
 
     static var model: String {
@@ -79,6 +81,7 @@ struct XAIProvider: AgentChatProvider {
                     var body: [String: Any] = [
                         "model": model,
                         "stream": true,
+                        "max_tokens": XAIConfig.maxOutputTokens,
                         "messages": messages.map(\.wire),
                     ]
                     if !tools.isEmpty {
@@ -96,6 +99,7 @@ struct XAIProvider: AgentChatProvider {
                     }
 
                     var pending: [Int: AgentToolCall] = [:]
+                    var finishReason = ""
                     for try await line in bytes.lines {
                         try Task.checkCancellation()
                         guard line.hasPrefix("data:") else { continue }
@@ -103,9 +107,10 @@ struct XAIProvider: AgentChatProvider {
                         if payload == "[DONE]" { break }
                         guard let data = payload.data(using: .utf8),
                               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                              let choice = (object["choices"] as? [[String: Any]])?.first,
-                              let delta = choice["delta"] as? [String: Any]
+                              let choice = (object["choices"] as? [[String: Any]])?.first
                         else { continue }
+                        if let reason = choice["finish_reason"] as? String { finishReason = reason }
+                        guard let delta = choice["delta"] as? [String: Any] else { continue }
                         if let text = delta["content"] as? String, !text.isEmpty {
                             continuation.yield(.delta(text))
                         }
@@ -124,6 +129,7 @@ struct XAIProvider: AgentChatProvider {
                         let calls = pending.keys.sorted().compactMap { pending[$0] }.enumerated().map { offset, call in
                             var c = call
                             if c.id.isEmpty { c.id = "call_\(offset)" }
+                            if finishReason == "length" { c.truncated = true }
                             return c
                         }
                         continuation.yield(.toolCalls(calls))
@@ -158,6 +164,52 @@ struct PracticeAgentProvider: AgentChatProvider {
                 continuation.yield(.toolCalls([AgentToolCall(id: "practice_ctx", name: "get_project_context", arguments: "{}")]))
             } else {
                 continuation.yield(.delta("Practice mode. I read the project context. Add an xAI key to design live, or paste a patch into the Control API compose route."))
+            }
+            continuation.finish()
+        }
+    }
+}
+
+/// Offline scripted model for verifying the agent loop (`defaults write com.kaleel.proshow proshow.ai.mockScript batched|broken`).
+/// batched: context → validate 3 → stage by patchId → stage 3 (append) → stage 4 (append) → reply.
+/// broken: keeps calling apply_preview with no patch, like the failing xAI run.
+struct ScriptedAgentProvider: AgentChatProvider {
+    let id = "scripted"
+    var script: String
+
+    static var configured: String? {
+        let v = UserDefaults.standard.string(forKey: "proshow.ai.mockScript") ?? ""
+        return v.isEmpty ? nil : v
+    }
+
+    private static func patch(_ range: ClosedRange<Int>) -> String {
+        let slides = range.map { "{\"title\":\"Morapay Live \($0)\",\"lines\":[\"Stablecoin rails slide \($0)\"],\"backgroundHex\":\"#121214\"}" }
+        return #"{"schemaVersion":1,"recipeId":"freeform","summary":"Batch \#(range.lowerBound)-\#(range.upperBound)","slides":[\#(slides.joined(separator: ","))],"designMeta":{"canvases":["stream","phone"]}}"#
+    }
+
+    func stream(messages: [AgentMessage], tools: [AgentToolDefinition]) -> AsyncThrowingStream<ProviderStreamEvent, Error> {
+        AsyncThrowingStream { continuation in
+            let lastUser = messages.lastIndex { $0.role == .user } ?? 0
+            let toolResults = messages[lastUser...].filter { $0.role == .tool }
+            let step = toolResults.count
+            func call(_ name: String, _ args: String) {
+                continuation.yield(.toolCalls([AgentToolCall(id: "s\(step)", name: name, arguments: args)]))
+            }
+            if tools.isEmpty { continuation.yield(.delta("Done.")); continuation.finish(); return }
+            if script == "broken" {
+                if step == 0 { call("get_project_context", "{}") } else { call("compose_patch_apply_preview", "{}") }
+                continuation.finish(); return
+            }
+            let lastPatchId: String? = toolResults.last.flatMap { msg in
+                (try? JSONSerialization.jsonObject(with: Data((msg.content ?? "").utf8)) as? [String: Any])?["patchId"] as? String
+            }
+            switch step {
+            case 0: call("get_project_context", "{}")
+            case 1: call("compose_patch_validate", #"{"patch":\#(Self.patch(1...3))}"#)
+            case 2: call("compose_patch_apply_preview", #"{"patchId":"\#(lastPatchId ?? "")","groupName":"Morapay Live: Stablecoin Rails for Africa"}"#)
+            case 3: call("compose_patch_apply_preview", #"{"patch":\#(Self.patch(4...6)),"append":true}"#)
+            case 4: call("compose_patch_apply_preview", #"{"patch":\#(Self.patch(7...10)),"append":true}"#)
+            default: continuation.yield(.delta("Done."))
             }
             continuation.finish()
         }

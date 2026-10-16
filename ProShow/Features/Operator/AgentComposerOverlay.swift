@@ -57,14 +57,46 @@ final class AgentComposerController: NSObject, NSWindowDelegate {
         frame.size = size
         frame.origin.x = midX - size.width / 2
         frame.origin.y = bottom
-        if let screen = panel.screen ?? NSScreen.main {
-            let visible = screen.visibleFrame
-            frame.origin.x = min(max(frame.origin.x, visible.minX + 16), visible.maxX - size.width - 16)
-            frame.origin.y = min(max(frame.origin.y, visible.minY + 24), visible.maxY - size.height - 24)
-        }
+        frame = clamped(frame, on: panel.screen ?? NSScreen.main)
+        isClamping = true
         panel.setFrame(frame, display: true, animate: false)
+        isClamping = false
         FloatingPanelTransparency.clearChain(panel)
     }
+
+    private var isClamping = false
+    /// Gap kept above the Dock (or the screen edge when the Dock auto-hides / sits left or right).
+    private let dockMargin: CGFloat = 24
+    private let sideMargin: CGFloat = 16
+
+    /// Keep the whole pill + response inside `visibleFrame` (excludes Dock and menu bar on any side).
+    private func clamped(_ frame: NSRect, on screen: NSScreen?) -> NSRect {
+        guard let screen else { return frame }
+        let visible = screen.visibleFrame
+        var out = frame
+        // An auto-hidden Dock leaves visibleFrame ≈ frame; still keep clear of its reveal strip.
+        let bottomInset = visible.minY - screen.frame.minY < 8 ? max(dockMargin, 56) : dockMargin
+        let minX = visible.minX + sideMargin, maxX = visible.maxX - sideMargin
+        let minY = visible.minY + bottomInset, maxY = visible.maxY - sideMargin
+        out.size.width = min(out.width, maxX - minX)
+        out.size.height = min(out.height, maxY - minY)
+        out.origin.x = min(max(out.minX, minX), maxX - out.width)
+        out.origin.y = min(max(out.minY, minY), maxY - out.height)
+        return out
+    }
+
+    private func clampToScreen() {
+        guard let panel, !isClamping else { return }
+        let target = clamped(panel.frame, on: panel.screen ?? screenUnderMouse() ?? NSScreen.main)
+        guard target != panel.frame else { return }
+        isClamping = true
+        panel.setFrame(target, display: true, animate: false)
+        isClamping = false
+    }
+
+    func windowDidResize(_ notification: Notification) { clampToScreen() }
+    func windowDidChangeScreen(_ notification: Notification) { clampToScreen() }
+    func windowDidEndLiveResize(_ notification: Notification) { clampToScreen() }
 
     private func ensurePanel() {
         if panel != nil { return }
@@ -75,6 +107,8 @@ final class AgentComposerController: NSObject, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
+        // We size the panel ourselves; letting SwiftUI resize it grew the window downward under the Dock.
+        hosting.sizingOptions = []
         panel.contentViewController = hosting
         panel.isFloatingPanel = true
         panel.level = .floating
@@ -95,6 +129,9 @@ final class AgentComposerController: NSObject, NSWindowDelegate {
         hosting.view.autoresizingMask = [.width, .height]
         FloatingPanelTransparency.apply(to: panel, hosting: hosting)
         self.panel = panel
+        NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.clampToScreen() }
+        }
     }
 
     private func placeOnActiveScreen(expanded: Bool) {
@@ -105,7 +142,10 @@ final class AgentComposerController: NSObject, NSWindowDelegate {
         let size = expanded ? expandedSize : pillSize
         let x = visible.midX - size.width / 2
         let y = visible.minY + max(80, visible.height * 0.22)
-        panel.setFrame(NSRect(x: x, y: y, width: size.width, height: size.height), display: true)
+        let frame = clamped(NSRect(x: x, y: y, width: size.width, height: size.height), on: screen)
+        isClamping = true
+        panel.setFrame(frame, display: true)
+        isClamping = false
     }
 
     private func screenUnderMouse() -> NSScreen? {
