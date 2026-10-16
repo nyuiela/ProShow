@@ -209,6 +209,49 @@ extension ShowController {
 
 /// Starting points for the design agent. Every template is editable canvas objects;
 /// the agent fills slots, restyles, removes or adds elements, then stages through validate/apply_preview.
+#if canImport(AppKit)
+import AppKit
+#endif
+
+/// Installed font families for the agent, with coarse categories.
+enum AgentFonts {
+    static func families() -> [String] { NSFontManager.shared.availableFontFamilies.filter { !$0.hasPrefix(".") } }
+
+    static func resolve(_ family: String) -> String {
+        let all = families()
+        if all.contains(family) { return family }
+        if let ci = all.first(where: { $0.caseInsensitiveCompare(family) == .orderedSame }) { return ci }
+        return all.contains("Inter") ? "Inter" : "Helvetica Neue"
+    }
+
+    static func category(_ family: String) -> String {
+        let lower = family.lowercased()
+        guard let font = NSFontManager.shared.font(withFamily: family, traits: [], weight: 5, size: 12) else { return "unknown" }
+        let traits = font.fontDescriptor.symbolicTraits
+        if traits.contains(.monoSpace) || lower.contains("mono") || lower.contains("courier") || lower.contains("code") { return "mono" }
+        if traits.contains(.condensed) || lower.contains("condensed") || lower.contains("narrow") || lower.contains("compressed") { return "condensed" }
+        let cls = traits.rawValue & 0xF000_0000 // NSFontFamilyClassMask
+        switch cls >> 28 {
+        case 1, 2, 3, 4, 5, 7: return "serif"
+        case 8: return "sans"
+        case 9: return "display"
+        case 10: return "script"
+        case 12: return "symbol"
+        default: break
+        }
+        if ["display", "black", "poster", "impact", "rounded", "stencil", "headline"].contains(where: lower.contains) { return "display" }
+        if ["serif", "times", "georgia", "garamond", "baskerville", "didot", "bodoni", "caslon", "palatino", "charter", "new york", "rockwell", "cochin", "hoefler"].contains(where: lower.contains) && !lower.contains("sans") { return "serif" }
+        return "sans"
+    }
+
+    static func catalog() -> [String: [String]] {
+        var out: [String: [String]] = [:]
+        for f in families() { out[category(f), default: []].append(f) }
+        out.removeValue(forKey: "symbol")
+        return out.mapValues { $0.sorted() }
+    }
+}
+
 enum AgentTemplateCatalog {
     struct Template {
         var id: String
@@ -490,6 +533,11 @@ enum AgentTemplateCatalog {
                 b.float(name, x, y, w, h, border: add["border"] as? String)
             default:
                 b.text(name, add["text"] as? String ?? "", x, y, w, h, size: size, color: color, weight: weight, align: align)
+            }
+            if b.objects.count > before, let family = (add["font"] as? String)?.trimmingCharacters(in: .whitespaces), !family.isEmpty {
+                let resolved = AgentFonts.resolve(family)
+                if resolved != family { notes.append("font_missing:\(family)→\(resolved)") }
+                b.objects[b.objects.count - 1].typography.fontFamily = resolved
             }
             if b.objects.count > before, let p = add["phone"] as? [String: Any] {
                 var o = mapToPhone(b.objects[b.objects.count - 1])

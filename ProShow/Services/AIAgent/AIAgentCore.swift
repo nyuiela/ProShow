@@ -130,6 +130,7 @@ enum AgentToolRegistry {
         .init(name: "get_context_pack_status", description: "Context pack version for this session vs live. Use when history may describe stale tools or settings.", parametersJSON: empty),
         .init(name: "list_assets", description: "Images and media already in the project, with slide and group names.", parametersJSON: empty),
         .init(name: "list_templates", description: "Template and recipe ids for inspiration only. You may invent layouts that follow the guide.", parametersJSON: empty),
+        .init(name: "fonts_list", description: "Installed font families on this Mac grouped by category (serif, sans, condensed, mono, display, script). Any of them works in addElements.font.", parametersJSON: #"{"type":"object","properties":{"category":{"type":"string"}}}"#),
         .init(name: "design_guide", description: "Full ProShow creative design guide (long). Only call when the built-in rules are not enough.", parametersJSON: empty),
         .init(name: "templates_list", description: "Broadcast/news template catalog: id, name, description, layout regions, editable text slots with defaults, canvases (Stream 16:9 + Phone 9:16). Starting points, not limits.", parametersJSON: #"{"type":"object","properties":{"id":{"type":"string","description":"Optional: one template id to get its full slot list"}}}"#),
         .init(name: "template_instantiate", description: "Build one rich dual-canvas slide (Stream + Phone reflow) from a template, fill slots, restyle, edit/remove/add elements. By default stages it straight into the draft (append). Use templateId blank + addElements for fully custom layouts.", parametersJSON: #"{"type":"object","properties":{"templateId":{"type":"string"},"title":{"type":"string"},"slots":{"type":"object","description":"slot name -> text, e.g. {\"Headline\":\"...\",\"Host Name\":\"Kaleel\"}"},"style":{"type":"object","properties":{"accent":{"type":"string"},"background":{"type":"string"},"text":{"type":"string"}}},"edits":{"type":"object","description":"element name -> {text,color,fill,fontSize,opacity,frame:{x,y,w,h fractions}}"},"remove":{"type":"array","items":{"type":"string"},"description":"element names to delete"},"addElements":{"type":"array","items":{"type":"object","description":"{kind: text|rect|video, name, text, x,y,w,h (fractions of Stream 16:9), fill, color, size (px at 3840 wide), weight, align, radius, border, phone:{x,y,w,h,size} optional}"}},"notes":{"type":"string"},"streamOnly":{"type":"boolean"},"stage":{"type":"boolean","description":"default true: append to the draft now"},"groupName":{"type":"string"}},"required":["templateId"]}"#),
@@ -203,12 +204,14 @@ enum AgentPromptPacks {
     - 12-column grid. Margins: Stream 160 px left/right, 120 px top/bottom (3840x2160). Phone 120 px (2160x3840).
     - Spacing scale only: 8, 16, 24, 48, 96 px (multiples allowed for big gaps).
     - Per slide: max 2 font weights, max 3 font sizes. Clear hierarchy: label < body < headline.
-    - Accent color on at most 2 elements per slide. Everything else graphite/white/gray.
+    - Accent color on at most 2 elements per slide (rule is per slide, not per show). Everything else neutral within that slide's palette.
+    - Max 2 font families per slide (set addElements.font). Call fonts_list for installed families.
+    - Range: when asked for variety (or for a multi-slide show), give each slide its own palette (background, text, one accent; any hex) and its own font pairing (e.g. serif headline + sans body, condensed + mono). Keep text contrast >= 4.5:1.
     - Flush left. No centered body text. No gradients, shadows, emoji, buzzwords.
     - Headlines under 7 words.
     - Variety: within one request no two slides share the same layout structure (vary column split, card count, alignment axis, image/text ratio). Don't reproduce slides already in the show.
     - Dual canvas by default: give every addElements item a `phone` frame designed for 9:16 (stack, don't shrink).
-    - Graphite #121214 background, accent #6B9FE0 unless the theme or operator says otherwise.
+    - Default palette: graphite #121214 background, accent #6B9FE0, unless the operator asks for range or other colors. Set the slide background with style.background on blank.
 
     ## Self-check before replying
     For each slide confirm: grid + margins, spacing scale, ≤2 weights, ≤3 sizes, ≤2 accents, headline <7 words, flush left, unique layout, phone frames present. Fix and re-stage anything that fails; tools also return `lint` issues.

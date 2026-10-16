@@ -327,8 +327,8 @@ enum ComposeDesignValidator {
         for slide in patch.slides {
             let hex = slide.backgroundHex.trimmingCharacters(in: .whitespaces)
             if hex.isEmpty { continue }
-            let allowed = Set(allowedBackgrounds.map { $0.uppercased() })
-            if !allowed.contains(hex.uppercased()) {
+            // Any valid hex (#RGB, #RRGGBB, #RRGGBBAA). Contrast is a lint warning, not an error.
+            if hex.range(of: "^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$", options: .regularExpression) == nil {
                 throw ComposeError.offTokenColor(hex)
             }
         }

@@ -363,11 +363,12 @@ final class AIAgentSession {
             "stream": ["w": CanvasConfig.width, "h": CanvasConfig.height, "margins": ["x": 160, "y": 120]],
             "phone": ["w": 2160, "h": 3840, "margins": 120, "inShow": hasPhone, "default": true],
             "theme": ["bg": "#121214", "surface": "#1B1B1F", "raised": "#25252A", "accent": "#6B9FE0", "text": "#FFFFFF", "muted": "#9AA3B2"],
-            "fonts": Array(fonts).sorted().prefix(4).map { $0 },
+            "fontsInShow": Array(fonts).sorted(),
+            "fontsInstalled": AgentFonts.families().count,
             "groups": show.groups.prefix(12).map { "\($0.name) (\($0.slides.count))" },
             "slideCount": slides.count,
             "existingLayouts": existingLayoutSignatures().count,
-            "addElements": "{kind:text|rect|video,name,text,x,y,w,h fractions of 3840x2160,size px,weight,color,fill,radius,border,phone:{x,y,w,h fractions of 2160x3840,size}}",
+            "addElements": "{kind:text|rect|video,name,text,font,x,y,w,h fractions of 3840x2160,size px,weight,color,fill,radius,border,phone:{x,y,w,h fractions of 2160x3840,size}}",
         ]
     }
 
@@ -409,6 +410,11 @@ final class AIAgentSession {
             return AgentToolOutcome(result: json(["assets": items]), ok: true, summary: "\(items.count) assets")
         case "list_templates":
             return AgentToolOutcome(result: json(["note": "Inspiration only", "recipes": ComposeRecipe.all.map { ["id": $0.id, "name": $0.name] }, "packs": ["Rollup", "Bloomberg nameplate", "Guest mosaic 2/3/5", "Cam + Slide", "Milk Road"]]), ok: true, summary: "Templates listed")
+        case "fonts_list":
+            let catalog = AgentFonts.catalog()
+            let filter = (args["category"] as? String)?.lowercased()
+            let payload: [String: Any] = filter.map { [$0: catalog[$0] ?? []] } ?? catalog
+            return AgentToolOutcome(result: json(["ok": true, "families": payload, "rule": "Max 2 families per slide. Any installed family works in addElements.font."]), ok: true, summary: "\(catalog.values.reduce(0) { $0 + $1.count }) fonts")
         case "design_guide":
             return AgentToolOutcome(result: json(["guide": String(AgentPromptPacks.designBrief().prefix(24_000))]), ok: true, summary: "Design guide")
         case "templates_list":
@@ -802,6 +808,34 @@ private final class ModelsBox: @unchecked Sendable {
 enum AgentDesignLint {
     static let accentish: Set<String> = ["#6B9FE0", "#C6FF3D", "#F5C518", "#FFD60A", "#E5322D"]
 
+    static func rgb(_ hex: String) -> (Double, Double, Double)? {
+        var h = hex.trimmingCharacters(in: .whitespaces).uppercased()
+        guard h.hasPrefix("#") else { return nil }
+        h.removeFirst()
+        if h.count == 3 { h = h.map { "\($0)\($0)" }.joined() }
+        guard h.count >= 6, let v = UInt32(h.prefix(6), radix: 16) else { return nil }
+        return (Double((v >> 16) & 0xFF) / 255, Double((v >> 8) & 0xFF) / 255, Double(v & 0xFF) / 255)
+    }
+
+    /// Vivid = accent-like (high saturation and brightness). Navy, cream, graphite are not accents.
+    static func isVivid(_ hex: String) -> Bool {
+        guard let (r, g, b) = rgb(hex) else { return false }
+        let mx = max(r, g, b), mn = min(r, g, b)
+        let sat = mx == 0 ? 0 : (mx - mn) / mx
+        return accentish.contains(hex.uppercased()) || (sat > 0.5 && mx > 0.6)
+    }
+
+    static func luminance(_ hex: String) -> Double? {
+        guard let (r, g, b) = rgb(hex) else { return nil }
+        func ch(_ c: Double) -> Double { c <= 0.03928 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4) }
+        return 0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(b)
+    }
+
+    static func contrast(_ a: String, _ b: String) -> Double? {
+        guard let la = luminance(a), let lb = luminance(b) else { return nil }
+        return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+    }
+
     static func hardIssues(_ objects: [CanvasObject]) -> [String] {
         var issues: [String] = []
         let texts = objects.filter { $0.kind == .text && !$0.text.isEmpty }
@@ -809,9 +843,13 @@ enum AgentDesignLint {
         if sizes.count > 3 { issues.append("\(sizes.count) font sizes (max 3): \(sizes.sorted())") }
         let weights = Set(texts.map(\.typography.fontWeight.rawValue))
         if weights.count > 2 { issues.append("\(weights.count) font weights (max 2): \(weights.sorted())") }
+        let families = Set(texts.map(\.typography.fontFamily).filter { !$0.isEmpty })
+        if families.count > 2 { issues.append("\(families.count) font families (max 2 per slide): \(families.sorted())") }
+        // Per slide: one accent hue on at most 2 elements. Background plate never counts.
         let accents = objects.filter { o in
-            let colors = [o.kind == .text ? o.typography.color : o.fill.color, o.stroke.style == .none ? "" : o.stroke.color]
-            return colors.contains { accentish.contains($0.uppercased()) }
+            guard o.name != "Background" else { return false }
+            let colors = [o.kind == .text ? o.typography.color : (o.fill.type == .none ? "" : o.fill.color), o.stroke.style == .none ? "" : o.stroke.color]
+            return colors.contains { isVivid($0) }
         }
         if accents.count > 2 { issues.append("accent on \(accents.count) elements (max 2): \(accents.map(\.name).joined(separator: ", "))") }
         if texts.contains(where: { $0.text.unicodeScalars.contains { $0.properties.isEmojiPresentation } }) { issues.append("emoji in text") }
@@ -821,6 +859,13 @@ enum AgentDesignLint {
     static func warnings(_ objects: [CanvasObject]) -> [String] {
         var out: [String] = []
         let texts = objects.filter { $0.kind == .text && !$0.text.isEmpty }
+        if let bg = objects.first(where: { $0.name == "Background" })?.fill.color {
+            for t in texts {
+                if let ratio = contrast(t.typography.color, bg), ratio < 4.5 {
+                    out.append("low contrast \(String(format: "%.1f", ratio)):1 on '\(t.name)' (\(t.typography.color) on \(bg))")
+                }
+            }
+        }
         if let headline = texts.max(by: { $0.typography.fontSize < $1.typography.fontSize }),
            headline.text.split(whereSeparator: \.isWhitespace).count >= 7 {
             out.append("headline '\(headline.name)' has 7+ words")
