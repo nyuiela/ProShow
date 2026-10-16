@@ -798,6 +798,9 @@ struct DeskModalNavRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(DeskPressButtonStyle())
+        // A min-only frame accepts any taller proposal; without this a row (e.g. Cancel) swallows the
+        // sidebar's spare height and centres its label mid-modal.
+        .fixedSize(horizontal: false, vertical: true)
         .padding(.horizontal, 8)
         .accessibilityLabel(title)
         .accessibilityAddTraits(selected ? .isSelected : [])

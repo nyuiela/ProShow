@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import Observation
 #if canImport(CoreVideo)
 import CoreVideo
@@ -7673,6 +7674,30 @@ final class ShowController {
             let ok = startProgramRecording()
             let path: Any = isoRecorder.programFileURL?.path ?? NSNull()
             return (200, ControlJSON.encode(["ok": ok, "is_recording": isoRecorder.isRecording, "path": path]))
+        }
+        if method == "POST", parts == ["v1", "ui", "addshot"] {
+            // Local QA hook: open/close the source picker without clicking through the desk.
+            switch ControlHTTP.jsonObject(body)["mode"] ?? "add" {
+            case "close": closeAddShot()
+            case "assign": openAddShotToAssign()
+            default: openAddShot()
+            }
+            return (200, #"{"ok":true}"#)
+        }
+        if method == "POST", parts == ["v1", "ui", "snapshot"] {
+            // Renders this app's own windows (sheets included) to PNGs; no screen-recording permission needed.
+            var paths: [String] = []
+            for (i, w) in NSApp.windows.enumerated() where w.isVisible {
+                guard let v = w.contentView?.superview ?? w.contentView,
+                      let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) else { continue }
+                v.cacheDisplay(in: v.bounds, to: rep)
+                let path = NSTemporaryDirectory() + "proshow-ui-\(i).png"
+                if let data = rep.representation(using: .png, properties: [:]),
+                   (try? data.write(to: URL(fileURLWithPath: path))) != nil {
+                    paths.append("\(path) \(Int(w.frame.width))x\(Int(w.frame.height)) sheet=\(w.isSheet)")
+                }
+            }
+            return (200, ControlJSON.encode(["ok": true, "paths": paths]))
         }
         if method == "POST", parts == ["v1", "project", "open"] {
             let parsed = ControlHTTP.jsonObject(body)
