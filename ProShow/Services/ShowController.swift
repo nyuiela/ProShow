@@ -2697,7 +2697,7 @@ final class ShowController {
             propCanvases: activePropCanvases,
             objectLivePixels: objectLivePixels,
             buildPlayback: slideEncodePlayback,
-            buildPhaseFilter: slideLeaveStartedAt != nil ? [.buildOut] : nil,
+            buildPhaseFilter: slideLeaveStartedAt != nil ? [.buildOut] : [.buildIn, .action],
             renderNow: now,
             programTransition: compositor.programTransition,
             propBuildPlayback: propBuildPlayback,
@@ -2998,7 +2998,7 @@ final class ShowController {
             existing.propCanvases = activePropCanvases
             existing.objectLivePixels = objectLivePixels
             existing.buildPlayback = slideEncodePlayback
-            existing.buildPhaseFilter = slideLeaveStartedAt != nil ? [.buildOut] : nil
+            existing.buildPhaseFilter = slideLeaveStartedAt != nil ? [.buildOut] : [.buildIn, .action]
             existing.renderNow = now
             existing.programTransition = compositor.programTransition
             existing.propBuildPlayback = propBuildPlayback
@@ -3029,7 +3029,7 @@ final class ShowController {
             propCanvases: activePropCanvases,
             objectLivePixels: objectLivePixels,
             buildPlayback: slideEncodePlayback,
-            buildPhaseFilter: slideLeaveStartedAt != nil ? [.buildOut] : nil,
+            buildPhaseFilter: slideLeaveStartedAt != nil ? [.buildOut] : [.buildIn, .action],
             renderNow: now,
             programTransition: compositor.programTransition,
             propBuildPlayback: propBuildPlayback,
@@ -7524,6 +7524,9 @@ final class ShowController {
         let parts = path.split(separator: "/").map(String.init)
         if let ai = handleAICompose(method: method, parts: parts, body: body) {
             return ai
+        }
+        if method == "GET", parts == ["v1", "program", "probe"] {
+            return programMonitorProbe()
         }
         if method == "GET", path == "/docs" || path == "/docs/" {
             return (200, ControlAPIOpenAPI.html(port: ControlAPIServer.defaultPort))
