@@ -190,8 +190,9 @@ extension ShowController {
     /// Show > Add Broadcast Template Pack. Appends one slide per recipe as editable canvas objects.
     func addBroadcastTemplatePack() {
         rehydrateFromEditor(persist: false)
-        let res = projectSettings.resolution
-        let slides = BroadcastTemplatePack.slides(width: Double(res.width), height: Double(res.height))
+        // Canvas objects live in the fixed design space (3840x2160), not the output resolution.
+        // Building at a 1920x1080 project size put every template in the top-left quarter at half-size type.
+        let slides = BroadcastTemplatePack.slides(width: CanvasConfig.width, height: CanvasConfig.height)
         var name = BroadcastTemplatePack.groupName
         var n = 2
         while show.groups.contains(where: { $0.name == name }) {
@@ -533,6 +534,24 @@ enum AgentTemplateCatalog {
         // Free-form additions (fractions of the Stream board; Phone gets the reflowed copy unless `phone` frame given).
         var b = BroadcastTemplatePack.Builder(sx: 1, sy: 1)
         var phoneAdds: [CanvasObject] = []
+        // Models often size type for a 1280/1920 board or in points (headline 48, body 32). The board is 3840x2160,
+        // so when every given size in the call is small, scale the whole call up by 3.
+        let givenSizes = adds.compactMap { a -> Double? in
+            let v = a["fontSize"] ?? a["size"]
+            if let n = v as? NSNumber { return n.doubleValue }
+            if let s = v as? String { return Double(s.trimmingCharacters(in: CharacterSet(charactersIn: " px"))) }
+            return nil
+        }
+        let legacySizing = ScriptedAgentProvider.configured != nil && UserDefaults.standard.bool(forKey: "proshow.ai.mockLegacySizing")
+        let sizeScale: Double = !legacySizing && (givenSizes.max() ?? 999) <= 100 ? 3 : 1
+        if sizeScale != 1 { notes.append("font_scale_x3: fontSize values (max \(Int(givenSizes.max() ?? 0))) looked like 1280px/pt units; the board is 3840x2160 px, so they were tripled. Use headline 140-200, body 56-72, label 36-48.") }
+        func roleSize(_ add: [String: Any]) -> Double {
+            let key = ((add["role"] as? String ?? "") + " " + (add["name"] as? String ?? "") + " " + (add["kind"] as? String ?? "")).lowercased()
+            if ["headline", "title", "hero", "big", "value", "stat"].contains(where: key.contains) { return 160 }
+            if ["label", "tag", "kicker", "eyebrow", "handle", "date", "source", "small"].contains(where: key.contains) { return 40 }
+            if ["caption", "subtitle", "footer", "channel"].contains(where: key.contains) { return 56 }
+            return 64
+        }
         for rawAdd in adds {
             // Accept a nested frame/bounds object as well as flat x,y,w,h.
             var add = rawAdd
@@ -555,8 +574,18 @@ enum AgentTemplateCatalog {
             let x = frac("x", add, 3840) * 3840, y = frac("y", add, 2160) * 2160
             let w = max(0.01, frac("w", add, 3840)) * 3840, h = max(0.01, frac("h", add, 2160)) * 2160
             let fill = (add["fill"] ?? add["fillColor"] ?? add["background"]) as? String ?? "#1B1B1F"
-            let color = (add["color"] ?? add["textColor"]) as? String ?? "#FFFFFF"
-            let size = num(add["size"] ?? add["fontSize"]) ?? 72
+            // No color given: pick white or near-black against whatever sits behind the text box.
+            let color: String = ((add["color"] ?? add["textColor"]) as? String) ?? {
+                let c = CGPoint(x: x + w / 2, y: y + h / 2)
+                let behind = b.objects.last { $0.kind != .text && $0.fill.type != .none &&
+                    CGRect(x: $0.transform.x, y: $0.transform.y, width: $0.transform.width, height: $0.transform.height).contains(c) }?.fill.color
+                    ?? (style["background"] as? String) ?? "#121214"
+                return (AgentDesignLint.luminance(behind) ?? 0) > 0.4 ? "#111114" : "#FFFFFF"
+            }()
+            // Given size (scaled if the call used small units) or a role default; never taller than its box.
+            var size = (num(add["fontSize"] ?? add["size"]).map { $0 * sizeScale }) ?? roleSize(add)
+            let lines = max(1, Double(("\(add["text"] ?? "")").components(separatedBy: "\n").count))
+            if !legacySizing { size = max(40, min(size, h / lines * 0.85)) }
             let weight = FontWeightToken(rawValue: (add["weight"] as? String ?? "bold").lowercased()) ?? .bold
             let align = TextHorizontalAlign(rawValue: (add["align"] as? String ?? "left").lowercased()) ?? .left
             let radius = num(add["cornerRadius"] ?? add["radius"]) ?? 0

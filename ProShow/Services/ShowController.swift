@@ -159,6 +159,10 @@ final class ShowController {
     var videoInputRunning: Bool = false
 
     var selectedSlideID: SlideID?
+    /// Operator cleared the live-input (camera) layer; slide changes must not bring it back.
+    var operatorClearedLiveInput = false
+    /// Camera was put on air by a slide's video pane (not by the operator).
+    var liveInputAutoBoundBySlide = false
     var liveSlideID: SlideID?
     var activeSlideBuildStepIndex: Int = 0
     var liveBuildStartedAt: Date?
@@ -723,10 +727,7 @@ final class ShowController {
             compositor.triggerCue(makeCue(for: slide, index: index))
         }
         applyMediaLayerDecision(decision)
-        if !compositor.isLayerLocked(.videoInput) {
-            ensureSlideLiveInputsOnMainLayer(slide)
-            compositor.restore(.videoInput)
-        }
+        syncSlideLiveInputLayer(slide)
         executeLinkedSlideMacros(slide)
         beginBoundTransition(presetID: slide.transition, workspace: .slideInspector, incomingSceneID: scenes.activeSceneID)
         resetLiveBuildClock()
@@ -1653,8 +1654,7 @@ final class ShowController {
         if show.id == ProgramOutlinePresentation.showID,
            ProgramOutlinePresentation.pageURL(in: cleaned) == nil,
            !compositor.isLayerLocked(.videoInput) {
-            ensureSlideLiveInputsOnMainLayer(cleaned)
-            compositor.restore(.videoInput)
+            syncSlideLiveInputLayer(cleaned)
         }
     }
 
@@ -1735,8 +1735,11 @@ final class ShowController {
     func toggleDefaultClear() {
         if isDefaultLayerCleared {
             compositor.restoreDefaultLayers()
+            operatorClearedLiveInput = false
         } else {
             compositor.clearDefaultLayers()
+            operatorClearedLiveInput = true
+            liveInputAutoBoundBySlide = false
         }
     }
 
@@ -3358,6 +3361,25 @@ final class ShowController {
     func ensureLiveInputOnMainLayer(_ item: DiscoveredSourceItem) -> LayerShot? {
         guard item.sourceType.needsMainLayerShot, masterLayers.indices.contains(0) else { return nil }
         return upsertLiveShot(item, layerIndex: 0, goLive: true)
+    }
+
+    /// Slide go-live: bring the camera up only for slides that actually have a live-input pane, and never
+    /// undo an operator Clear. Previously every slide change called restore(.videoInput), so a cleared camera
+    /// came back and showed through transparent slides; a camera auto-bound by one slide's pane also stayed on
+    /// for the next transparent slide.
+    func syncSlideLiveInputLayer(_ slide: Slide) {
+        guard !compositor.isLayerLocked(.videoInput) else { return }
+        let hasPane = !liveInputItems(on: slide).isEmpty
+            || resolvedCanvasObjects(slide.canvas).contains { $0.kind == .videoInput }
+        if hasPane {
+            guard !operatorClearedLiveInput else { return }
+            ensureSlideLiveInputsOnMainLayer(slide)
+            compositor.restore(.videoInput)
+            liveInputAutoBoundBySlide = true
+        } else if liveInputAutoBoundBySlide {
+            compositor.clear(.videoInput)
+            liveInputAutoBoundBySlide = false
+        }
     }
 
     func ensureSlideLiveInputsOnMainLayer(_ slide: Slide) {
@@ -6292,6 +6314,20 @@ final class ShowController {
 
     /// Removes every group with this name (agent test cleanup). Returns how many were removed.
     @discardableResult
+    /// Removes only groups that hold the given slides (test cleanup that never touches same-named groups).
+    func removeGroups(containing ids: Set<SlideID>) -> Int {
+        guard !ids.isEmpty else { return 0 }
+        let before = show.groups.count
+        let remaining = show.groups.filter { g in !g.slides.contains { ids.contains($0.id) } }
+        guard !remaining.isEmpty, remaining.count != before else { return 0 }
+        show.groups = remaining
+        selectedSlideID = remaining.first?.slides.first?.id
+        editors.syncPresentation(from: show, selectedSlideID: selectedSlideID)
+        persistCurrentShow()
+        rebuildSearchIndex()
+        return before - remaining.count
+    }
+
     func removeGroups(named name: String) -> Int {
         let before = show.groups.count
         let remaining = show.groups.filter { $0.name != name }
@@ -6922,6 +6958,7 @@ final class ShowController {
 
     func hideLayer(_ layer: RenderLayer) {
         compositor.clear(layer)
+        if layer == .videoInput { operatorClearedLiveInput = true; liveInputAutoBoundBySlide = false }
         if layer == .media {
             applyProgramAudioMute()
         }
@@ -6982,6 +7019,7 @@ final class ShowController {
         case .media:
             applyProgramAudioMute()
         case .videoInput:
+            operatorClearedLiveInput = false
             videoInputRunning = compositor.stack.videoInput != nil
         case .props, .messages, .announcements, .mask, .screenColor:
             break
@@ -7022,6 +7060,8 @@ final class ShowController {
         case .videoInput:
             compositor.clearProgramVideoInput()
             compositor.clear(.videoInput)
+            operatorClearedLiveInput = true
+            liveInputAutoBoundBySlide = false
             videoInputRunning = false
             reconcileAudioCaptureGraph()
         case .media:

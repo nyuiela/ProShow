@@ -207,7 +207,8 @@ final class AIAgentSession {
     // MARK: - Turn loop
 
     private func chatProvider() -> AgentChatProvider {
-        if let script = ScriptedAgentProvider.configured { return ScriptedAgentProvider(script: script) }
+        // "live" keeps the test routes but talks to the real model (one-off verification runs).
+        if let script = ScriptedAgentProvider.configured, script != "live" { return ScriptedAgentProvider(script: script) }
         return provider == .xai && XAIKeyStore.isConnected ? XAIProvider() : PracticeAgentProvider()
     }
 
@@ -247,6 +248,7 @@ final class AIAgentSession {
         let provider = chatProvider()
         let tools = AgentToolRegistry.all
         var finalText = ""
+        var continuationNudges = 0
 
         do {
             for round in 0..<AgentToolRegistry.maxToolRounds {
@@ -264,6 +266,14 @@ final class AIAgentSession {
                     }
                 }
                 if calls.isEmpty {
+                    if continuationNudges < 3, round < AgentToolRegistry.maxToolRounds - 2, let reason = unfinishedReason(prompt) {
+                        continuationNudges += 1
+                        let said = AgentMessage(role: .assistant, content: roundText)
+                        context.append(said)
+                        context.append(AgentMessage(role: .system, content: "[Not done] " + reason + " Do not reply to the operator until it is done."))
+                        emit(.delta("\nContinuing: \(reason.prefix(90))\n"))
+                        continue
+                    }
                     finalText = roundText
                     break
                 }
@@ -452,6 +462,8 @@ final class AIAgentSession {
                 : instantiateTool(args)
             if outcome.ok { roundHadComposeSuccess = true } else { roundHadComposeFailure = true; turnLastComposeError = outcome.summary }
             return outcome
+        case "slide_snapshot":
+            return snapshotTool(args)
         case "slide_add_elements":
             turnComposeAttempted = true
             let outcome = addElementsTool(args)
@@ -470,13 +482,15 @@ final class AIAgentSession {
     private func instantiateTool(_ args: [String: Any]) -> AgentToolOutcome {
         let id = (args["templateId"] as? String ?? "").trimmingCharacters(in: .whitespaces)
         do {
-            let (slide, notes) = try AgentTemplateCatalog.instantiate(id, args: args)
+            var (slide, notes) = try AgentTemplateCatalog.instantiate(id, args: args)
             var plainWarning: String?
             if id == "blank" {
                 // Plainness is judged on the final composed slide: text, shapes, video panes and images all count.
                 let visuals = slide.canvas.filter { $0.name != "Background" }
                 let received = AgentTemplateCatalog.addElementList(args).count
-                if visuals.count <= 1, !plainAllowed {
+                if visuals.isEmpty, received == 0 {
+                    plainWarning = "EMPTY slide staged (background only). Next call slide_add_elements with title '\(slide.title)' and the full element list, or resend template_instantiate with addElements."
+                } else if visuals.count <= 1, !plainAllowed {
                     let have = visuals.first.map { "1 \($0.kind.rawValue) ('\($0.name)')" } ?? "nothing but the background"
                     let sent = AgentTemplateCatalog.addElementList(args).isEmpty
                         ? (args.keys.contains { ["addElements", "elements", "add_elements"].contains($0) } ? "addElements was unreadable" : "no addElements key was sent (args: \(args.keys.sorted().joined(separator: ", ")))")
@@ -489,6 +503,11 @@ final class AIAgentSession {
                     // Never leave the operator with zero slides: after 2 rejections stage it with a warning.
                     plainWarning = "too_plain (staged anyway): slide has \(have). Call slide_add_elements with title '\(slide.title)' to add the layout."
                 }
+                let fixNotes = AgentDesignLint.normalize(&slide.canvas)
+                if !fixNotes.isEmpty, let p = slide.editorCanvases.firstIndex(where: \.isPhoneArtboard) {
+                    _ = AgentDesignLint.normalize(&slide.editorCanvases[p].objects)
+                }
+                notes += fixNotes
                 let issues = AgentDesignLint.hardIssues(slide.canvas)
                 if !issues.isEmpty {
                     return AgentToolOutcome(result: json(["ok": false, "error": "design_rules", "issues": issues, "retry": "Fix these and call template_instantiate again."]), ok: false, summary: "design_rules")
@@ -553,24 +572,32 @@ final class AIAgentSession {
     /// Build requests get rich slides; a lone text element is pushed back unless the operator asked for minimal.
     /// Second step for models that stage blank slides first: append elements to a staged draft slide.
     private func addElementsTool(_ args: [String: Any]) -> AgentToolOutcome {
-        guard var staged = draft else {
-            return AgentToolOutcome(result: json(["ok": false, "error": "no_draft", "message": "Nothing staged. Use template_instantiate with templateId blank and addElements."]), ok: false, summary: "no_draft")
+        guard var staged = draft, turnStagedSlides > 0 else {
+            var create = args
+            create["templateId"] = "blank"
+            return instantiateTool(create)
         }
         let key = ((args["title"] ?? args["slide"] ?? args["patchId"]) as? String ?? "").lowercased()
         let index = staged.slides.lastIndex { $0.title.lowercased() == key } ?? (key.isEmpty ? staged.slides.indices.last : nil)
         guard let index else {
-            return AgentToolOutcome(result: json(["ok": false, "error": "slide_not_found", "titles": staged.slides.map(\.title)]), ok: false, summary: "slide_not_found")
+            // Unknown title: create the slide from these elements instead of failing.
+            var create = args
+            create["templateId"] = "blank"
+            create["title"] = (args["title"] ?? args["slide"]) as? String ?? "Slide \(staged.slides.count + 1)"
+            return instantiateTool(create)
         }
         let adds = AgentTemplateCatalog.addElementList(args)
         guard !adds.isEmpty else {
             return AgentToolOutcome(result: json(["ok": false, "error": "missing_addElements", "message": "Send addElements as a JSON array of element objects."]), ok: false, summary: "missing_addElements")
         }
         do {
-            let (built, notes) = try AgentTemplateCatalog.instantiate("blank", args: ["addElements": adds])
+            var (built, notes) = try AgentTemplateCatalog.instantiate("blank", args: ["addElements": adds])
             var slide = staged.slides[index]
-            let newStream = built.canvas.filter { $0.name != "Background" }
+            // Drop only the blank template's own background plate; keep a model-authored "Background" rect.
+            let newStream = Array(built.canvas.dropFirst())
             var merged = slide.canvas + newStream
             for i in merged.indices { merged[i].zIndex = i }
+            notes += AgentDesignLint.normalize(&merged)
             let issues = AgentDesignLint.hardIssues(merged)
             if !issues.isEmpty {
                 return AgentToolOutcome(result: json(["ok": false, "error": "design_rules", "issues": issues]), ok: false, summary: "design_rules")
@@ -578,8 +605,9 @@ final class AIAgentSession {
             slide.canvas = merged
             if let p = slide.editorCanvases.firstIndex(where: \.isPhoneArtboard),
                let bp = built.editorCanvases.first(where: \.isPhoneArtboard) {
-                var phone = slide.editorCanvases[p].objects + bp.objects.filter { $0.name != "Background" }
+                var phone = slide.editorCanvases[p].objects + Array(bp.objects.dropFirst())
                 for i in phone.indices { phone[i].zIndex = i }
+                _ = AgentDesignLint.normalize(&phone)
                 slide.editorCanvases[p].objects = phone
             }
             staged.slides[index] = slide
@@ -591,6 +619,65 @@ final class AIAgentSession {
         } catch {
             return AgentToolOutcome(result: json(["ok": false, "error": "build_failed", "message": "\(error)"]), ok: false, summary: "build_failed")
         }
+    }
+
+    /// Text layout summary of a staged slide so the model can check sizes, overlaps and margins.
+    private func snapshotTool(_ args: [String: Any]) -> AgentToolOutcome {
+        guard let staged = draft, !staged.slides.isEmpty else {
+            return AgentToolOutcome(result: json(["ok": false, "error": "no_draft"]), ok: false, summary: "no_draft")
+        }
+        let key = (args["title"] as? String ?? "").lowercased()
+        let slide = staged.slides.last { $0.title.lowercased() == key } ?? staged.slides.last!
+        let objects = slide.canvas
+        func frac(_ v: Double, _ full: Double) -> Double { (v / full * 1000).rounded() / 1000 }
+        let elements: [[String: Any]] = objects.map { o in
+            var e: [String: Any] = ["name": o.name, "kind": o.kind.rawValue,
+                                    "x": frac(o.transform.x, 3840), "y": frac(o.transform.y, 2160),
+                                    "w": frac(o.transform.width, 3840), "h": frac(o.transform.height, 2160)]
+            if o.kind == .text {
+                e["text"] = String(o.text.prefix(60)); e["fontSize"] = Int(o.typography.fontSize)
+                e["font"] = o.typography.fontFamily; e["color"] = o.typography.color
+                e["capHeightPctOfBoard"] = (o.typography.fontSize * 0.7 / 2160 * 1000).rounded() / 10
+            } else if o.fill.type != .none { e["fill"] = o.fill.color }
+            if o.opacity < 1 { e["opacity"] = o.opacity }
+            return e
+        }
+        var problems: [String] = []
+        let texts = objects.filter { $0.kind == .text && !$0.text.isEmpty }
+        for t in texts where t.typography.fontSize < 36 { problems.append("'\(t.name)' fontSize \(Int(t.typography.fontSize)) is unreadable on a 3840x2160 board (min 36)") }
+        if let biggest = texts.map(\.typography.fontSize).max(), biggest < 110 { problems.append("no headline: largest text is \(Int(biggest))px; use 140-200 for the headline") }
+        for (i, a) in texts.enumerated() {
+            for b in texts[(i + 1)...] {
+                let ra = CGRect(x: a.transform.x, y: a.transform.y, width: a.transform.width, height: a.transform.height)
+                let rb = CGRect(x: b.transform.x, y: b.transform.y, width: b.transform.width, height: b.transform.height)
+                let inter = ra.intersection(rb)
+                if !inter.isNull, inter.width * inter.height > 0.2 * min(ra.width * ra.height, rb.width * rb.height) { problems.append("text '\(a.name)' overlaps '\(b.name)'") }
+            }
+        }
+        if objects.filter({ $0.name != "Background" }).count <= 1 { problems.append("slide is empty: add elements with slide_add_elements") }
+        return AgentToolOutcome(result: json(["ok": true, "title": slide.title, "board": "3840x2160", "background": slide.backgroundHex, "elements": elements, "problems": problems]), ok: true, summary: problems.isEmpty ? "Snapshot OK" : "\(problems.count) problem(s)")
+    }
+
+    /// Slide count the operator asked for ("4 brand new slides", "two slides"), if any.
+    static func requestedSlideCount(_ prompt: String) -> Int? {
+        let lower = prompt.lowercased()
+        let words = ["one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10, "twelve": 12]
+        guard let re = try? NSRegularExpression(pattern: #"\b(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|twelve)\s+(?:[a-z\-]+\s+){0,3}slides?\b"#) else { return nil }
+        guard let m = re.firstMatch(in: lower, range: NSRange(lower.startIndex..., in: lower)),
+              let r = Range(m.range(at: 1), in: lower) else { return nil }
+        let token = String(lower[r])
+        return Int(token) ?? words[token]
+    }
+
+    /// Why the turn is not done yet, or nil. Used to keep the loop going (bounded) instead of replying early.
+    private func unfinishedReason(_ prompt: String) -> String? {
+        let staged = draft?.slides ?? []
+        if let want = Self.requestedSlideCount(prompt), staged.count < want, turnStagedSlides > 0 || turnComposeAttempted {
+            return "Only \(staged.count) of \(want) requested slides are staged (\(staged.map(\.title).joined(separator: ", "))). Build the remaining \(want - staged.count) now: one template_instantiate per slide with templateId blank and the FULL addElements list (fontSize in 3840x2160 px)."
+        }
+        let empty = staged.filter { $0.canvas.filter { $0.name != "Background" }.count <= 1 }.map(\.title)
+        if !empty.isEmpty { return "These staged slides are still empty: \(empty.joined(separator: ", ")). Call slide_add_elements for each with the full layout." }
+        return nil
     }
 
     private var plainAllowed: Bool {
@@ -813,7 +900,8 @@ extension ShowController {
         if method == "POST", ScriptedAgentProvider.configured != nil {
             switch parts[3] {
             case "send":
-                session.send("Build a complete 10-slide show (mock run).")
+                let testPrompt = UserDefaults.standard.string(forKey: "proshow.ai.testPrompt") ?? ""
+                session.send(testPrompt.isEmpty ? "Build a complete 10-slide show (mock run)." : testPrompt)
                 return (202, #"{"ok":true}"#)
             case "render_last":
                 // Writes Stream + Phone PNGs of the last applied slides to /tmp for visual checks.
@@ -834,7 +922,13 @@ extension ShowController {
             case "delete_group":
                 let name = session.lastPlacement?.groupName ?? ""
                 guard !name.isEmpty, name != BroadcastTemplatePack.groupName else { return (409, #"{"ok":false}"#) }
-                let removed = removeGroups(named: name)
+                // Only the group(s) holding the slides this test applied; never another group with the same name.
+                var removed = removeGroups(containing: Set(session.lastPlacement?.slideIDs ?? []))
+                if removed == 0, let titles = session.lastPlacement?.slideTitles {
+                    // Fallback: the one same-named group whose slides are exactly the ones this test applied.
+                    let matches = show.groups.filter { $0.name == name }
+                    if matches.count == 1, matches[0].slides.map(\.title) == titles { removed = removeGroups(named: name) }
+                }
                 return (200, ControlJSON.encode(["ok": true, "removedGroups": removed, "name": name]))
             case "apply_draft":
                 guard let placement = session.applyDraft() else {
@@ -889,6 +983,28 @@ private final class ModelsBox: @unchecked Sendable {
 
 /// Built-in design rule checks for agent-composed (blank) slides. Stream design space 3840x2160.
 enum AgentDesignLint {
+    /// Auto-fixes rules a model often trips on, instead of failing the call: strips emoji and
+    /// snaps text sizes to 3 tiers (largest, smallest, middle), keeping the slide's hierarchy.
+    static func normalize(_ objects: inout [CanvasObject]) -> [String] {
+        var notes: [String] = []
+        for i in objects.indices where objects[i].kind == .text {
+            let cleaned = String(String.UnicodeScalarView(objects[i].text.unicodeScalars.filter { !$0.properties.isEmojiPresentation && !($0.properties.isEmoji && $0.value > 0x2000) }))
+                .trimmingCharacters(in: .whitespaces)
+            if cleaned != objects[i].text { notes.append("emoji_removed:\(objects[i].name)"); objects[i].text = cleaned }
+        }
+        let sizes = Set(objects.filter { $0.kind == .text && !$0.text.isEmpty }.map { $0.typography.fontSize.rounded() }).sorted()
+        if sizes.count > 3, let lo = sizes.first, let hi = sizes.last {
+            let mid = sizes.min { abs($0 - (lo * hi).squareRoot()) < abs($1 - (lo * hi).squareRoot()) } ?? lo
+            let tiers = [lo, mid, hi]
+            for i in objects.indices where objects[i].kind == .text {
+                let v = objects[i].typography.fontSize
+                objects[i].typography.fontSize = tiers.min { abs($0 - v) < abs($1 - v) } ?? v
+            }
+            notes.append("font_sizes_snapped:\(sizes.map { Int($0) })→\(tiers.map { Int($0) })")
+        }
+        return notes
+    }
+
     static let accentish: Set<String> = ["#6B9FE0", "#C6FF3D", "#F5C518", "#FFD60A", "#E5322D"]
 
     static func rgb(_ hex: String) -> (Double, Double, Double)? {

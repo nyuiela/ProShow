@@ -223,6 +223,36 @@ struct ScriptedAgentProvider: AgentChatProvider {
                 if step == 0 { call("get_project_context", "{}") } else { call("compose_patch_apply_preview", "{}") }
                 continuation.finish(); return
             }
+            if script == "logreplay" {
+                // Replays compose calls from the tool log (entries after proshow.ai.replayAfter, ISO time), one per round.
+                let after = UserDefaults.standard.string(forKey: "proshow.ai.replayAfter") ?? ""
+                let steps: [(String, String)] = ((try? FileManager.default.contentsOfDirectory(at: AgentToolLog.directory, includingPropertiesForKeys: nil)) ?? [])
+                    .filter { $0.lastPathComponent.hasPrefix("tools-") }.sorted { $0.path < $1.path }.last
+                    .flatMap { try? String(contentsOf: $0, encoding: .utf8) }?
+                    .split(separator: "\n").compactMap { line -> (String, String)? in
+                        guard let d = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+                              let ts = d["ts"] as? String, ts >= after, ts < (UserDefaults.standard.string(forKey: "proshow.ai.replayBefore") ?? "9"),
+                              let tool = d["tool"] as? String, ["template_instantiate", "slide_add_elements"].contains(tool),
+                              let a = d["arguments"] as? String else { return nil }
+                        return (tool, a)
+                    } ?? []
+                let done = messages[(messages.lastIndex { $0.role == .user } ?? 0)...].filter { $0.role == .tool }.count
+                if done < steps.count, !tools.isEmpty { continuation.yield(.toolCalls([AgentToolCall(id: "l\(done)", name: steps[done].0, arguments: steps[done].1)])) }
+                else { continuation.yield(.delta("Log replay finished.")) }
+                continuation.finish(); return
+            }
+            if script == "realreplay" {
+                // Exact logged xAI args from Kaleel's 10:56 On Air run.
+                let rounds: [(Int, [(String, String)])] = [
+                    (0, [("template_instantiate", ##"{"templateId":"blank","title":"1. Podcast Quote - Ghana Payments","groupName":"Morapay On Air","stage":true}"##)]),
+                    (1, [("slide_add_elements", ##"{"addElements":[{"kind":"rect","name":"Background","x":0,"y":0,"w":1,"h":1,"fill":"#3A2622"},{"kind":"rect","name":"FrostedCard","x":0.05,"y":0.15,"w":0.48,"h":0.65,"fill":"#1A1A1C","opacity":0.8,"cornerRadius":48,"borderColor":"#FFFFFF","borderWidth":1},{"kind":"text","name":"Label","text":"Post:","x":0.1,"y":0.2,"w":0.38,"h":0.05,"size":32,"weight":"bold","color":"#FFFFFF","font":"SF Pro"},{"kind":"text","name":"Quote","text":"[Editable] Building payments in Ghana means solving for trust first.","x":0.1,"y":0.28,"w":0.38,"h":0.45,"size":36,"weight":"regular","color":"#FFFFFF","font":"SF Pro"},{"kind":"video","name":"HostCam","x":0.58,"y":0.12,"w":0.37,"h":0.7,"borderColor":"#FF7A9A","borderWidth":6,"cornerRadius":36},{"kind":"rect","name":"CaptionPlate","x":0.2,"y":0.88,"w":0.6,"h":0.06,"fill":"#121214","opacity":0.7,"cornerRadius":8},{"kind":"text","name":"Caption","text":"Kaleel — Morapay On Air","x":0.22,"y":0.89,"w":0.56,"h":0.04,"size":24,"weight":"regular","color":"#FFFFFF","font":"SF Pro"}],"title":"1. Podcast Quote - Ghana Payments"}"##), ("slide_add_elements", ##"{"addElements":[{"kind":"rect","name":"TopBar","x":0,"y":0,"w":1,"h":0.12,"fill":"#1534A8"},{"kind":"text","name":"Headline","text":"TOKENIZED PAYMENTS IN AFRICA","x":0.05,"y":0.02,"w":0.9,"h":0.08,"size":48,"weight":"bold","color":"#FFFFFF","font":"DIN Alternate"},{"kind":"rect","name":"XCard","x":0.05,"y":0.18,"w":0.9,"h":0.45,"fill":"#F5F5F5","cornerRadius":12},{"kind":"text","name":"XHeader","text":"🕊 @kaleel","x":0.1,"y":0.2,"w":0.8,"h":0.05,"size":28,"weight":"bold","color":"#000000","font":"SF Pro"},{"kind":"text","name":"PostText","text":"[Editable] Stablecoin rails are the future for cross-border payments in Africa.","x":0.1,"y":0.28,"w":0.8,"h":0.25,"size":32,"weight":"regular","color":"#1A2A5A","font":"SF Pro"},{"kind":"text","name":"Date","text":"2h ago","x":0.1,"y":0.55,"w":0.8,"h":0.04,"size":20,"weight":"regular","color":"#666666","font":"SF Pro"},{"kind":"rect","name":"LowerThird","x":0,"y":0.7,"w":1,"h":0.3,"fill":"#0A1A3A"},{"kind":"rect","name":"ShowTag","x":0.05,"y":0.72,"w":0.18,"h":0.05,"fill":"#FFFFFF","cornerRadius":4},{"kind":"text","name":"ShowTagText","text":"MORAPAY LIVE","x":0.06,"y":0.73,"w":0.16,"h":0.03,"size":14,"weight":"bold","color":"#000000","font":"SF Pro"},{"kind":"text","name":"LowerTitle","text":"FOUNDER ON STABLECOIN RAILS","x":0.05,"y":0.8,"w":0.9,"h":0.05,"size":28,"weight":"bold","color":"#FFFFFF","font":"DIN Alternate"},{"kind":"text","name":"Footer","text":"STREAM MORAPAY+","x":0.05,"y":0.92,"w":0.9,"h":0.04,"size":18,"weight":"regular","color":"#FF7A9A","font":"SF Pro"}],"title":"2. X Post - Stablecoin Rails"}"##)])
+                ]
+                let done = messages[(messages.lastIndex { $0.role == .user } ?? 0)...].filter { $0.role == .tool }.count
+                if let round = rounds.first(where: { $0.0 == done }), !tools.isEmpty {
+                    continuation.yield(.toolCalls(round.1.enumerated().map { AgentToolCall(id: "q\(done)_\($0.offset)", name: $0.element.0, arguments: $0.element.1) }))
+                } else { continuation.yield(.delta("Replay finished.")) }
+                continuation.finish(); return
+            }
             if script == "plainreplay" {
                 // Replays the exact logged xAI args from the failing On Air run (parallel calls per round).
                 let rounds: [(Int, [(String, String)])] = [
