@@ -7,6 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A455B12D8FD39A3C8FB94791 /* AIAgentCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 833632A23808345937921080 /* AIAgentCore.swift */; };
+		2E9527966B09EE72E0408029 /* XAIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE742513DC6377110BA776A3 /* XAIProvider.swift */; };
+		55C4BCC80F6B123CCF63895C /* AIAgentSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FA5466F322705B2EF1530B3 /* AIAgentSession.swift */; };
+		8DC5C336478DBEEDF37396E5 /* AIDeskWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 175E580C434437AB5ACE6109 /* AIDeskWindow.swift */; };
+		A5C6F72375DEFD397688A45C /* PROSHOW_CREATIVE_DESIGN_AGENT.md in Resources */ = {isa = PBXBuildFile; fileRef = 66903F9BF1565A22D565FAD1 /* PROSHOW_CREATIVE_DESIGN_AGENT.md */; };
 		3B33FED38E2B33812B3D87E5 /* FloatingPanelTransparency.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25ACA0AC1A4A6935B1346764 /* FloatingPanelTransparency.swift */; };
 		70DDF89D710261CCFD3CFF63 /* SlideDeckImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 394D828F02D4E088EA8AF2F8 /* SlideDeckImporter.swift */; };
 		9B2308FCF47F11FFD0EAD05C /* BroadcastTemplatePack.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69E78DF0B0D4828910EF0123 /* BroadcastTemplatePack.swift */; };
@@ -171,6 +176,7 @@
 		A100000000000000000000D2 /* NDISessions.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000D2 /* NDISessions.swift */; };
 		A100000000000000000000F1 /* ThemeTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000F1 /* ThemeTokens.swift */; };
 		A1A100000000000000000C01 /* AIComposeV1.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2A200000000000000000C01 /* AIComposeV1.swift */; };
+		A1A1000000000000000AA001 /* AIAgentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2A2000000000000000AA001 /* AIAgentTests.swift */; };
 		A1A100000000000000000C02 /* AIComposeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2A200000000000000000C02 /* AIComposeTests.swift */; };
 		A1T000000000000000000001 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000001 /* TestSupport.swift */; };
 		A1T000000000000000000002 /* CompositorEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000002 /* CompositorEngineTests.swift */; };
@@ -404,6 +410,11 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		833632A23808345937921080 /* AIAgentCore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIAgentCore.swift; sourceTree = "<group>"; };
+		BE742513DC6377110BA776A3 /* XAIProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = XAIProvider.swift; sourceTree = "<group>"; };
+		7FA5466F322705B2EF1530B3 /* AIAgentSession.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIAgentSession.swift; sourceTree = "<group>"; };
+		175E580C434437AB5ACE6109 /* AIDeskWindow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIDeskWindow.swift; sourceTree = "<group>"; };
+		66903F9BF1565A22D565FAD1 /* PROSHOW_CREATIVE_DESIGN_AGENT.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; name = PROSHOW_CREATIVE_DESIGN_AGENT.md; path = docs/PROSHOW_CREATIVE_DESIGN_AGENT.md; sourceTree = SOURCE_ROOT; };
 		25ACA0AC1A4A6935B1346764 /* FloatingPanelTransparency.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FloatingPanelTransparency.swift; sourceTree = "<group>"; };
 		394D828F02D4E088EA8AF2F8 /* SlideDeckImporter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SlideDeckImporter.swift; sourceTree = "<group>"; };
 		69E78DF0B0D4828910EF0123 /* BroadcastTemplatePack.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BroadcastTemplatePack.swift; sourceTree = "<group>"; };
@@ -571,6 +582,7 @@
 		A200000000000000000000F1 /* ThemeTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeTokens.swift; sourceTree = "<group>"; };
 		A200TEST000000000000000A /* ProShowTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ProShowTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A2A200000000000000000C01 /* AIComposeV1.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIComposeV1.swift; sourceTree = "<group>"; };
+		A2A2000000000000000AA001 /* AIAgentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIAgentTests.swift; sourceTree = "<group>"; };
 		A2A200000000000000000C02 /* AIComposeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIComposeTests.swift; sourceTree = "<group>"; };
 		A2T000000000000000000001 /* TestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestSupport.swift; sourceTree = "<group>"; };
 		A2T000000000000000000002 /* CompositorEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompositorEngineTests.swift; sourceTree = "<group>"; };
@@ -813,6 +825,16 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		0691E04B54D3F397BF2A628D /* AIAgent */ = {
+			isa = PBXGroup;
+			children = (
+				833632A23808345937921080 /* AIAgentCore.swift */,
+				BE742513DC6377110BA776A3 /* XAIProvider.swift */,
+				7FA5466F322705B2EF1530B3 /* AIAgentSession.swift */,
+			);
+			path = AIAgent;
+			sourceTree = "<group>";
+		};
 		A40000000000000000000001 = {
 			isa = PBXGroup;
 			children = (
@@ -1083,6 +1105,7 @@
 				A20000000000000000000037 /* PathGeometryEngine.swift */,
 				A20000000000000000000038 /* RTMPStreamTransport.swift */,
 				394D828F02D4E088EA8AF2F8 /* SlideDeckImporter.swift */,
+				0691E04B54D3F397BF2A628D /* AIAgent */,
 				69E78DF0B0D4828910EF0123 /* BroadcastTemplatePack.swift */,
 			);
 			path = Services;
@@ -1130,6 +1153,7 @@
 			children = (
 				A20000000000000000000009 /* Assets.xcassets */,
 				A200000000000000000000C9 /* Localizable.xcstrings */,
+				66903F9BF1565A22D565FAD1 /* PROSHOW_CREATIVE_DESIGN_AGENT.md */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -1191,6 +1215,7 @@
 				C6D200000000000000000029 /* RundownDetailPane.swift */,
 				C8F32100000000000000000E /* RundownTeleprompterView.swift */,
 				C8F321000000000000000012 /* PromptFloatWindow.swift */,
+				175E580C434437AB5ACE6109 /* AIDeskWindow.swift */,
 				C8F322000000000000000013 /* RundownFloatWindow.swift */,
 				C8F325000000000000000015 /* StudioGlassWindow.swift */,
 				C6D20000000000000000002A /* RundownProgramEditor.swift */,
@@ -1269,6 +1294,7 @@
 				A2T000000000000000000017 /* CanvasEngineTests.swift */,
 				A2T000000000000000000018 /* ActionInspectorTests.swift */,
 				A2A200000000000000000C02 /* AIComposeTests.swift */,
+				A2A2000000000000000AA001 /* AIAgentTests.swift */,
 				A2T000000000000000000019 /* ProgramCompositorTests.swift */,
 				A2T000000000000000000020 /* VideoIngestTests.swift */,
 				A2T000000000000000000021 /* AudioIOTests.swift */,
@@ -1395,6 +1421,7 @@
 			files = (
 				A10000000000000000000009 /* Assets.xcassets in Resources */,
 				A100000000000000000000C9 /* Localizable.xcstrings in Resources */,
+				A5C6F72375DEFD397688A45C /* PROSHOW_CREATIVE_DESIGN_AGENT.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1755,6 +1782,10 @@
 				A1000000000000000000002A /* ProShowVirtualCam.swift in Sources */,
 				3B33FED38E2B33812B3D87E5 /* FloatingPanelTransparency.swift in Sources */,
 				70DDF89D710261CCFD3CFF63 /* SlideDeckImporter.swift in Sources */,
+				A455B12D8FD39A3C8FB94791 /* AIAgentCore.swift in Sources */,
+				2E9527966B09EE72E0408029 /* XAIProvider.swift in Sources */,
+				55C4BCC80F6B123CCF63895C /* AIAgentSession.swift in Sources */,
+				8DC5C336478DBEEDF37396E5 /* AIDeskWindow.swift in Sources */,
 				9B2308FCF47F11FFD0EAD05C /* BroadcastTemplatePack.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1794,6 +1825,7 @@
 				A1T000000000000000000017 /* CanvasEngineTests.swift in Sources */,
 				A1T000000000000000000018 /* ActionInspectorTests.swift in Sources */,
 				A1A100000000000000000C02 /* AIComposeTests.swift in Sources */,
+				A1A1000000000000000AA001 /* AIAgentTests.swift in Sources */,
 				A1T000000000000000000019 /* ProgramCompositorTests.swift in Sources */,
 				A1T000000000000000000023 /* AddShotTests.swift in Sources */,
 				A1T000000000000000000024 /* PlaceholderMatrixTests.swift in Sources */,

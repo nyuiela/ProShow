@@ -7522,6 +7522,9 @@ final class ShowController {
             return RemoteControlBridge.apply(remote, to: self)
         }
         let parts = path.split(separator: "/").map(String.init)
+        if let agent = handleAIAgent(method: method, parts: parts) {
+            return agent
+        }
         if let ai = handleAICompose(method: method, parts: parts, body: body) {
             return ai
         }

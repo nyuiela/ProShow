@@ -30,6 +30,7 @@ struct ComposeRecipe: Codable, Hashable, Sendable {
         ComposeRecipe(id: "qa", name: "Q&A"),
         ComposeRecipe(id: "chapter_cta", name: "Chapter CTA"),
         ComposeRecipe(id: "talk_section", name: "Talk section"),
+        ComposeRecipe(id: "freeform", name: "Freeform"),
     ]
 }
 
