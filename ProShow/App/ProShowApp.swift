@@ -130,8 +130,10 @@ struct ProShowApp: App {
                     .disabled(session.phase != .desk)
                 Button("Add Broadcast Template Pack") { session.controller.addBroadcastTemplatePack() }
                     .disabled(session.phase != .desk)
-                Button("AI Desk…") { AIDeskWindowController.shared.toggle(controller: session.controller) }
+                Button("Ask ProShow…") { AgentComposerController.shared.toggle(controller: session.controller) }
                     .keyboardShortcut("a", modifiers: [.command, .option])
+                    .disabled(session.phase != .desk)
+                Button("AI Desk…") { AIDeskWindowController.shared.toggle(controller: session.controller) }
                     .disabled(session.phase != .desk)
                 Divider()
                 Button("Save Project") { _ = session.saveProject() }

@@ -11,6 +11,7 @@
 		2E9527966B09EE72E0408029 /* XAIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE742513DC6377110BA776A3 /* XAIProvider.swift */; };
 		55C4BCC80F6B123CCF63895C /* AIAgentSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FA5466F322705B2EF1530B3 /* AIAgentSession.swift */; };
 		8DC5C336478DBEEDF37396E5 /* AIDeskWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 175E580C434437AB5ACE6109 /* AIDeskWindow.swift */; };
+		20B40C8DC25E4974AB401A9E /* AgentComposerOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C096765363C4945A1F7CECC /* AgentComposerOverlay.swift */; };
 		A5C6F72375DEFD397688A45C /* PROSHOW_CREATIVE_DESIGN_AGENT.md in Resources */ = {isa = PBXBuildFile; fileRef = 66903F9BF1565A22D565FAD1 /* PROSHOW_CREATIVE_DESIGN_AGENT.md */; };
 		3B33FED38E2B33812B3D87E5 /* FloatingPanelTransparency.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25ACA0AC1A4A6935B1346764 /* FloatingPanelTransparency.swift */; };
 		70DDF89D710261CCFD3CFF63 /* SlideDeckImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 394D828F02D4E088EA8AF2F8 /* SlideDeckImporter.swift */; };
@@ -414,6 +415,7 @@
 		BE742513DC6377110BA776A3 /* XAIProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = XAIProvider.swift; sourceTree = "<group>"; };
 		7FA5466F322705B2EF1530B3 /* AIAgentSession.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIAgentSession.swift; sourceTree = "<group>"; };
 		175E580C434437AB5ACE6109 /* AIDeskWindow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIDeskWindow.swift; sourceTree = "<group>"; };
+		5C096765363C4945A1F7CECC /* AgentComposerOverlay.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentComposerOverlay.swift; sourceTree = "<group>"; };
 		66903F9BF1565A22D565FAD1 /* PROSHOW_CREATIVE_DESIGN_AGENT.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; name = PROSHOW_CREATIVE_DESIGN_AGENT.md; path = docs/PROSHOW_CREATIVE_DESIGN_AGENT.md; sourceTree = SOURCE_ROOT; };
 		25ACA0AC1A4A6935B1346764 /* FloatingPanelTransparency.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FloatingPanelTransparency.swift; sourceTree = "<group>"; };
 		394D828F02D4E088EA8AF2F8 /* SlideDeckImporter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SlideDeckImporter.swift; sourceTree = "<group>"; };
@@ -1215,6 +1217,7 @@
 				C6D200000000000000000029 /* RundownDetailPane.swift */,
 				C8F32100000000000000000E /* RundownTeleprompterView.swift */,
 				C8F321000000000000000012 /* PromptFloatWindow.swift */,
+				5C096765363C4945A1F7CECC /* AgentComposerOverlay.swift */,
 				175E580C434437AB5ACE6109 /* AIDeskWindow.swift */,
 				C8F322000000000000000013 /* RundownFloatWindow.swift */,
 				C8F325000000000000000015 /* StudioGlassWindow.swift */,
@@ -1785,6 +1788,7 @@
 				A455B12D8FD39A3C8FB94791 /* AIAgentCore.swift in Sources */,
 				2E9527966B09EE72E0408029 /* XAIProvider.swift in Sources */,
 				55C4BCC80F6B123CCF63895C /* AIAgentSession.swift in Sources */,
+				20B40C8DC25E4974AB401A9E /* AgentComposerOverlay.swift in Sources */,
 				8DC5C336478DBEEDF37396E5 /* AIDeskWindow.swift in Sources */,
 				9B2308FCF47F11FFD0EAD05C /* BroadcastTemplatePack.swift in Sources */,
 			);

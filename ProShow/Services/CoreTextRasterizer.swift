@@ -96,13 +96,11 @@ enum CoreTextRasterizer {
             return textRect.origin
         }
         let layoutHeight = measuredLayoutHeight(for: attributed, width: textRect.width)
-        let alignHeight = layoutHeight
-        let frame = verticallyAlignedFrame(
-            contentHeight: alignHeight,
-            within: textRect,
-            align: verticalAlign
-        )
-        return frame.origin
+        let pathHeight = layoutHeight + 2
+        let framesetter = CTFramesetterCreateWithAttributedString(attributed as CFAttributedString)
+        let path = CGPath(rect: CGRect(x: 0, y: 0, width: textRect.width, height: pathHeight), transform: nil)
+        let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: 0, length: attributed.length), path, nil)
+        return CGPoint(x: textRect.minX, y: alignedLayoutTop(frame: frame, pathHeight: pathHeight, attributed: attributed, in: textRect, align: verticalAlign))
     }
 
     static func drawCanvasText(
@@ -172,34 +170,72 @@ enum CoreTextRasterizer {
         guard attributed.length > 0, bounds.width > 0, bounds.height > 0 else { return }
 
         let layoutHeight = measuredLayoutHeight(for: attributed, width: bounds.width)
-        // Single lines used to take a glyph/optical-bounds path whose `middle` math ignored
-        // `minY` (optical bounds = line box incl. descent), so middle sat near bottom and never
-        // matched the NSTextView edit overlay. Lay out every block like the editor: line box via
-        // CTFramesetter, aligned by measured layout height.
-        context.saveGState()
-
         let framesetter = CTFramesetterCreateWithAttributedString(attributed as CFAttributedString)
-        let alignHeight = layoutHeight
-        var frameRect = verticallyAlignedFrame(
-            contentHeight: alignHeight,
-            within: bounds,
-            align: verticalAlign
-        )
-        frameRect.size.height = max(layoutHeight, alignHeight)
+        let pathHeight = layoutHeight + 2
+        let path = CGPath(rect: CGRect(x: 0, y: 0, width: bounds.width, height: pathHeight), transform: nil)
+        let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: 0, length: attributed.length), path, nil)
+        let layoutTop = alignedLayoutTop(frame: frame, pathHeight: pathHeight, attributed: attributed, in: bounds, align: verticalAlign)
 
-        let path = CGPath(rect: CGRect(origin: .zero, size: frameRect.size), transform: nil)
-        let frame = CTFramesetterCreateFrame(
-            framesetter,
-            CFRange(location: 0, length: attributed.length),
-            path,
-            nil
-        )
-
-        context.translateBy(x: frameRect.minX, y: frameRect.maxY)
+        context.saveGState()
+        context.translateBy(x: bounds.minX, y: layoutTop + pathHeight)
         context.scaleBy(x: 1, y: -1)
         CTFrameDraw(frame, context)
-
         context.restoreGState()
+    }
+
+    /// Visual text block = first baseline − font ascender … last baseline + font descender.
+    /// Excludes the extra space `lineHeightMultiple` puts above each line (the cause of top/middle
+    /// sitting low), and is font-size aware (pure font metrics, not string ink, so typing never jumps).
+    /// Returns the y (top-left space) where the layout's top must go so the visual block is aligned.
+    static func visualAlignedLayoutTop(
+        firstBaselineFromTop: CGFloat,
+        lastBaselineFromTop: CGFloat,
+        ascent: CGFloat,
+        descent: CGFloat,
+        in rect: CGRect,
+        align: TextVerticalAlign
+    ) -> CGFloat {
+        let visualTop = firstBaselineFromTop - ascent
+        let visualHeight = (lastBaselineFromTop + descent) - visualTop
+        let target: CGFloat
+        switch align {
+        case .top: target = rect.minY
+        case .middle: target = rect.midY - visualHeight / 2
+        case .bottom, .baseline: target = rect.maxY - visualHeight
+        }
+        return target - visualTop
+    }
+
+    static func fontMetrics(of attributed: NSAttributedString, at index: Int) -> (ascent: CGFloat, descent: CGFloat) {
+        guard attributed.length > 0 else { return (0, 0) }
+        let i = min(max(0, index), attributed.length - 1)
+        let font = (attributed.attribute(.font, at: i, effectiveRange: nil) as? NSFont) ?? NSFont.systemFont(ofSize: 12)
+        return (font.ascender, -font.descender)
+    }
+
+    private static func alignedLayoutTop(
+        frame: CTFrame,
+        pathHeight: CGFloat,
+        attributed: NSAttributedString,
+        in rect: CGRect,
+        align: TextVerticalAlign
+    ) -> CGFloat {
+        let lines = CTFrameGetLines(frame) as? [CTLine] ?? []
+        guard !lines.isEmpty else { return rect.minY }
+        var origins = [CGPoint](repeating: .zero, count: lines.count)
+        CTFrameGetLineOrigins(frame, CFRange(location: 0, length: 0), &origins)
+        let firstRange = CTLineGetStringRange(lines[0])
+        let lastRange = CTLineGetStringRange(lines[lines.count - 1])
+        let top = fontMetrics(of: attributed, at: firstRange.location)
+        let bottom = fontMetrics(of: attributed, at: lastRange.location)
+        return visualAlignedLayoutTop(
+            firstBaselineFromTop: pathHeight - origins[0].y,
+            lastBaselineFromTop: pathHeight - origins[lines.count - 1].y,
+            ascent: top.ascent,
+            descent: bottom.descent,
+            in: rect,
+            align: align
+        )
     }
 
     /// RTMP/ISO compositor flips the root context once; anchor with `midY` like `ProgramOutputComposer.drawLine`.
@@ -242,20 +278,13 @@ enum CoreTextRasterizer {
             x = bounds.minX - glyphBounds.minX
         }
 
-        let yAnchor: CGFloat
-        let textY: CGFloat
-        switch verticalAlign {
-        case .top:
-            yAnchor = bounds.minY
-            textY = -glyphBounds.maxY
-        case .bottom, .baseline:
-            yAnchor = bounds.maxY
-            textY = -glyphBounds.minY
-        case .middle:
-            yAnchor = bounds.midY
-            textY = -glyphBounds.height / 2
-        }
-
+        var ascent: CGFloat = 0, descent: CGFloat = 0, leading: CGFloat = 0
+        CTLineGetTypographicBounds(line, &ascent, &descent, &leading)
+        let yAnchor = visualAlignedLayoutTop(
+            firstBaselineFromTop: ascent, lastBaselineFromTop: ascent,
+            ascent: ascent, descent: descent, in: bounds, align: verticalAlign
+        ) + ascent // baseline y in top-left space
+        let textY: CGFloat = 0
         context.saveGState()
         context.translateBy(x: x, y: yAnchor)
         context.scaleBy(x: 1, y: -1)
@@ -285,20 +314,13 @@ enum CoreTextRasterizer {
             x = bounds.minX - glyphBounds.minX
         }
 
-        let yAnchor: CGFloat
-        let textY: CGFloat
-        switch verticalAlign {
-        case .top:
-            yAnchor = bounds.maxY
-            textY = -glyphBounds.maxY
-        case .bottom, .baseline:
-            yAnchor = bounds.minY
-            textY = -glyphBounds.minY
-        case .middle:
-            yAnchor = bounds.midY
-            textY = -glyphBounds.height / 2
-        }
-
+        var ascent: CGFloat = 0, descent: CGFloat = 0, leading: CGFloat = 0
+        CTLineGetTypographicBounds(line, &ascent, &descent, &leading)
+        let yAnchor = visualAlignedLayoutTop(
+            firstBaselineFromTop: ascent, lastBaselineFromTop: ascent,
+            ascent: ascent, descent: descent, in: bounds, align: verticalAlign
+        ) + ascent // baseline y in top-left space
+        let textY: CGFloat = 0
         context.saveGState()
         context.translateBy(x: x, y: yAnchor)
         context.scaleBy(x: 1, y: -1)

@@ -2807,9 +2807,38 @@ private final class CanvasInputTextView: NSTextView {
         layoutManager.ensureLayout(for: textContainer)
 
         let used = layoutManager.usedRect(for: textContainer)
-        let contentHeight = max(used.height, 1)
+        let align = CanvasTextBoxLayout.coreTextVerticalAlignment(for: canvasObject)
         let contentTop: CGFloat
-        switch CanvasTextBoxLayout.coreTextVerticalAlignment(for: canvasObject) {
+        let glyphCount = layoutManager.numberOfGlyphs
+        if glyphCount > 0, let storage = textStorage, storage.length > 0 {
+            // Same visual-block rule as CoreTextRasterizer (font ascender/descender around baselines).
+            func baseline(_ glyph: Int) -> CGFloat {
+                layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil).minY
+                    + layoutManager.location(forGlyphAt: glyph).y
+            }
+            let lastGlyph = glyphCount - 1
+            let firstChar = layoutManager.characterIndexForGlyph(at: 0)
+            let lastFragment = layoutManager.lineFragmentRect(forGlyphAt: lastGlyph, effectiveRange: nil)
+            let lastLineFirstGlyph = layoutManager.glyphIndex(for: NSPoint(x: 0, y: lastFragment.midY), in: textContainer)
+            let lastChar = layoutManager.characterIndexForGlyph(at: lastLineFirstGlyph)
+            let topMetrics = CoreTextRasterizer.fontMetrics(of: storage, at: firstChar)
+            let bottomMetrics = CoreTextRasterizer.fontMetrics(of: storage, at: lastChar)
+            contentTop = CoreTextRasterizer.visualAlignedLayoutTop(
+                firstBaselineFromTop: baseline(0),
+                lastBaselineFromTop: baseline(lastGlyph),
+                ascent: topMetrics.ascent,
+                descent: bottomMetrics.descent,
+                in: textRect,
+                align: align
+            )
+            let target = NSSize(width: max(0, textRect.minX), height: max(0, contentTop))
+            if abs(textContainerInset.width - target.width) > 0.01 || abs(textContainerInset.height - target.height) > 0.01 {
+                textContainerInset = target
+            }
+            return
+        }
+        let contentHeight = max(used.height, 1)
+        switch align {
         case .top:
             contentTop = textRect.minY
         case .middle:
