@@ -389,6 +389,12 @@ final class AIAgentSession {
     // MARK: - Tools
 
     private func execute(_ call: AgentToolCall) -> AgentToolOutcome {
+        let outcome = executeTool(call)
+        AgentToolLog.write(tool: call.name, arguments: call.arguments, truncated: call.truncated, ok: outcome.ok, summary: outcome.summary, result: outcome.result)
+        return outcome
+    }
+
+    private func executeTool(_ call: AgentToolCall) -> AgentToolOutcome {
         guard let def = AgentToolRegistry.definition(call.name) else {
             return AgentToolOutcome(result: json(["ok": false, "error": "unknown_tool", "tools": AgentToolRegistry.all.map(\.name)]), ok: false, summary: "Unknown tool")
         }
@@ -428,7 +434,9 @@ final class AIAgentSession {
             return AgentToolOutcome(result: json(["templates": list, "note": "Starting points. Restyle, edit, remove and add elements freely."]), ok: true, summary: "\(list.count) templates")
         case "template_instantiate":
             turnComposeAttempted = true
-            let outcome = instantiateTool(args)
+            let outcome = call.truncated
+                ? AgentToolOutcome(result: json(["ok": false, "error": "output_truncated", "message": "Your template_instantiate call was cut off by the output limit, so addElements was incomplete. Send one slide per call with fewer, shorter elements."]), ok: false, summary: "output_truncated")
+                : instantiateTool(args)
             if outcome.ok { turnComposeFailures = 0 } else { turnComposeFailures += 1; turnLastComposeError = outcome.summary }
             return outcome
         case "compose_patch_validate", "compose_patch_apply_preview":
@@ -451,8 +459,15 @@ final class AIAgentSession {
         do {
             let (slide, notes) = try AgentTemplateCatalog.instantiate(id, args: args)
             if id == "blank" {
-                if slide.canvas.filter({ $0.name != "Background" }).count < 2, plainSlideTitles(ComposePatch(schemaVersion: 1, recipeId: "freeform", summary: "", slides: [slide], rundownBlocks: nil, designMeta: ComposeDesignMeta(canvases: ["stream"]))).count > 0 {
-                    return AgentToolOutcome(result: json(["ok": false, "error": "too_plain", "message": "Add hierarchy: label, headline, rules/plates/cards."]), ok: false, summary: "too_plain")
+                // Plainness is judged on the final composed slide: text, shapes, video panes and images all count.
+                let visuals = slide.canvas.filter { $0.name != "Background" }
+                let received = AgentTemplateCatalog.addElementList(args).count
+                if visuals.count <= 1, !plainAllowed {
+                    let have = visuals.first.map { "1 \($0.kind.rawValue) ('\($0.name)')" } ?? "nothing but the background"
+                    let hint = received == 0
+                        ? "addElements was missing or unreadable (got \(String(describing: type(of: args["addElements"] ?? "none")))). Send addElements as a JSON array of objects."
+                        : "Received \(received) addElements but only \(visuals.count) were created; check each has kind and x,y,w,h fractions 0-1."
+                    return AgentToolOutcome(result: json(["ok": false, "error": "too_plain", "message": "The slide has \(have). Add at least one more element via addElements, e.g. a label text, a rect plate/card, a rule, or a video pane. \(hint)"]), ok: false, summary: "too_plain")
                 }
                 let issues = AgentDesignLint.hardIssues(slide.canvas)
                 if !issues.isEmpty {
@@ -515,6 +530,11 @@ final class AIAgentSession {
     }
 
     /// Build requests get rich slides; a lone text element is pushed back unless the operator asked for minimal.
+    private var plainAllowed: Bool {
+        let lower = turnPrompt.lowercased()
+        return ["minimal", "simple slide", "plain", "text only", "single line", "just text"].contains(where: { lower.contains($0) })
+    }
+
     private func plainSlideTitles(_ patch: ComposePatch) -> [String] {
         let lower = turnPrompt.lowercased()
         if ["minimal", "simple slide", "plain", "text only", "single line", "just text"].contains(where: { lower.contains($0) }) { return [] }
@@ -846,10 +866,14 @@ enum AgentDesignLint {
         let families = Set(texts.map(\.typography.fontFamily).filter { !$0.isEmpty })
         if families.count > 2 { issues.append("\(families.count) font families (max 2 per slide): \(families.sorted())") }
         // Per slide: one accent hue on at most 2 elements. Background plate never counts.
+        // A vivid brand color filling the largest structural rect (e.g. a blue CNBC bar) is the slide's base
+        // color, not its accent. The accent is any other vivid color, on at most 2 elements.
+        let base = objects.filter { $0.name != "Background" && $0.kind != .text && $0.fill.type != .none && isVivid($0.fill.color) }
+            .max { $0.transform.width * $0.transform.height < $1.transform.width * $1.transform.height }?.fill.color.uppercased()
         let accents = objects.filter { o in
             guard o.name != "Background" else { return false }
             let colors = [o.kind == .text ? o.typography.color : (o.fill.type == .none ? "" : o.fill.color), o.stroke.style == .none ? "" : o.stroke.color]
-            return colors.contains { isVivid($0) }
+            return colors.contains { isVivid($0) && $0.uppercased() != base }
         }
         if accents.count > 2 { issues.append("accent on \(accents.count) elements (max 2): \(accents.map(\.name).joined(separator: ", "))") }
         if texts.contains(where: { $0.text.unicodeScalars.contains { $0.properties.isEmojiPresentation } }) { issues.append("emoji in text") }
@@ -887,5 +911,43 @@ enum AgentDesignLint {
         }.sorted()
         let textCount = objects.filter { $0.kind == .text }.count
         return blocks.joined(separator: "|") + "#t\(min(textCount, 12) / 3)"
+    }
+}
+
+
+/// Debug log of agent tool calls: Application Support/ProShow/Agent/Logs/tools-YYYY-MM-DD.jsonl. Secrets redacted.
+enum AgentToolLog {
+    static let directory: URL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("ProShow/Agent/Logs", isDirectory: true)
+
+    static func redact(_ text: String) -> String {
+        var out = text
+        let patterns = [
+            #"xai-[A-Za-z0-9_\-]{8,}"#,
+            #"(?i)bearer\s+[A-Za-z0-9._\-]{8,}"#,
+            #"sk-[A-Za-z0-9_\-]{8,}"#,
+            #"(?i)("(?:api_?key|token|secret|password|authorization)"\s*:\s*")[^"]*""#
+        ]
+        for (i, p) in patterns.enumerated() {
+            guard let re = try? NSRegularExpression(pattern: p) else { continue }
+            let range = NSRange(out.startIndex..., in: out)
+            out = re.stringByReplacingMatches(in: out, range: range, withTemplate: i == 3 ? "$1[REDACTED]\"" : "[REDACTED]")
+        }
+        return out
+    }
+
+    static func write(tool: String, arguments: String, truncated: Bool, ok: Bool, summary: String, result: String) {
+        let fm = FileManager.default
+        try? fm.createDirectory(at: directory, withIntermediateDirectories: true)
+        let day = ISO8601DateFormatter.string(from: Date(), timeZone: .current, formatOptions: [.withFullDate])
+        let url = directory.appendingPathComponent("tools-\(day).jsonl")
+        let entry: [String: Any] = [
+            "ts": ISO8601DateFormatter().string(from: Date()), "tool": tool, "ok": ok, "summary": summary,
+            "truncated": truncated, "arguments": redact(String(arguments.prefix(60_000))), "result": redact(String(result.prefix(4_000)))
+        ]
+        guard var data = try? JSONSerialization.data(withJSONObject: entry, options: [.sortedKeys]) else { return }
+        data.append(0x0A)
+        if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(data); try? h.close() }
+        else { try? data.write(to: url) }
     }
 }

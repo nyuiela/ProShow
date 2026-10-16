@@ -454,6 +454,25 @@ enum AgentTemplateCatalog {
 
     enum InstantiateError: Error { case unknownTemplate(String) }
 
+    /// addElements in any shape models send: array of objects, a JSON string of one, or common aliases.
+    static func addElementList(_ args: [String: Any]) -> [[String: Any]] {
+        for key in ["addElements", "add_elements", "elements", "add", "addElement"] {
+            guard let value = args[key] else { continue }
+            if let list = value as? [[String: Any]] { return list }
+            if let one = value as? [String: Any] { return [one] }
+            if let list = value as? [Any] { return list.compactMap { item in
+                if let d = item as? [String: Any] { return d }
+                if let s = item as? String, let d = try? JSONSerialization.jsonObject(with: Data(s.utf8)) as? [String: Any] { return d }
+                return nil
+            } }
+            if let s = value as? String, let parsed = try? JSONSerialization.jsonObject(with: Data(s.utf8)) {
+                if let list = parsed as? [[String: Any]] { return list }
+                if let one = parsed as? [String: Any] { return [one] }
+            }
+        }
+        return []
+    }
+
     /// Builds a dual-canvas Slide (Stream objects on the slide, Phone objects on the phone board).
     @MainActor
     static func instantiate(_ id: String, args: [String: Any]) throws -> (Slide, [String]) {
@@ -463,7 +482,7 @@ enum AgentTemplateCatalog {
         let style = (args["style"] as? [String: Any]) ?? [:]
         let edits = (args["edits"] as? [String: [String: Any]]) ?? [:]
         let remove = Set(((args["remove"] as? [String]) ?? []).map { $0.lowercased() })
-        let adds = (args["addElements"] as? [[String: Any]]) ?? []
+        let adds = addElementList(args)
         let streamOnly = (args["streamOnly"] as? Bool) == true
 
         func norm(_ s: String) -> String { s.lowercased().replacingOccurrences(of: "_", with: " ") }
@@ -514,25 +533,59 @@ enum AgentTemplateCatalog {
         // Free-form additions (fractions of the Stream board; Phone gets the reflowed copy unless `phone` frame given).
         var b = BroadcastTemplatePack.Builder(sx: 1, sy: 1)
         var phoneAdds: [CanvasObject] = []
-        for add in adds {
-            func d(_ key: String, _ src: [String: Any] = add) -> Double { (src[key] as? NSNumber)?.doubleValue ?? 0 }
-            let kind = (add["kind"] as? String ?? "text").lowercased()
+        for rawAdd in adds {
+            // Accept a nested frame/bounds object as well as flat x,y,w,h.
+            var add = rawAdd
+            if let f = (add["frame"] ?? add["bounds"] ?? add["rect"]) as? [String: Any] { for (k, v) in f where add[k] == nil { add[k] = v } }
+            if add["w"] == nil, let v = add["width"] { add["w"] = v }
+            if add["h"] == nil, let v = add["height"] { add["h"] = v }
+            func num(_ v: Any?) -> Double? {
+                if let n = v as? NSNumber { return n.doubleValue }
+                if let s = v as? String { return Double(s.trimmingCharacters(in: CharacterSet(charactersIn: " px%"))) }
+                return nil
+            }
+            // Fractions 0-1; values > 1 are treated as pixels of the board (W x H).
+            func frac(_ key: String, _ src: [String: Any], _ full: Double) -> Double {
+                guard let v = num(src[key]) else { return 0 }
+                return v > 1.0001 ? v / full : v
+            }
+            func d(_ key: String, _ src: [String: Any] = add) -> Double { num(src[key]) ?? 0 }
+            let kind = (add["kind"] as? String ?? add["type"] as? String ?? "text").lowercased().replacingOccurrences(of: "-", with: "_")
             let name = add["name"] as? String ?? "Element \(b.objects.count + 1)"
-            let x = d("x") * 3840, y = d("y") * 2160, w = max(0.01, d("w")) * 3840, h = max(0.01, d("h")) * 2160
-            let fill = add["fill"] as? String ?? "#1B1B1F"
-            let color = add["color"] as? String ?? "#FFFFFF"
-            let size = (add["size"] as? NSNumber)?.doubleValue ?? 72
+            let x = frac("x", add, 3840) * 3840, y = frac("y", add, 2160) * 2160
+            let w = max(0.01, frac("w", add, 3840)) * 3840, h = max(0.01, frac("h", add, 2160)) * 2160
+            let fill = (add["fill"] ?? add["fillColor"] ?? add["background"]) as? String ?? "#1B1B1F"
+            let color = (add["color"] ?? add["textColor"]) as? String ?? "#FFFFFF"
+            let size = num(add["size"] ?? add["fontSize"]) ?? 72
             let weight = FontWeightToken(rawValue: (add["weight"] as? String ?? "bold").lowercased()) ?? .bold
             let align = TextHorizontalAlign(rawValue: (add["align"] as? String ?? "left").lowercased()) ?? .left
-            let radius = (add["radius"] as? NSNumber)?.doubleValue ?? 0
+            let radius = num(add["cornerRadius"] ?? add["radius"]) ?? 0
+            var borderColor = (add["borderColor"] ?? add["strokeColor"]) as? String
+            var borderWidth = num(add["borderWidth"] ?? add["strokeWidth"])
+            if let border = add["border"] as? [String: Any] {
+                borderColor = borderColor ?? (border["color"] as? String)
+                borderWidth = borderWidth ?? num(border["width"])
+            } else if let s = add["border"] as? String, borderColor == nil { borderColor = s }
+            if borderColor == nil, borderWidth != nil { borderColor = "#FFFFFF" }
             let before = b.objects.count
             switch kind {
-            case "rect", "shape", "plate", "rule", "card":
-                b.rect(name, x, y, w, h, fill: fill, radius: radius, border: add["border"] as? String)
-            case "video", "camera", "float", "screen":
-                b.float(name, x, y, w, h, border: add["border"] as? String)
+            case "rect", "rectangle", "shape", "plate", "rule", "card", "box", "bar", "strip", "panel", "line", "divider", "frosted_card", "glass":
+                b.rect(name, x, y, w, h, fill: fill, radius: radius, border: borderColor, borderWidth: borderWidth ?? 6)
+            case "video", "video_pane", "videopane", "video_input", "camera", "cam", "float", "screen", "pane":
+                b.float(name, x, y, w, h, border: borderColor, width: borderWidth ?? 6)
+                if radius > 0 { b.objects[b.objects.count - 1].stroke.cornerRadius = radius }
+            case "image", "logo", "picture", "photo":
+                // Image placeholder: a plate the operator swaps for media.
+                b.rect(name, x, y, w, h, fill: add["fill"] as? String ?? "#2A2A2E", radius: radius, border: borderColor, borderWidth: borderWidth ?? 6)
             default:
-                b.text(name, add["text"] as? String ?? "", x, y, w, h, size: size, color: color, weight: weight, align: align)
+                b.text(name, "\(add["text"] ?? add["content"] ?? "")", x, y, w, h, size: size, color: color, weight: weight, align: align)
+                if let fillHex = add["fill"] as? String { b.objects[b.objects.count - 1].fill.type = .color; b.objects[b.objects.count - 1].fill.color = fillHex }
+            }
+            if b.objects.count > before {
+                var o = b.objects[b.objects.count - 1]
+                if var op = num(add["opacity"]) { if op > 1 { op /= 100 }; o.opacity = min(1, max(0, op)) }
+                if let fo = num(add["fillOpacity"]) { o.opacity = min(1, max(0, fo > 1 ? fo / 100 : fo)) }
+                b.objects[b.objects.count - 1] = o
             }
             if b.objects.count > before, let family = (add["font"] as? String)?.trimmingCharacters(in: .whitespaces), !family.isEmpty {
                 let resolved = AgentFonts.resolve(family)
