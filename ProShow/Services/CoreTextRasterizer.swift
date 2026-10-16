@@ -96,22 +96,6 @@ enum CoreTextRasterizer {
             return textRect.origin
         }
         let layoutHeight = measuredLayoutHeight(for: attributed, width: textRect.width)
-        let inkHeight = TextAttributeConverter.measureVerticalInkExtent(for: attributed)
-        let multiline = attributed.string.contains("\n") || layoutHeight > inkHeight * 1.4
-        if !multiline {
-            let line = CTLineCreateWithAttributedString(attributed as CFAttributedString)
-            let glyphBounds = CTLineGetBoundsWithOptions(line, [.useGlyphPathBounds, .useOpticalBounds])
-            let y: CGFloat
-            switch verticalAlign {
-            case .top:
-                y = textRect.minY - glyphBounds.minY
-            case .middle:
-                y = textRect.midY - glyphBounds.height / 2 - glyphBounds.minY
-            case .bottom, .baseline:
-                y = textRect.maxY - glyphBounds.height - glyphBounds.minY
-            }
-            return CGPoint(x: textRect.minX, y: y)
-        }
         let alignHeight = layoutHeight
         let frame = verticallyAlignedFrame(
             contentHeight: alignHeight,
@@ -188,28 +172,20 @@ enum CoreTextRasterizer {
         guard attributed.length > 0, bounds.width > 0, bounds.height > 0 else { return }
 
         let layoutHeight = measuredLayoutHeight(for: attributed, width: bounds.width)
-        let inkHeight = TextAttributeConverter.measureVerticalInkExtent(for: attributed)
-        let multiline = attributed.string.contains("\n") || layoutHeight > inkHeight * 1.4
-
-        if !multiline {
-            if usesProgramEncodeCoordinates(context) {
-                drawSingleLineInProgramSpace(attributed, in: bounds, verticalAlign: verticalAlign, context: context)
-            } else {
-                drawSingleLineInCanvasSpace(attributed, in: bounds, verticalAlign: verticalAlign, context: context)
-            }
-            return
-        }
-
+        // Single lines used to take a glyph/optical-bounds path whose `middle` math ignored
+        // `minY` (optical bounds = line box incl. descent), so middle sat near bottom and never
+        // matched the NSTextView edit overlay. Lay out every block like the editor: line box via
+        // CTFramesetter, aligned by measured layout height.
         context.saveGState()
 
         let framesetter = CTFramesetterCreateWithAttributedString(attributed as CFAttributedString)
-        let alignHeight = multiline ? layoutHeight : inkHeight
+        let alignHeight = layoutHeight
         var frameRect = verticallyAlignedFrame(
             contentHeight: alignHeight,
             within: bounds,
             align: verticalAlign
         )
-        frameRect.size.height = min(bounds.height, max(layoutHeight, alignHeight))
+        frameRect.size.height = max(layoutHeight, alignHeight)
 
         let path = CGPath(rect: CGRect(origin: .zero, size: frameRect.size), transform: nil)
         let frame = CTFramesetterCreateFrame(
@@ -391,7 +367,8 @@ enum CoreTextRasterizer {
         align: TextVerticalAlign
     ) -> CGRect {
         var frame = bounds
-        frame.size.height = min(contentHeight, bounds.height)
+        // Allow overflow so an oversize line is still laid out (CTFrame drops lines that don't fit).
+        frame.size.height = contentHeight
         switch align {
         case .top:
             frame.origin.y = bounds.minY
