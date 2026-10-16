@@ -37,8 +37,9 @@ struct GoLiveSetupSheet: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(ShowDrawerPalette.background(scheme))
         }
-        .frame(width: Self.modalWidth, height: Self.modalHeight)
-        .frame(maxWidth: Self.modalMaxWidth, maxHeight: Self.modalMaxHeight)
+        // Fill the sheet (not a fixed 620 pt box centred in it) so the sidebar reaches the bottom edge.
+        .frame(minWidth: Self.modalWidth, idealWidth: Self.modalWidth, maxWidth: Self.modalMaxWidth,
+               minHeight: Self.modalHeight, idealHeight: Self.modalHeight, maxHeight: Self.modalMaxHeight)
         .background(ShowDrawerPalette.background(scheme))
         .clipShape(RoundedRectangle(cornerRadius: DeskRadius.sheet, style: .continuous))
         .modifier(ShowSidebarSystemScheme())

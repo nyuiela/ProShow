@@ -43,8 +43,9 @@ struct RundownBlockEditorSheet: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(StartHome.page)
         }
-        .frame(width: Self.modalWidth, height: Self.modalHeight)
-        .frame(maxWidth: Self.modalMaxWidth, maxHeight: Self.modalMaxHeight)
+        // Fill the sheet (not a fixed 620 pt box centred in it) so the sidebar reaches the bottom edge.
+        .frame(minWidth: Self.modalWidth, idealWidth: Self.modalWidth, maxWidth: Self.modalMaxWidth,
+               minHeight: Self.modalHeight, idealHeight: Self.modalHeight, maxHeight: Self.modalMaxHeight)
         .background(StartHome.page)
         .clipShape(RoundedRectangle(cornerRadius: DeskRadius.sheet, style: .continuous))
         .preferredColorScheme(.dark)
@@ -60,7 +61,8 @@ struct RundownBlockEditorSheet: View {
                     maxWidth: AddShotModalView.modalMaxWidth,
                     maxHeight: AddShotModalView.modalMaxHeight
                 )
-                .frame(width: AddShotModalView.modalWidth, height: AddShotModalView.modalHeight)
+                .frame(minWidth: AddShotModalView.modalWidth, idealWidth: AddShotModalView.modalWidth, maxWidth: AddShotModalView.modalMaxWidth,
+               minHeight: AddShotModalView.modalHeight, idealHeight: AddShotModalView.modalHeight, maxHeight: AddShotModalView.modalMaxHeight)
         }
     }
 
@@ -109,12 +111,16 @@ struct RundownBlockEditorSheet: View {
                 }
             }
             .focusEffectDisabled()
+            .frame(maxHeight: .infinity, alignment: .top)
+
+            Spacer(minLength: 0)
 
             navButton("Cancel", systemImage: "xmark") { dismiss() }
                 .padding(.bottom, 20)
                 .keyboardShortcut(.cancelAction)
         }
         .frame(width: 200, alignment: .leading)
+        .frame(maxHeight: .infinity, alignment: .top)
         .background(StartHome.sidebar)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Outline sections")

@@ -87,11 +87,8 @@ struct RundownWorkspaceView: View {
                 draft: $blockEditorDraft,
                 onSave: { saveBlockEditor($0) }
             )
-            .frame(
-                maxWidth: RundownBlockEditorSheet.modalMaxWidth,
-                maxHeight: RundownBlockEditorSheet.modalMaxHeight
-            )
-            .frame(width: RundownBlockEditorSheet.modalWidth, height: RundownBlockEditorSheet.modalHeight)
+            .frame(minWidth: RundownBlockEditorSheet.modalWidth, idealWidth: RundownBlockEditorSheet.modalWidth, maxWidth: RundownBlockEditorSheet.modalMaxWidth,
+                   minHeight: RundownBlockEditorSheet.modalHeight, idealHeight: RundownBlockEditorSheet.modalHeight, maxHeight: RundownBlockEditorSheet.modalMaxHeight)
         }
         .sheet(isPresented: $showTalentEditor) {
             RundownTalentEditorSheet(

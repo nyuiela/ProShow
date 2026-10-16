@@ -97,8 +97,9 @@ struct AddShotModalView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(ShowDrawerPalette.background(scheme))
         }
-        .frame(width: Self.modalWidth, height: Self.modalHeight)
-        .frame(maxWidth: Self.modalMaxWidth, maxHeight: Self.modalMaxHeight)
+        // Fill the sheet (not a fixed 620 pt box centred in it) so the sidebar reaches the bottom edge.
+        .frame(minWidth: Self.modalWidth, idealWidth: Self.modalWidth, maxWidth: Self.modalMaxWidth,
+               minHeight: Self.modalHeight, idealHeight: Self.modalHeight, maxHeight: Self.modalMaxHeight)
         .background(ShowDrawerPalette.background(scheme))
         .clipShape(RoundedRectangle(cornerRadius: DeskRadius.sheet, style: .continuous))
         .modifier(ShowSidebarSystemScheme())
@@ -164,6 +165,8 @@ struct AddShotModalView: View {
             .frame(maxHeight: .infinity, alignment: .top)
             .focusEffectDisabled()
 
+            Spacer(minLength: 0)
+
             navButton("Cancel", systemImage: "xmark") {
                 controller.closeAddShot()
             }
@@ -171,6 +174,7 @@ struct AddShotModalView: View {
             .keyboardShortcut(.cancelAction)
         }
         .frame(width: 220, alignment: .leading)
+        .frame(maxHeight: .infinity, alignment: .top)
         .background(ShowSidebarPalette.background(scheme))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Source categories")
