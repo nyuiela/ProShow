@@ -83,10 +83,36 @@ enum BroadcastTemplatePack {
             objects.append(o)
         }
 
-        /// Transparent float: no plate behind the video, just an optional thin chrome border.
+        /// Placeholder letter for a video slot, matching the default placeholder catalog
+        /// (A Host Cam, B Screen Share, C.. Guest 1..). Assign a source to the letter once and every
+        /// slide using it fills in place.
+        static func placeholderLetter(forSlotNamed name: String) -> PlaceholderLetter {
+            let lower = name.lowercased()
+            if lower.hasPrefix("guest") {
+                let digits = lower.filter(\.isNumber)
+                let n = max(1, Int(digits) ?? 1)
+                let all = PlaceholderLetter.allCases
+                return all[min(all.count - 1, 1 + n)]
+            }
+            if lower.contains("slide") || lower.contains("screen") || lower.contains("deck") { return .B }
+            return .A
+        }
+
+        /// Transparent float: a lettered placeholder slot (no plate behind the video), with an
+        /// optional thin chrome border. Unassigned slots render empty, never as a stray camera.
         mutating func float(_ name: String, _ x: Double, _ y: Double, _ w: Double, _ h: Double,
                             border: String? = nil, width bw: Double = 6) {
             var o = CanvasObject(name: name, kind: .videoInput, bounds: bounds(x, y, w, h), zIndex: objects.count)
+            let letter = Self.placeholderLetter(forSlotNamed: name)
+            o.token = letter.rawValue
+            o.assignedSource = AssignedMediaSource(
+                sourceID: "placeholder-\(letter.rawValue)",
+                name: "Placeholder \(letter.rawValue)",
+                sourceType: .placeholderSlot,
+                category: .placeholders,
+                connectionString: letter.rawValue,
+                placeholderLetter: letter.rawValue
+            )
             o.fill.type = .none
             if let border {
                 o.stroke.style = .solid
@@ -99,7 +125,7 @@ enum BroadcastTemplatePack {
 
         // 1) Rollup: LIVE FROM strip, logo + NEXT lower third, PARTNERS ticker.
         mutating func rollup() {
-            float("Program Cam", 0, 0, 3840, 2160)
+            float("Camera", 0, 0, 3840, 2160)
             rect("Live From Strip", 120, 110, 900, 110, fill: "#121214")
             rect("Live Dot", 150, 145, 40, 40, fill: "#C6FF3D", radius: 20)
             text("Live From", "LIVE FROM TOKEN2049", 215, 110, 800, 110, size: 52)
@@ -118,7 +144,7 @@ enum BroadcastTemplatePack {
 
         // 2) Bloomberg: LIVE + location, caption pill, yellow nameplate, headline banner.
         mutating func bloomberg() {
-            float("Program Cam", 0, 0, 3840, 2160)
+            float("Camera", 0, 0, 3840, 2160)
             rect("Live Tag", 120, 120, 220, 100, fill: "#E5322D")
             text("Live", "LIVE", 120, 120, 220, 100, size: 56, align: .center)
             text("Location", "SINGAPORE", 370, 120, 900, 100, size: 56)

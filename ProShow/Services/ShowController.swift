@@ -3250,8 +3250,14 @@ final class ShowController {
         }
         rehydrateFromEditor(persist: true)
         syncPropsFromEditor()
+        // Placeholder mappings live in the studio manifest; save them or they are gone on reload.
+        persistStudio()
+        // Fill the pane in place. Do NOT take the source live on master layer 0 here: that added a
+        // separate camera shot that stayed on program (behind transparent slides) even when the edited
+        // slide was not on air. If the edited slide is live, rehydrate -> applyLiveSceneDelta ->
+        // syncSlideLiveInputLayer brings the feed up slide-bound, so it clears on slides without panes.
         if item.sourceType.needsMainLayerShot {
-            _ = ensureLiveInputOnMainLayer(item)
+            warmLiveCaptureForPreview(item)
         }
     }
 
@@ -3356,6 +3362,52 @@ final class ShowController {
         return shot
     }
 
+    /// Local QA hook for placeholder / live-input checks (no UI clicks).
+    func handleQARequest(_ args: [String: String]) -> [String: Any] {
+        func slide() -> Slide? {
+            guard let group = show.groups.first(where: { $0.name == args["group"] }) else { return nil }
+            let index = Int(args["slide"] ?? "0") ?? 0
+            return group.slides.indices.contains(index) ? group.slides[index] : nil
+        }
+        switch args["action"] ?? "state" {
+        case "add_pack":
+            addBroadcastTemplatePack()
+            return ["ok": true, "group": show.groups.last?.name ?? ""]
+        case "remove_group":
+            return ["ok": true, "removed": removeGroups(named: args["group"] ?? "")]
+        case "golive":
+            guard let slide = slide() else { return ["ok": false, "error": "no_slide"] }
+            goLive(slideID: slide.id)
+        case "assign_camera":
+            guard let slide = slide() else { return ["ok": false, "error": "no_slide"] }
+            editSlide(id: slide.id)
+            guard let object = editors.selectedDocument?.objects.first(where: { $0.name == args["object"] }) else {
+                return ["ok": false, "error": "no_object"]
+            }
+            editors.selectedObjectIDs = [object.id]
+            guard let camera = preferredProgramCameraSource() else { return ["ok": false, "error": "no_camera"] }
+            assignSourceToSelectedEditorObjects(discoveredLiveInput(from: camera))
+        default:
+            break
+        }
+        let objects: [[String: Any]] = (slide().map { resolvedCanvasObjects($0.canvas) } ?? [])
+            .filter { $0.kind == .videoInput || $0.assignedSource != nil }
+            .map { ["name": $0.name, "kind": $0.kind.rawValue, "letter": $0.assignedPlaceholderLetter ?? "",
+                    "source": $0.assignedSource?.name ?? "", "type": $0.assignedSource?.sourceType.rawValue ?? ""] }
+        return [
+            "ok": true,
+            "layers": masterLayers.map { layer in
+                ["index": layer.index, "shots": layer.shots.map(\.name),
+                 "live": layer.shots.first(where: { $0.id == layer.liveShotID })?.name ?? ""] as [String: Any]
+            },
+            "videoInputOnProgram": compositor.stack.videoInput != nil && !compositor.stack.isCleared(.videoInput),
+            "autoBoundBySlide": liveInputAutoBoundBySlide,
+            "liveSlide": liveSlide?.title ?? "",
+            "slideObjects": objects,
+            "slideCount": show.allSlides.count,
+        ]
+    }
+
     @discardableResult
     func ensureLiveInputOnMainLayer(_ item: DiscoveredSourceItem) -> LayerShot? {
         guard item.sourceType.needsMainLayerShot, masterLayers.indices.contains(0) else { return nil }
@@ -3369,7 +3421,7 @@ final class ShowController {
     func syncSlideLiveInputLayer(_ slide: Slide) {
         guard !compositor.isLayerLocked(.videoInput) else { return }
         let hasPane = !liveInputItems(on: slide).isEmpty
-            || resolvedCanvasObjects(slide.canvas).contains { $0.kind == .videoInput }
+            || resolvedCanvasObjects(slide.canvas).contains { $0.isLegacyUnassignedVideoPane }
         if hasPane {
             guard !operatorClearedLiveInput else { return }
             ensureSlideLiveInputsOnMainLayer(slide)
@@ -3384,7 +3436,7 @@ final class ShowController {
     func ensureSlideLiveInputsOnMainLayer(_ slide: Slide) {
         var items = liveInputItems(on: slide)
         if items.isEmpty,
-           resolvedCanvasObjects(slide.canvas).contains(where: { $0.kind == .videoInput }),
+           resolvedCanvasObjects(slide.canvas).contains(where: \.isLegacyUnassignedVideoPane),
            let source = preferredProgramCameraSource() {
             items = [discoveredLiveInput(from: source)]
         }
@@ -3397,7 +3449,7 @@ final class ShowController {
     func prepareSlidePreviewCapture(for slide: Slide) {
         var items = liveInputItems(on: slide)
         if items.isEmpty,
-           resolvedCanvasObjects(slide.canvas).contains(where: { $0.kind == .videoInput }),
+           resolvedCanvasObjects(slide.canvas).contains(where: \.isLegacyUnassignedVideoPane),
            let source = preferredProgramCameraSource() {
             items = [discoveredLiveInput(from: source)]
         }
@@ -3416,7 +3468,7 @@ final class ShowController {
                 return input
             }
         }
-        if resolvedCanvasObjects(slide.canvas).contains(where: { $0.kind == .videoInput }),
+        if resolvedCanvasObjects(slide.canvas).contains(where: \.isLegacyUnassignedVideoPane),
            let source = preferredProgramCameraSource() {
             return VideoInputSource(
                 id: source.id,
@@ -7683,6 +7735,9 @@ final class ShowController {
             default: openAddShot()
             }
             return (200, #"{"ok":true}"#)
+        }
+        if method == "POST", parts == ["v1", "ui", "qa"] {
+            return (200, ControlJSON.encode(handleQARequest(ControlHTTP.jsonObject(body))))
         }
         if method == "POST", parts == ["v1", "ui", "snapshot"] {
             // Renders this app's own windows (sheets included) to PNGs; no screen-recording permission needed.

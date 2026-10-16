@@ -68,6 +68,7 @@ final class ProgramOutputComposer: @unchecked Sendable {
     static let previewEndpoint = "program.encode"
 
     static func needsLiveVideoPixel(for object: CanvasObject) -> Bool {
+        if object.isUnfilledPlaceholder { return false }
         switch object.assignedSource?.sourceType {
         case .systemCamera, .systemDisplay, .systemWindow, .ndiSource, .rendezvousGuest, .srtStream:
             return true
@@ -1416,6 +1417,7 @@ final class ProgramOutputComposer: @unchecked Sendable {
     #endif
 
     private func shouldBlitLiveVideo(_ object: CanvasObject) -> Bool {
+        if object.isUnfilledPlaceholder { return false }
         switch object.assignedSource?.sourceType {
         case .systemCamera, .systemDisplay, .systemWindow, .ndiSource:
             return true

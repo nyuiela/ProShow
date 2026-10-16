@@ -789,6 +789,22 @@ struct CanvasObject: Identifiable, Hashable, Codable, Sendable {
 
     var isAudioMuted: Bool { audioMuted == true }
 
+    /// A lettered placeholder (A–I) that has no real source yet. It renders as an empty slot,
+    /// never as whatever camera happens to be on the live-input layer.
+    var isUnfilledPlaceholder: Bool {
+        guard assignedPlaceholderLetter != nil else { return false }
+        switch assignedSource?.sourceType {
+        case nil, .placeholderSlot?: return true
+        default: return false
+        }
+    }
+
+    /// A video pane from before placeholders: no letter, no source. Slides with one still
+    /// fall back to the preferred program camera.
+    var isLegacyUnassignedVideoPane: Bool {
+        kind == .videoInput && assignedSource == nil && assignedPlaceholderLetter == nil
+    }
+
     /// Live capture assigned to a shape (program outline camera rows, etc.).
     var rendersLiveVideoInputOnCanvas: Bool {
         switch assignedSource?.sourceType {
