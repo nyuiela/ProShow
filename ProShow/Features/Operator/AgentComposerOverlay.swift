@@ -359,17 +359,24 @@ private struct AgentComposerRoot: View {
                         .buttonStyle(.plain)
                         .font(.system(size: 12))
                         .foregroundStyle(.white.opacity(0.55))
-                    Button("Apply") {
+                    Button(session.needsOpenShow ? "Open a show to apply" : "Apply") {
                         if let placement = session.applyDraft() {
                             appliedLabel = placement.label
                         }
                     }
                     .buttonStyle(.plain)
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(ComposerInk.accent)
+                    .foregroundStyle(session.needsOpenShow ? Color.orange : ComposerInk.accent)
                 }
                 .padding(.horizontal, 12)
                 .padding(.bottom, 4)
+                if session.needsOpenShow || session.applyBlockedMessage != nil {
+                    Text(AIAgentSession.openShowMessage)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.orange)
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 4)
+                }
             }
             if let appliedLabel {
                 VStack(alignment: .leading, spacing: 4) {

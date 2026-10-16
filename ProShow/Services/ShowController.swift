@@ -6293,7 +6293,6 @@ final class ShowController {
     /// Removes every group with this name (agent test cleanup). Returns how many were removed.
     @discardableResult
     func removeGroups(named name: String) -> Int {
-        guard show.id != ProgramOutlinePresentation.showID else { return 0 }
         let before = show.groups.count
         let remaining = show.groups.filter { $0.name != name }
         guard !remaining.isEmpty, remaining.count != before else { return 0 }
@@ -6303,6 +6302,28 @@ final class ShowController {
         persistCurrentShow()
         rebuildSearchIndex()
         return before - remaining.count
+    }
+
+    /// Agent mock-run cleanup: drops "Agent * Test" groups and scripted mock slides ("Stablecoin rails slide N").
+    func removeAgentTestContent() -> Int {
+        var removed = 0
+        var groups = show.groups
+        for i in groups.indices {
+            let isTestGroup = groups[i].name.hasPrefix("Agent ") && groups[i].name.hasSuffix(" Test")
+            let before = groups[i].slides.count
+            groups[i].slides.removeAll { slide in
+                isTestGroup || (slide.lines.first?.hasPrefix("Stablecoin rails slide ") == true && slide.title.hasPrefix("Morapay Live "))
+            }
+            removed += before - groups[i].slides.count
+        }
+        groups.removeAll { $0.slides.isEmpty }
+        guard removed > 0, !groups.isEmpty else { return 0 }
+        show.groups = groups
+        selectedSlideID = groups.first?.slides.first?.id
+        editors.syncPresentation(from: show, selectedSlideID: selectedSlideID)
+        persistCurrentShow()
+        rebuildSearchIndex()
+        return removed
     }
 
     func moveSlideToEnd(_ id: SlideID) {

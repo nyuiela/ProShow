@@ -108,12 +108,23 @@ final class AIAgentSession {
         emit(.cancelled)
     }
 
+    static let openShowMessage = "Open a show first. Your draft is kept; tap Apply after opening a show."
+    /// No real show open: the built-in outline is not saved, so Apply must refuse (matches /v1/ai/apply).
+    var needsOpenShow: Bool { controller.map { $0.show.id == ProgramOutlinePresentation.showID } ?? true }
+    private(set) var applyBlockedMessage: String?
+
     func discardDraft() { draft = nil; draftGroupName = AIComposeAPI.draftGroupName }
 
     /// Operator gate. Only path from agent output into the show.
     @discardableResult
     func applyDraft() -> AgentSlidePlacement? {
         guard let draft, let controller else { return nil }
+        if needsOpenShow {
+            applyBlockedMessage = Self.openShowMessage
+            emit(.error(Self.openShowMessage))
+            return nil // draft stays staged
+        }
+        applyBlockedMessage = nil
         do {
             let placement = try controller.applyComposePatch(draft, groupName: draftGroupName)
             self.draft = nil
@@ -199,6 +210,9 @@ final class AIAgentSession {
     private func runTurn(prompt: String, deskNote: String) async {
         defer { isRunning = false; turnTask = nil }
         emit(.turnStarted(turnID: UUID().uuidString))
+        if needsOpenShow {
+            emit(.confirmRequired(tool: "open_show", reason: "No show is open. Slides can be drafted, but Apply needs an open show."))
+        }
         turnStagedSlides = 0
         turnComposeAttempted = false
         turnLastComposeError = nil
@@ -285,7 +299,7 @@ final class AIAgentSession {
             }
             if let draft, turnStagedSlides > 0 {
                 let list = draft.slides.enumerated().map { "\($0.offset + 1). \($0.element.title.isEmpty ? "Slide" : $0.element.title)" }.joined(separator: "\n")
-                finalText += "\n\nStaged \(draft.slides.count) slide(s) for group \"\(draftGroupName)\":\n\(list)\nTap Apply to create them. Each slide's link is listed after Apply."
+                finalText += "\n\nStaged \(draft.slides.count) slide(s) for group \"\(draftGroupName)\":\n\(list)\nTap Apply to create them. Each slide's link is listed after Apply." + (needsOpenShow ? "\nNo show is open: open a show first, then tap Apply." : "")
             }
             history.append(AgentMessage(role: .assistant, content: finalText))
             if !finalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -479,6 +493,7 @@ final class AIAgentSession {
                 }
                 turnStagedSlides += 1
                 payload["staged"] = true
+                if needsOpenShow { payload["warning"] = "No show open. Tell the operator to open a show before Apply." }
                 payload["draftSlides"] = staged.slides.count
                 payload["group"] = draftGroupName
                 return AgentToolOutcome(result: json(payload), ok: true, summary: "\(id) → \(slide.title) (S\(slide.canvas.count)/P\(phoneCount))", draft: staged)
@@ -576,6 +591,7 @@ final class AIAgentSession {
                 "locationHint": "After Apply: group \(draftGroupName)",
                 "next": "Stage remaining slides (append true), then reply with the slide list. The operator taps Apply.",
             ]
+            if needsOpenShow { payload["warning"] = "No show open. Tell the operator to open a show before Apply." }
             if !notes.isEmpty { payload["notes"] = notes }
             return AgentToolOutcome(
                 result: json(payload),
@@ -724,13 +740,20 @@ extension ShowController {
                     if let phone, Self.renderPNG(ProgramSlideThumbnailPreview(controller: self, slide: slide, objects: resolvedCanvasObjects(phone.objects), canvasWidth: phone.width, canvasHeight: phone.height), size: NSSize(width: 540, height: 960), to: base + "-phone.png") { paths.append(base + "-phone.png") }
                 }
                 return (200, ControlJSON.encode(["ok": true, "paths": paths, "slides": counts]))
+            case "delete_test_content":
+                return (200, ControlJSON.encode(["ok": true, "removedSlides": removeAgentTestContent()]))
             case "delete_group":
                 let name = session.lastPlacement?.groupName ?? ""
                 guard !name.isEmpty, name != BroadcastTemplatePack.groupName else { return (409, #"{"ok":false}"#) }
                 let removed = removeGroups(named: name)
                 return (200, ControlJSON.encode(["ok": true, "removedGroups": removed, "name": name]))
             case "apply_draft":
-                guard let placement = session.applyDraft() else { return (409, #"{"ok":false,"error":"no_draft"}"#) }
+                guard let placement = session.applyDraft() else {
+                    if session.draft != nil, session.needsOpenShow {
+                        return (409, ControlJSON.encode(["ok": false, "error": "program_outline", "message": "Open a show first", "draftKept": true]))
+                    }
+                    return (409, #"{"ok":false,"error":"no_draft"}"#)
+                }
                 return (200, ControlJSON.encode(["ok": true, "group": placement.groupName, "slides": placement.slideIDs.count, "deepLink": placement.deepLink]))
             default: break
             }

@@ -74,7 +74,7 @@ enum ControlHTTP {
         if parts.contains("soundboard"), parts.last == "play" {
             return method == "POST"
         }
-        if parts == ["v1", "ai", "agent", "send"] || parts == ["v1", "ai", "agent", "apply_draft"] || parts == ["v1", "ai", "agent", "render_last"] || parts == ["v1", "ai", "agent", "delete_group"] {
+        if parts == ["v1", "ai", "agent", "send"] || parts == ["v1", "ai", "agent", "apply_draft"] || parts == ["v1", "ai", "agent", "render_last"] || parts == ["v1", "ai", "agent", "delete_group"] || parts == ["v1", "ai", "agent", "delete_test_content"] {
             return method == "POST"
         }
         if parts == ["v1", "ai", "compose"] || parts == ["v1", "ai", "apply"] {
