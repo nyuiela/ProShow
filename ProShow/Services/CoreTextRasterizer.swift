@@ -412,7 +412,9 @@ enum CoreTextRasterizer {
     ) -> CGFloat {
         guard textRect.width > 1, textRect.height > 1 else { return style.font.pointSize }
         let initial = max(1, object.typography.fontSize * scale)
-        let minSize = max(8, initial * minimumScaleFactor)
+        // Floor must scale with the render (no absolute 8pt): an absolute floor made text in
+        // thumbnails / small monitors (scale ≈ 0.05–0.2) render far larger than its plates.
+        let minSize = max(0.5, initial * minimumScaleFactor)
         var low = minSize
         var high = initial
         var best = minSize
@@ -421,7 +423,8 @@ enum CoreTextRasterizer {
             ? singleLineHeight(for: object, at: initial, scale: scale)
             : textRect.height
 
-        for _ in 0..<10 {
+        let step = max(0.001, initial * 0.002) // relative, so thumbnails fit like full size
+        for _ in 0..<16 {
             let mid = (low + high) / 2
             let size = mid
             let font = CanvasTypeface.nsFont(
@@ -440,9 +443,9 @@ enum CoreTextRasterizer {
             )
             if measured.height <= maxHeight + 0.5, measured.width <= textRect.width + 0.5 {
                 best = mid
-                low = mid + 0.25
+                low = mid + step
             } else {
-                high = mid - 0.25
+                high = mid - step
             }
         }
         return best
