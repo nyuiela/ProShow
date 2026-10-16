@@ -200,6 +200,21 @@ struct ScriptedAgentProvider: AgentChatProvider {
                 if step == 0 { call("get_project_context", "{}") } else { call("compose_patch_apply_preview", "{}") }
                 continuation.finish(); return
             }
+            if script == "templates" {
+                let g = #""groupName":"Agent Template Test""#
+                let steps: [(String, String)] = [
+                    ("get_project_context", "{}"),
+                    ("templates_list", "{}"),
+                    ("template_instantiate", ##"{"templateId":"title_card","title":"Cold Open",\##(g),"slots":{"Headline":"Stablecoin Rails for Africa","Subline":"Morapay Live, Episode 1","Host Name":"Kaleel","Host Role":"Founder, Morapay","Show Name":"MORAPAY LIVE"}}"##),
+                    ("template_instantiate", ##"{"templateId":"next_up","title":"Next Up","slots":{"Item 1":"Why payments are slow","Item 2":"How Morapay settles","Item 3":"Live Q&A"}}"##),
+                    ("template_instantiate", ##"{"templateId":"stat_cards","title":"The Problem","slots":{"Stat Label 1":"Avg fees","Stat Label 2":"Settlement","Stat Label 3":"Unbanked"},"addElements":[{"kind":"text","name":"Source","text":"Sources: TBD","x":0.0625,"y":0.88,"w":0.5,"h":0.04,"size":40,"color":"#9AA3B2"}]}"##),
+                    ("template_instantiate", ##"{"templateId":"process_steps","title":"How It Works","style":{"accent":"#C6FF3D"}}"##),
+                    ("template_instantiate", ##"{"templateId":"bloomberg","title":"Guest Intro","slots":{"Name":"Kaleel","Role":"Founder, Morapay","Location":"ACCRA","Headline":"STABLECOIN RAILS GO MAINSTREAM IN AFRICA"}}"##),
+                ]
+                let step = messages[(messages.lastIndex { $0.role == .user } ?? 0)...].filter { $0.role == .tool }.count
+                if step < steps.count, !tools.isEmpty { call(steps[step].0, steps[step].1) } else { continuation.yield(.delta("Staged 5 template slides.")) }
+                continuation.finish(); return
+            }
             let lastPatchId: String? = toolResults.last.flatMap { msg in
                 (try? JSONSerialization.jsonObject(with: Data((msg.content ?? "").utf8)) as? [String: Any])?["patchId"] as? String
             }

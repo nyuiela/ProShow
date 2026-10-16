@@ -304,6 +304,8 @@ enum ComposeCodec {
 enum ComposeDesignValidator {
     static let allowedBackgrounds: Set<String> = [
         "#121214", "#1B1B1F", "#161618", "#25252A", "#000000", "#6B9FE0",
+        // Broadcast pack + news accents (Rollup lime, Bloomberg yellow/red, Milk Road yellow, paper white).
+        "#C6FF3D", "#F5C518", "#FFD60A", "#E5322D", "#FFFFFF", "#1A1C22", "#0B0B0D", "#F4F1EA", "#0E2A47", "#9AA3B2",
     ]
 
     static func validate(_ patch: ComposePatch) throws {

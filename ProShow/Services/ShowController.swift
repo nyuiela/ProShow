@@ -6290,6 +6290,21 @@ final class ShowController {
         persistCurrentShow()
     }
 
+    /// Removes every group with this name (agent test cleanup). Returns how many were removed.
+    @discardableResult
+    func removeGroups(named name: String) -> Int {
+        guard show.id != ProgramOutlinePresentation.showID else { return 0 }
+        let before = show.groups.count
+        let remaining = show.groups.filter { $0.name != name }
+        guard !remaining.isEmpty, remaining.count != before else { return 0 }
+        show.groups = remaining
+        selectedSlideID = remaining.first?.slides.first?.id
+        editors.syncPresentation(from: show, selectedSlideID: selectedSlideID)
+        persistCurrentShow()
+        rebuildSearchIndex()
+        return before - remaining.count
+    }
+
     func moveSlideToEnd(_ id: SlideID) {
         guard show.id != ProgramOutlinePresentation.showID else { return }
         guard let from = slideLocation(id), let lastGroup = show.groups.indices.last else { return }

@@ -1,3 +1,5 @@
+import SwiftUI
+import AppKit
 import Foundation
 import Observation
 
@@ -37,6 +39,7 @@ final class AIAgentSession {
     private var turnComposeAttempted = false
     private var turnLastComposeError: String?
     private var turnComposeFailures = 0
+    private var turnPrompt = ""
     private(set) var keyConnected = XAIKeyStore.isConnected
     private(set) var packVersion = ""
     /// Persisted display history for Ask overlay / Settings (survives relaunch).
@@ -194,6 +197,7 @@ final class AIAgentSession {
         turnComposeAttempted = false
         turnLastComposeError = nil
         turnComposeFailures = 0
+        turnPrompt = prompt
 
         let pack = currentPack()
         packVersion = pack.version
@@ -359,6 +363,9 @@ final class AIAgentSession {
             "groups": show.groups.map { ["name": $0.name, "slides": $0.slides.count] },
             "slideCount": slides.count,
             "recipes": ComposeRecipe.all.map(\.id),
+            "templates": AgentTemplateCatalog.compactSummary,
+            "templateTools": "templates_list, template_instantiate (dual Stream+Phone, slots, style, edits, addElements)",
+            "designBar": "Rich multi-element slides: header strip, headline hierarchy, plates, stat cards, accent rules, footer ticker. No single-text slides unless asked for minimal.",
             "roles": ["operator": "applies drafts, takes, holds, arms destinations", "agent": "drafts to preview only"],
             "patchSchema": "ComposePatch v1. Slide fields: title, lines, notes, label, backgroundHex, elements[{text, alignment, x, y}] with x,y fractions 0 to 1.",
         ]
@@ -402,6 +409,20 @@ final class AIAgentSession {
             return AgentToolOutcome(result: json(["assets": items]), ok: true, summary: "\(items.count) assets")
         case "list_templates":
             return AgentToolOutcome(result: json(["note": "Inspiration only", "recipes": ComposeRecipe.all.map { ["id": $0.id, "name": $0.name] }, "packs": ["Rollup", "Bloomberg nameplate", "Guest mosaic 2/3/5", "Cam + Slide", "Milk Road"]]), ok: true, summary: "Templates listed")
+        case "templates_list":
+            if let id = args["id"] as? String, let t = AgentTemplateCatalog.template(id) {
+                return AgentToolOutcome(result: json(["id": t.id, "name": t.name, "description": t.description, "regions": t.regions, "bestFor": t.bestFor, "slots": AgentTemplateCatalog.slots(t.id), "canvases": ["stream", "phone"]]), ok: true, summary: "Template \(t.id)")
+            }
+            let list = AgentTemplateCatalog.all.map { t -> [String: Any] in
+                ["id": t.id, "name": t.name, "description": t.description, "regions": t.regions, "bestFor": t.bestFor,
+                 "slots": AgentTemplateCatalog.slots(t.id).map { $0["slot"] ?? "" }, "canvases": ["stream", "phone"]]
+            }
+            return AgentToolOutcome(result: json(["templates": list, "note": "Starting points. Restyle, edit, remove and add elements freely."]), ok: true, summary: "\(list.count) templates")
+        case "template_instantiate":
+            turnComposeAttempted = true
+            let outcome = instantiateTool(args)
+            if outcome.ok { turnComposeFailures = 0 } else { turnComposeFailures += 1; turnLastComposeError = outcome.summary }
+            return outcome
         case "compose_patch_validate", "compose_patch_apply_preview":
             turnComposeAttempted = true
             let outcome = composeTool(call, args: args)
@@ -415,6 +436,61 @@ final class AIAgentSession {
         default:
             return AgentToolOutcome(result: json(["ok": false, "error": "not_implemented"]), ok: false, summary: "Not implemented")
         }
+    }
+
+    private func instantiateTool(_ args: [String: Any]) -> AgentToolOutcome {
+        let id = (args["templateId"] as? String ?? "").trimmingCharacters(in: .whitespaces)
+        do {
+            let (slide, notes) = try AgentTemplateCatalog.instantiate(id, args: args)
+            let streamOnly = (args["streamOnly"] as? Bool) == true
+            let patch = ComposePatch(
+                schemaVersion: ComposePatch.currentSchemaVersion,
+                recipeId: "freeform",
+                summary: "\(id): \(slide.title)",
+                slides: [slide],
+                rundownBlocks: nil,
+                designMeta: ComposeDesignMeta(canvases: streamOnly ? ["stream"] : ["stream", "phone"], streamOnly: streamOnly ? true : nil)
+            )
+            try ComposeDesignValidator.validate(patch)
+            let patchId = "t" + String(UUID().uuidString.prefix(8)).lowercased()
+            lastValidated = (patchId, patch)
+            let phoneCount = slide.editorCanvases.first(where: \.isPhoneArtboard)?.objects.count ?? 0
+            var payload: [String: Any] = ["ok": true, "patchId": patchId, "title": slide.title,
+                                          "streamElements": slide.canvas.count, "phoneElements": phoneCount,
+                                          "elementNames": slide.canvas.map(\.name)]
+            if !notes.isEmpty { payload["notes"] = notes }
+            if (args["stage"] as? Bool) ?? true {
+                if let name = (args["groupName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+                    draftGroupName = String(name.prefix(80))
+                }
+                var staged = patch
+                if turnStagedSlides > 0, let existing = draft {
+                    staged = existing
+                    staged.slides += patch.slides
+                    staged.summary = String((existing.summary + "; " + patch.summary).prefix(600))
+                    if streamOnly == false, existing.designMeta.streamOnly == true { staged.designMeta = patch.designMeta }
+                }
+                turnStagedSlides += 1
+                payload["staged"] = true
+                payload["draftSlides"] = staged.slides.count
+                payload["group"] = draftGroupName
+                return AgentToolOutcome(result: json(payload), ok: true, summary: "\(id) → \(slide.title) (S\(slide.canvas.count)/P\(phoneCount))", draft: staged)
+            }
+            payload["next"] = "compose_patch_apply_preview {\"patchId\":\"\(patchId)\"}"
+            return AgentToolOutcome(result: json(payload), ok: true, summary: "Built \(id)")
+        } catch AgentTemplateCatalog.InstantiateError.unknownTemplate(let bad) {
+            return AgentToolOutcome(result: json(["ok": false, "error": "unknown_template", "message": bad, "templates": AgentTemplateCatalog.all.map(\.id)]), ok: false, summary: "unknown_template")
+        } catch {
+            let e = error as? ComposeError ?? .invalidJSON(String(describing: error))
+            return AgentToolOutcome(result: json(["ok": false, "error": e.code, "message": e.detail, "retry": "Fix and call template_instantiate again."]), ok: false, summary: e.code)
+        }
+    }
+
+    /// Build requests get rich slides; a lone text element is pushed back unless the operator asked for minimal.
+    private func plainSlideTitles(_ patch: ComposePatch) -> [String] {
+        let lower = turnPrompt.lowercased()
+        if ["minimal", "simple slide", "plain", "text only", "single line", "just text"].contains(where: { lower.contains($0) }) { return [] }
+        return patch.slides.filter { $0.canvas.count + $0.elements.count + ($0.lines.isEmpty ? 0 : 1) <= 2 && $0.canvas.count < 3 }.map(\.title)
     }
 
     private func composeTool(_ call: AgentToolCall, args: [String: Any]) -> AgentToolOutcome {
@@ -456,6 +532,10 @@ final class AIAgentSession {
                 return fail(ComposeError.missingPatch.code, hint)
             }
             try ComposeDesignValidator.validate(patch)
+            let plain = plainSlideTitles(patch)
+            if !plain.isEmpty {
+                return fail("too_plain", "Slides \(plain.joined(separator: ", ")) are a single text element. Use template_instantiate (templates_list) or add header, plates, cards, rules and a footer.")
+            }
             if !isStage {
                 let id = "p" + String(UUID().uuidString.prefix(8)).lowercased()
                 lastValidated = (id, patch)
@@ -595,6 +675,22 @@ final class AIAgentSession {
 
 
 extension ShowController {
+    @MainActor
+    static func renderPNG<V: View>(_ view: V, size: NSSize, to path: String) -> Bool {
+        let host = NSHostingView(rootView: view.frame(width: size.width, height: size.height).background(Color.black))
+        host.frame = NSRect(origin: .zero, size: size)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentView = host
+        host.layoutSubtreeIfNeeded()
+        host.displayIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.4))
+        host.layoutSubtreeIfNeeded()
+        guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return false }
+        host.cacheDisplay(in: host.bounds, to: rep)
+        guard let data = rep.representation(using: .png, properties: [:]) else { return false }
+        return (try? data.write(to: URL(fileURLWithPath: path))) != nil
+    }
+
     /// Read-only agent routes: /v1/ai/agent/{status,context,tools,events}. No key material is ever returned.
     func handleAIAgent(method: String, parts: [String]) -> (Int, String)? {
         guard parts.count == 4, parts[0] == "v1", parts[1] == "ai", parts[2] == "agent" else { return nil }
@@ -607,6 +703,25 @@ extension ShowController {
             case "send":
                 session.send("Build a complete 10-slide show (mock run).")
                 return (202, #"{"ok":true}"#)
+            case "render_last":
+                // Writes Stream + Phone PNGs of the last applied slides to /tmp for visual checks.
+                guard let placement = session.lastPlacement else { return (409, #"{"ok":false,"error":"no_placement"}"#) }
+                var paths: [String] = []
+                var counts: [[String: Any]] = []
+                for (index, id) in placement.slideIDs.enumerated() {
+                    guard let slide = show.allSlides.first(where: { $0.id == id }) else { continue }
+                    let phone = phoneCanvasBoard(on: slide)
+                    counts.append(["title": slide.title, "stream": slide.canvas.count, "phone": phone?.objects.count ?? 0])
+                    let base = "/tmp/proshow-agent-\(index + 1)"
+                    if Self.renderPNG(ProgramSlideThumbnailPreview(controller: self, slide: slide, objects: resolvedCanvasObjects(slide.canvas)), size: NSSize(width: 1280, height: 720), to: base + "-stream.png") { paths.append(base + "-stream.png") }
+                    if let phone, Self.renderPNG(ProgramSlideThumbnailPreview(controller: self, slide: slide, objects: resolvedCanvasObjects(phone.objects), canvasWidth: phone.width, canvasHeight: phone.height), size: NSSize(width: 540, height: 960), to: base + "-phone.png") { paths.append(base + "-phone.png") }
+                }
+                return (200, ControlJSON.encode(["ok": true, "paths": paths, "slides": counts]))
+            case "delete_group":
+                let name = session.lastPlacement?.groupName ?? ""
+                guard !name.isEmpty, name != BroadcastTemplatePack.groupName else { return (409, #"{"ok":false}"#) }
+                let removed = removeGroups(named: name)
+                return (200, ControlJSON.encode(["ok": true, "removedGroups": removed, "name": name]))
             case "apply_draft":
                 guard let placement = session.applyDraft() else { return (409, #"{"ok":false,"error":"no_draft"}"#) }
                 return (200, ControlJSON.encode(["ok": true, "group": placement.groupName, "slides": placement.slideIDs.count, "deepLink": placement.deepLink]))

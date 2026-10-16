@@ -204,3 +204,419 @@ extension ShowController {
         rebuildSearchIndex()
     }
 }
+
+// MARK: - Agent templates (catalog + instantiate, Stream 16:9 and Phone 9:16)
+
+/// Starting points for the design agent. Every template is editable canvas objects;
+/// the agent fills slots, restyles, removes or adds elements, then stages through validate/apply_preview.
+enum AgentTemplateCatalog {
+    struct Template {
+        var id: String
+        var name: String
+        var description: String
+        var regions: [String]
+        var bestFor: String
+    }
+
+    static let all: [Template] = [
+        .init(id: "title_card", name: "Title Card / Cold Open", description: "Header strip (show name + LIVE tag), accent rule, big headline, subline, host nameplate, footer ticker.", regions: ["header 0-7%", "headline 40-60%", "nameplate 75-85%", "ticker 93-100%"], bestFor: "cold open, episode title, section opener"),
+        .init(id: "next_up", name: "Next Up / Agenda", description: "Header + footer, NEXT UP label, headline, 3 numbered agenda rows with accent markers and plates.", regions: ["header", "label+headline 12-26%", "rows 32-86%", "ticker"], bestFor: "agenda, run of show, next-up bar"),
+        .init(id: "stat_cards", name: "Stat Cards", description: "Header + footer, headline, 3 stat cards (accent top rule, big value, label, note).", regions: ["header", "headline 12-21%", "cards 29-84%", "ticker"], bestFor: "problem/market numbers, KPIs, comparisons"),
+        .init(id: "process_steps", name: "Process Steps", description: "Header + footer, headline, 4 bordered step cards joined by accent arrows.", regions: ["header", "headline", "steps 42-74%", "ticker"], bestFor: "product flow, how it works, timeline"),
+        .init(id: "rollup", name: "Rollup Lower Third", description: "Full-frame camera, LIVE FROM strip, logo block + NEXT label + headline + white subtitle bar, PARTNERS ticker.", regions: ["cam full", "live-from strip top-left", "lower third 72-89%", "ticker 93-100%"], bestFor: "live interview, conference broadcast"),
+        .init(id: "bloomberg", name: "Bloomberg Nameplate", description: "Full-frame camera, red LIVE tag + location, caption pill, bordered nameplate (name + role), full-width yellow headline banner.", regions: ["cam full", "live tag top-left", "nameplate 69-80%", "banner 82-92%"], bestFor: "news desk, guest intro, breaking headline"),
+        .init(id: "guest_mosaic_2", name: "Guests 2-Up", description: "Patterned background, top logos, 2 bordered camera panes with handle plates.", regions: ["logos top", "2 panes"], bestFor: "interview, debate"),
+        .init(id: "guest_mosaic_3", name: "Guests 3-Up", description: "Patterned background, top logos, 3 camera panes with handles.", regions: ["logos top", "3 panes"], bestFor: "panel"),
+        .init(id: "guest_mosaic_5", name: "Guests 5-Up", description: "Patterned background, top logos, 2 large + 3 small camera panes with handles.", regions: ["logos top", "2+3 panes"], bestFor: "big panel, spaces-style"),
+        .init(id: "cam_slide", name: "Cam + Slide", description: "1/3 camera + 2/3 slide/screen split with speaker nameplate.", regions: ["cam left 33%", "slide right 67%", "nameplate bottom-left"], bestFor: "talk with deck, demo"),
+        .init(id: "milk_road", name: "Milk Road 3 Column", description: "Three full-height guest columns with yellow name bar and white title bar each.", regions: ["3 columns", "name bars 79-89%"], bestFor: "three-guest show"),
+        .init(id: "blank", name: "Blank Board", description: "Background only on both canvases. Build everything with addElements.", regions: ["free"], bestFor: "fully custom layouts"),
+    ]
+
+    /// Accent colors used by the pack; `accent` overrides remap all of them.
+    static let accentHexes: Set<String> = ["#C6FF3D", "#F5C518", "#FFD60A", "#6B9FE0"]
+    static let k = 2160.0 / 3840.0
+
+    static func template(_ id: String) -> Template? { all.first { $0.id == id } }
+
+    // MARK: Stream build (3840x2160 design px)
+
+    static func streamObjects(_ id: String) -> [CanvasObject]? {
+        var b = BroadcastTemplatePack.Builder(sx: 1, sy: 1)
+        switch id {
+        case "rollup": b.rollup()
+        case "bloomberg": b.bloomberg()
+        case "guest_mosaic_2": b.mosaic(count: 2)
+        case "guest_mosaic_3": b.mosaic(count: 3)
+        case "guest_mosaic_5": b.mosaic(count: 5)
+        case "cam_slide": b.camSlide()
+        case "milk_road": b.milkRoad()
+        case "title_card": b.titleCard()
+        case "next_up": b.nextUp()
+        case "stat_cards": b.statCards()
+        case "process_steps": b.processSteps()
+        case "blank": b.rect("Background", 0, 0, 3840, 2160, fill: "#121214")
+        default: return nil
+        }
+        return b.objects
+    }
+
+    // MARK: Phone build (2160x3840 design px)
+
+    static func phoneObjects(_ id: String, stream: [CanvasObject]) -> [CanvasObject] {
+        var b = BroadcastTemplatePack.Builder(sx: 1, sy: 1)
+        switch id {
+        case "cam_slide":
+            b.rect("Background", 0, 0, 2160, 3840, fill: "#121214")
+            b.float("Camera", 0, 0, 2160, 1600)
+            b.float("Slide", 0, 1640, 2160, 1215)
+            b.rect("Name Plate", 80, 1420, 1300, 140, fill: "#121214")
+            b.text("Name", "Speaker Name", 120, 1420, 1240, 140, size: 64)
+            return carryText(from: stream, into: b.objects)
+        case "milk_road":
+            b.rect("Background", 0, 0, 2160, 3840, fill: "#121214")
+            let h = 3840.0 / 3
+            for i in 0..<3 {
+                let y = Double(i) * h
+                b.float("Guest \(i + 1)", 0, y, 2160, h)
+                b.rect("Name Bar \(i + 1)", 80, y + h - 330, 1500, 130, fill: "#FFD60A")
+                b.text("Name \(i + 1)", "Guest Name", 120, y + h - 330, 1440, 130, size: 66, color: "#121214", weight: .black)
+                b.rect("Title Bar \(i + 1)", 80, y + h - 200, 1500, 110, fill: "#FFFFFF")
+                b.text("Title \(i + 1)", "Title, Company", 120, y + h - 200, 1440, 110, size: 50, color: "#121214", weight: .semibold)
+            }
+            return carryText(from: stream, into: b.objects)
+        case "title_card", "next_up", "stat_cards", "process_steps":
+            b.phoneHeader()
+            switch id {
+            case "title_card":
+                b.rect("Accent Rule", 120, 1300, 300, 12, fill: "#6B9FE0")
+                b.text("Headline", "Stablecoin Rails for Africa", 120, 1340, 1920, 600, size: 150, weight: .black)
+                b.text("Subline", "Morapay Live, Episode 1", 120, 1960, 1920, 140, size: 70, color: "#9AA3B2", weight: .semibold)
+                b.rect("Nameplate", 120, 2700, 1920, 260, fill: "#1B1B1F", border: "#6B9FE0", borderWidth: 6)
+                b.text("Host Name", "Kaleel", 180, 2715, 1800, 130, size: 80)
+                b.text("Host Role", "Founder, Morapay", 180, 2840, 1800, 100, size: 54, color: "#6B9FE0", weight: .semibold)
+            case "next_up":
+                b.text("Section Label", "NEXT UP", 120, 320, 1500, 110, size: 60, color: "#6B9FE0", weight: .black)
+                b.text("Headline", "On today's show", 120, 430, 1920, 320, size: 110, weight: .black)
+                for i in 0..<3 {
+                    let y = 900.0 + Double(i) * 700
+                    b.rect("Item Marker \(i + 1)", 120, y, 260, 560, fill: "#6B9FE0")
+                    b.text("Item Number \(i + 1)", "\(i + 1)", 120, y, 260, 560, size: 160, color: "#121214", weight: .black, align: .center)
+                    b.rect("Item Plate \(i + 1)", 400, y, 1640, 560, fill: "#1B1B1F")
+                    b.text("Item \(i + 1)", "Agenda item \(i + 1)", 460, y, 1540, 560, size: 88)
+                }
+            case "stat_cards":
+                b.rect("Accent Rule", 120, 320, 300, 12, fill: "#6B9FE0")
+                b.text("Headline", "Cross-border payments still take days", 120, 350, 1920, 380, size: 104, weight: .black)
+                for i in 0..<3 {
+                    let y = 820.0 + Double(i) * 880
+                    b.rect("Card \(i + 1)", 120, y, 1920, 820, fill: "#1B1B1F", radius: 24, border: "#25252A", borderWidth: 4)
+                    b.rect("Card Rule \(i + 1)", 120, y, 1920, 14, fill: "#6B9FE0")
+                    b.text("Stat Value \(i + 1)", "TBD", 200, y + 60, 1760, 320, size: 220, color: "#6B9FE0", weight: .black)
+                    b.text("Stat Label \(i + 1)", "Metric \(i + 1)", 200, y + 400, 1760, 160, size: 80)
+                    b.text("Stat Note \(i + 1)", "Source / context", 200, y + 580, 1760, 180, size: 50, color: "#9AA3B2", weight: .medium)
+                }
+            default:
+                b.rect("Accent Rule", 120, 320, 300, 12, fill: "#6B9FE0")
+                b.text("Headline", "How Morapay works", 120, 350, 1920, 380, size: 104, weight: .black)
+                for i in 0..<4 {
+                    let y = 820.0 + Double(i) * 680
+                    b.rect("Step Card \(i + 1)", 120, y, 1920, 600, fill: "#1B1B1F", radius: 24, border: "#6B9FE0", borderWidth: 6)
+                    b.text("Step Number \(i + 1)", "0\(i + 1)", 200, y + 40, 600, 160, size: 96, color: "#6B9FE0", weight: .black)
+                    b.text("Step \(i + 1)", ["Send", "Convert", "Settle", "Receive"][i], 200, y + 200, 1700, 180, size: 100)
+                    b.text("Step Note \(i + 1)", "Short detail", 200, y + 390, 1700, 160, size: 50, color: "#9AA3B2", weight: .medium)
+                    if i < 3 { b.text("Arrow \(i + 1)", "↓", 980, y + 590, 200, 100, size: 72, color: "#6B9FE0", align: .center) }
+                }
+            }
+            b.phoneFooter()
+            return carryText(from: stream, into: b.objects)
+        case "guest_mosaic_2", "guest_mosaic_3", "guest_mosaic_5":
+            let count = id == "guest_mosaic_2" ? 2 : (id == "guest_mosaic_3" ? 3 : 5)
+            b.rect("Background", 0, 0, 2160, 3840, fill: "#121214")
+            for i in 0..<9 { b.rect("Pattern \(i + 1)", Double(i) * 260 - 120, 0, 60, 3840, fill: "#1A1C22") }
+            b.text("Logo Left", "MORAPAY", 100, 120, 1000, 140, size: 72, weight: .black)
+            b.text("Logo Right", "PROSHOW LIVE", 1060, 120, 1000, 140, size: 56, weight: .black, align: .right)
+            let top = 360.0, margin = 80.0, gap = 40.0, avail = 3840 - top - 240
+            var panes: [(Double, Double, Double, Double)] = []
+            if count <= 3 {
+                let h = min(1125, (avail - gap * Double(count - 1)) / Double(count)), w = min(2000, h * 16 / 9)
+                for i in 0..<count { panes.append(((2160 - w) / 2, top + Double(i) * (h + gap), w, h)) }
+            } else {
+                let w = (2160 - margin * 2 - gap) / 2, h = w * 9 / 16 * 1.4
+                for i in 0..<count {
+                    let col = Double(i % 2), row = Double(i / 2)
+                    let x = i == 4 ? (2160 - w) / 2 : margin + col * (w + gap)
+                    panes.append((x, top + row * (h + gap), w, h))
+                }
+            }
+            for (i, p) in panes.enumerated() {
+                b.float("Guest \(i + 1)", p.0, p.1, p.2, p.3, border: "#6B9FE0", width: 4)
+                b.rect("Handle Plate \(i + 1)", p.0 + 20, p.1 + p.3 - 100, 520, 76, fill: "#121214", radius: 12)
+                b.text("Handle \(i + 1)", "@guest\(i + 1)", p.0 + 40, p.1 + p.3 - 100, 480, 76, size: 42)
+            }
+            return carryText(from: stream, into: b.objects)
+        default:
+            return stream.map(mapToPhone)
+        }
+    }
+
+    /// Generic Stream→Phone reflow: scale to phone width; top band pins to the top safe area,
+    /// bottom band (lower thirds, tickers) pins to the bottom, middle stays centered. Full-frame stays full-frame.
+    static func mapToPhone(_ source: CanvasObject) -> CanvasObject {
+        var o = source
+        let t = source.transform
+        let full = t.width >= 3800 && t.height >= 2100
+        if full {
+            o.transform.x = 0; o.transform.y = 0; o.transform.width = 2160; o.transform.height = 3840
+            return o
+        }
+        o.transform.x = t.width >= 3800 ? 0 : t.x * k
+        o.transform.width = t.width >= 3800 ? 2160 : t.width * k
+        o.transform.height = t.height * k
+        let cy = t.y + t.height / 2
+        if cy < 2160 * 0.36 {
+            o.transform.y = 220 + t.y * k
+        } else if cy > 2160 * 0.64 {
+            o.transform.y = 3840 - 260 - (2160 - t.y) * k
+        } else {
+            o.transform.y = 1920 + (t.y - 1080) * k
+        }
+        if t.width >= 3800, t.y <= 1, t.height < 400 { o.transform.y = 0 } // header strips hug the top
+        if t.width >= 3800, t.y + t.height >= 2155 { o.transform.y = 3840 - o.transform.height } // footers hug bottom
+        o.typography.fontSize = source.typography.fontSize * k * 1.15
+        o.stroke.width = source.stroke.width * k
+        o.stroke.cornerRadius = source.stroke.cornerRadius * k
+        return o
+    }
+
+    /// Keep slot text edits made on Stream when Phone uses its own layout.
+    private static func carryText(from stream: [CanvasObject], into phone: [CanvasObject]) -> [CanvasObject] {
+        let texts = Dictionary(stream.filter { $0.kind == .text }.map { ($0.name, $0.text) }, uniquingKeysWith: { a, _ in a })
+        return phone.map { o in
+            var c = o
+            if c.kind == .text, let v = texts[c.name] { c.text = v }
+            return c
+        }
+    }
+
+    static func slots(_ id: String) -> [[String: String]] {
+        (streamObjects(id) ?? []).filter { $0.kind == .text }.map { ["slot": $0.name, "default": $0.text] }
+    }
+
+    static var compactSummary: String {
+        all.map { "\($0.id): \($0.bestFor)" }.joined(separator: "; ")
+    }
+
+    // MARK: Instantiate
+
+    enum InstantiateError: Error { case unknownTemplate(String) }
+
+    /// Builds a dual-canvas Slide (Stream objects on the slide, Phone objects on the phone board).
+    @MainActor
+    static func instantiate(_ id: String, args: [String: Any]) throws -> (Slide, [String]) {
+        guard var stream = streamObjects(id) else { throw InstantiateError.unknownTemplate(id) }
+        var notes: [String] = []
+        let slots = (args["slots"] as? [String: Any]) ?? [:]
+        let style = (args["style"] as? [String: Any]) ?? [:]
+        let edits = (args["edits"] as? [String: [String: Any]]) ?? [:]
+        let remove = Set(((args["remove"] as? [String]) ?? []).map { $0.lowercased() })
+        let adds = (args["addElements"] as? [[String: Any]]) ?? []
+        let streamOnly = (args["streamOnly"] as? Bool) == true
+
+        func norm(_ s: String) -> String { s.lowercased().replacingOccurrences(of: "_", with: " ") }
+        var matched = Set<String>()
+        func applySlotsAndEdits(_ objects: inout [CanvasObject], phone: Bool) {
+            objects.removeAll { remove.contains($0.name.lowercased()) }
+            for i in objects.indices {
+                let key = norm(objects[i].name)
+                if objects[i].kind == .text, let (name, v) = slots.first(where: { norm($0.key) == key }) {
+                    objects[i].text = "\(v)"; matched.insert(name)
+                }
+                if let (name, e) = edits.first(where: { norm($0.key) == key }) {
+                    matched.insert(name)
+                    if let v = e["text"] as? String { objects[i].text = v }
+                    if let v = e["color"] as? String { objects[i].typography.color = v }
+                    if let v = e["fill"] as? String { objects[i].fill.type = .color; objects[i].fill.color = v }
+                    if let v = (e["fontSize"] as? NSNumber)?.doubleValue { objects[i].typography.fontSize = phone ? v * k * 1.15 : v }
+                    if let v = (e["opacity"] as? NSNumber)?.doubleValue { objects[i].opacity = v }
+                    if !phone, let f = e["frame"] as? [String: Any] {
+                        let W = 3840.0, H = 2160.0
+                        if let x = (f["x"] as? NSNumber)?.doubleValue { objects[i].transform.x = x * W }
+                        if let y = (f["y"] as? NSNumber)?.doubleValue { objects[i].transform.y = y * H }
+                        if let w = (f["w"] as? NSNumber)?.doubleValue { objects[i].transform.width = w * W }
+                        if let h = (f["h"] as? NSNumber)?.doubleValue { objects[i].transform.height = h * H }
+                    }
+                }
+            }
+        }
+        func restyle(_ objects: inout [CanvasObject]) {
+            let accent = (style["accent"] as? String)?.uppercased()
+            let bg = (style["background"] as? String)?.uppercased()
+            let textColor = (style["text"] as? String)?.uppercased()
+            func swap(_ hex: String) -> String {
+                let u = hex.uppercased()
+                if let accent, accentHexes.contains(u) { return accent }
+                if let bg, u == "#121214" { return bg }
+                return hex
+            }
+            for i in objects.indices {
+                objects[i].fill.color = swap(objects[i].fill.color)
+                objects[i].stroke.color = swap(objects[i].stroke.color)
+                objects[i].typography.color = swap(objects[i].typography.color)
+                if let textColor, objects[i].kind == .text, objects[i].typography.color.uppercased() == "#FFFFFF" {
+                    objects[i].typography.color = textColor
+                }
+            }
+        }
+        // Free-form additions (fractions of the Stream board; Phone gets the reflowed copy unless `phone` frame given).
+        var b = BroadcastTemplatePack.Builder(sx: 1, sy: 1)
+        var phoneAdds: [CanvasObject] = []
+        for add in adds {
+            func d(_ key: String, _ src: [String: Any] = add) -> Double { (src[key] as? NSNumber)?.doubleValue ?? 0 }
+            let kind = (add["kind"] as? String ?? "text").lowercased()
+            let name = add["name"] as? String ?? "Element \(b.objects.count + 1)"
+            let x = d("x") * 3840, y = d("y") * 2160, w = max(0.01, d("w")) * 3840, h = max(0.01, d("h")) * 2160
+            let fill = add["fill"] as? String ?? "#1B1B1F"
+            let color = add["color"] as? String ?? "#FFFFFF"
+            let size = (add["size"] as? NSNumber)?.doubleValue ?? 72
+            let weight = FontWeightToken(rawValue: (add["weight"] as? String ?? "bold").lowercased()) ?? .bold
+            let align = TextHorizontalAlign(rawValue: (add["align"] as? String ?? "left").lowercased()) ?? .left
+            let radius = (add["radius"] as? NSNumber)?.doubleValue ?? 0
+            let before = b.objects.count
+            switch kind {
+            case "rect", "shape", "plate", "rule", "card":
+                b.rect(name, x, y, w, h, fill: fill, radius: radius, border: add["border"] as? String)
+            case "video", "camera", "float", "screen":
+                b.float(name, x, y, w, h, border: add["border"] as? String)
+            default:
+                b.text(name, add["text"] as? String ?? "", x, y, w, h, size: size, color: color, weight: weight, align: align)
+            }
+            if b.objects.count > before, let p = add["phone"] as? [String: Any] {
+                var o = mapToPhone(b.objects[b.objects.count - 1])
+                o.transform.x = d("x", p) * 2160; o.transform.y = d("y", p) * 3840
+                o.transform.width = max(0.01, d("w", p)) * 2160; o.transform.height = max(0.01, d("h", p)) * 3840
+                if let s = (p["size"] as? NSNumber)?.doubleValue { o.typography.fontSize = s }
+                phoneAdds.append(o)
+            } else if b.objects.count > before {
+                phoneAdds.append(mapToPhone(b.objects[b.objects.count - 1]))
+            }
+        }
+        applySlotsAndEdits(&stream, phone: false)
+        var phone = phoneObjects(id, stream: stream)
+        applySlotsAndEdits(&phone, phone: true)
+        stream += b.objects
+        phone += phoneAdds
+        restyle(&stream); restyle(&phone)
+        for i in stream.indices { stream[i].zIndex = i }
+        for i in phone.indices { phone[i].zIndex = i; phone[i].id = UUID() }
+
+        let unknown = Set(slots.keys).union(edits.keys).subtracting(matched)
+        if !unknown.isEmpty { notes.append("unmatched_slots:\(unknown.sorted().joined(separator: ","))") }
+
+        let title = (args["title"] as? String) ?? template(id)?.name ?? id
+        let bgHex = ((style["background"] as? String) ?? "#121214").uppercased()
+        var slide = Slide(title: title, canvas: stream, themeApplication: .native, label: "AI", backgroundEnabled: true)
+        slide.backgroundHex = bgHex
+        if let notesText = args["notes"] as? String { slide.notes = notesText }
+        if streamOnly {
+            ShowController.ensurePrimaryEditorCanvas(on: &slide, backgroundHex: bgHex)
+        } else {
+            ShowController.ensurePhoneEditorCanvas(on: &slide, backgroundHex: bgHex)
+            if let idx = slide.editorCanvases.firstIndex(where: { $0.isPhoneArtboard }) {
+                slide.editorCanvases[idx].objects = phone
+            }
+        }
+        return (slide, notes)
+    }
+}
+
+extension BroadcastTemplatePack.Builder {
+    mutating func header(show: String = "MORAPAY LIVE") {
+        rect("Background", 0, 0, 3840, 2160, fill: "#121214")
+        rect("Header Strip", 0, 0, 3840, 150, fill: "#1B1B1F")
+        rect("Header Rule", 0, 150, 3840, 6, fill: "#6B9FE0")
+        text("Show Name", show, 160, 0, 2400, 150, size: 56, weight: .black)
+        rect("Live Tag", 3480, 35, 220, 80, fill: "#E5322D", radius: 8)
+        text("Live", "LIVE", 3480, 35, 220, 80, size: 46, weight: .black, align: .center)
+    }
+
+    mutating func phoneHeader(show: String = "MORAPAY LIVE") {
+        rect("Background", 0, 0, 2160, 3840, fill: "#121214")
+        rect("Header Strip", 0, 0, 2160, 200, fill: "#1B1B1F")
+        rect("Header Rule", 0, 200, 2160, 6, fill: "#6B9FE0")
+        text("Show Name", show, 100, 0, 1500, 200, size: 60, weight: .black)
+        rect("Live Tag", 1840, 60, 220, 80, fill: "#E5322D", radius: 8)
+        text("Live", "LIVE", 1840, 60, 220, 80, size: 46, weight: .black, align: .center)
+    }
+
+    mutating func phoneFooter() {
+        rect("Ticker Bar", 0, 3640, 2160, 200, fill: "#FFFFFF")
+        rect("Ticker Tag", 0, 3640, 500, 200, fill: "#6B9FE0")
+        text("Ticker Label", "MORAPAY", 0, 3640, 500, 200, size: 50, color: "#121214", weight: .black, align: .center)
+        text("Ticker", "Stablecoin rails  ·  Instant settlement  ·  Built for Africa", 540, 3640, 1580, 200, size: 44, color: "#121214", weight: .semibold)
+    }
+
+    mutating func footer() {
+        rect("Ticker Bar", 0, 2010, 3840, 150, fill: "#FFFFFF")
+        rect("Ticker Tag", 0, 2010, 460, 150, fill: "#6B9FE0")
+        text("Ticker Label", "MORAPAY", 0, 2010, 460, 150, size: 52, color: "#121214", weight: .black, align: .center)
+        text("Ticker", "Stablecoin rails  ·  Instant settlement  ·  Built for Africa", 520, 2010, 3260, 150, size: 52, color: "#121214", weight: .semibold)
+    }
+
+    mutating func titleCard() {
+        header()
+        rect("Accent Rule", 240, 860, 420, 14, fill: "#6B9FE0")
+        text("Headline", "Stablecoin Rails for Africa", 240, 900, 3360, 360, size: 190, weight: .black)
+        text("Subline", "Morapay Live, Episode 1", 240, 1270, 3000, 150, size: 80, color: "#9AA3B2", weight: .semibold)
+        rect("Nameplate", 240, 1600, 1600, 230, fill: "#1B1B1F", border: "#6B9FE0", borderWidth: 6)
+        text("Host Name", "Kaleel", 300, 1615, 1500, 110, size: 72)
+        text("Host Role", "Founder, Morapay", 300, 1720, 1500, 90, size: 50, color: "#6B9FE0", weight: .semibold)
+        footer()
+    }
+
+    mutating func nextUp() {
+        header()
+        text("Section Label", "NEXT UP", 240, 250, 1500, 110, size: 60, color: "#6B9FE0", weight: .black)
+        text("Headline", "On today's show", 240, 350, 3360, 200, size: 120, weight: .black)
+        for i in 0..<3 {
+            let y = 680.0 + Double(i) * 410
+            rect("Item Marker \(i + 1)", 240, y, 260, 330, fill: "#6B9FE0")
+            text("Item Number \(i + 1)", "\(i + 1)", 240, y, 260, 330, size: 160, color: "#121214", weight: .black, align: .center)
+            rect("Item Plate \(i + 1)", 520, y, 3080, 330, fill: "#1B1B1F")
+            text("Item \(i + 1)", "Agenda item \(i + 1)", 600, y, 2900, 330, size: 96)
+        }
+        footer()
+    }
+
+    mutating func statCards() {
+        header()
+        rect("Accent Rule", 240, 250, 300, 12, fill: "#6B9FE0")
+        text("Headline", "Cross-border payments still take days", 240, 280, 3360, 200, size: 116, weight: .black)
+        let w = (3360.0 - 160) / 3
+        for i in 0..<3 {
+            let x = 240 + Double(i) * (w + 80)
+            rect("Card \(i + 1)", x, 620, w, 1240, fill: "#1B1B1F", radius: 24, border: "#25252A", borderWidth: 4)
+            rect("Card Rule \(i + 1)", x, 620, w, 14, fill: "#6B9FE0")
+            text("Stat Value \(i + 1)", "TBD", x + 80, 760, w - 160, 380, size: 230, color: "#6B9FE0", weight: .black)
+            text("Stat Label \(i + 1)", "Metric \(i + 1)", x + 80, 1170, w - 160, 200, size: 80)
+            text("Stat Note \(i + 1)", "Source / context", x + 80, 1420, w - 160, 300, size: 52, color: "#9AA3B2", weight: .medium)
+        }
+        footer()
+    }
+
+    mutating func processSteps() {
+        header()
+        rect("Accent Rule", 240, 250, 300, 12, fill: "#6B9FE0")
+        text("Headline", "How Morapay works", 240, 280, 3360, 200, size: 116, weight: .black)
+        let gap = 120.0, w = (3360 - gap * 3) / 4
+        for i in 0..<4 {
+            let x = 240 + Double(i) * (w + gap)
+            rect("Step Card \(i + 1)", x, 900, w, 700, fill: "#1B1B1F", radius: 24, border: "#6B9FE0", borderWidth: 6)
+            text("Step Number \(i + 1)", "0\(i + 1)", x + 60, 940, w - 120, 160, size: 96, color: "#6B9FE0", weight: .black)
+            text("Step \(i + 1)", ["Send", "Convert", "Settle", "Receive"][i], x + 60, 1120, w - 120, 200, size: 104)
+            text("Step Note \(i + 1)", "Short detail", x + 60, 1330, w - 120, 220, size: 50, color: "#9AA3B2", weight: .medium)
+            if i < 3 { text("Arrow \(i + 1)", "→", x + w, 1150, gap, 200, size: 120, color: "#6B9FE0", align: .center) }
+        }
+        footer()
+    }
+}
