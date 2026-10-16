@@ -6,6 +6,7 @@ import CoreVideo
 #endif
 #if canImport(CoreMedia)
 import CoreMedia
+import CoreImage
 #endif
 
 /// Exclusive highlight for the left workspace capsule (Show, Edit, Map, …).
@@ -3388,6 +3389,33 @@ final class ShowController {
             }
         case "remove_group":
             return ["ok": true, "removed": removeGroups(named: args["group"] ?? "")]
+        case "render":
+            // Renders every canvas of one slide to PNGs (QA only; never goes live).
+            #if canImport(CoreVideo) && os(macOS)
+            guard let slide = slide(), let out = args["out"] else { return ["ok": false, "error": "no_slide"] }
+            var paths: [String] = []
+            let ctx = CIContext()
+            for (i, board) in prepareSlideForProgramCue(slide).editorCanvases.enumerated() {
+                let scale = min(1.0, 1920.0 / max(board.width, board.height))
+                var probe = RenderStack.idle
+                probe.slideCanvas = board.objects
+                let live = buildProgramObjectLivePixels(stack: probe, programVideo: nil, propCanvases: [])
+                guard let px = ProgramOutputComposer.shared.renderSlideBoard(
+                    objects: board.objects, canvasWidth: board.width, canvasHeight: board.height,
+                    backgroundEnabled: board.backgroundEnabled, backgroundHex: board.backgroundHex,
+                    width: Int(board.width * scale), height: Int(board.height * scale),
+                    textContext: nil, objectLivePixels: live, renderNow: Date()) else { continue }
+                let path = "\(out)-\(i).png"
+                let image = CIImage(cvPixelBuffer: px)
+                if let cs = CGColorSpace(name: CGColorSpace.sRGB),
+                   (try? ctx.writePNGRepresentation(of: image, to: URL(fileURLWithPath: path), format: .RGBA8, colorSpace: cs)) != nil {
+                    paths.append(path)
+                }
+            }
+            return ["ok": true, "paths": paths]
+            #else
+            return ["ok": false, "error": "unsupported"]
+            #endif
         case "golive":
             guard let slide = slide() else { return ["ok": false, "error": "no_slide"] }
             goLive(slideID: slide.id)
