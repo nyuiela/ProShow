@@ -2248,9 +2248,7 @@ final class ShowController {
 
     func phoneCanvasBoard(on slide: Slide?) -> EditorCanvasFrame? {
         guard let slide else { return nil }
-        return slide.editorCanvases.first {
-            !$0.isPrimary && CanvasResolution.screenFamily(width: $0.width, height: $0.height) == .phone
-        }
+        return slide.editorCanvases.first { $0.isPhoneArtboard }
     }
 
     func selectPhonePreviewFeed(_ feed: PreviewFeed) {

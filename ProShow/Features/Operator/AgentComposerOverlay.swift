@@ -177,14 +177,16 @@ private enum ComposerInk {
 private struct AgentComposerRoot: View {
     @Bindable private var session = AIAgentSession.shared
     @State private var prompt = ""
-    @State private var applied: Int?
+    @State private var appliedLabel: String?
     @State private var baselineSeq = 0
     @FocusState private var inputFocused: Bool
 
     /// Expand only for this open session's activity or a staged draft.
     private var showReply: Bool {
-        if session.isRunning || session.draft != nil { return true }
-        return session.events.contains { $0.seq > baselineSeq }
+        if session.isRunning || session.draft != nil || session.lastPlacement != nil { return true }
+        if session.events.contains(where: { $0.seq > baselineSeq }) { return true }
+        // Show capped recent history when reopening Ask with no live turn.
+        return !session.persistedEntries.isEmpty
     }
 
     var body: some View {
@@ -213,7 +215,7 @@ private struct AgentComposerRoot: View {
         .onReceive(NotificationCenter.default.publisher(for: .agentComposerDidOpen)) { _ in
             baselineSeq = session.events.last?.seq ?? 0
             prompt = ""
-            applied = nil
+            appliedLabel = nil
             inputFocused = true
             AgentComposerController.shared.resizeForContent(expanded: false)
         }
@@ -305,7 +307,7 @@ private struct AgentComposerRoot: View {
             if let draft = session.draft {
                 HStack(spacing: 8) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Draft · \(draft.slides.count) slides")
+                        Text("Draft · \(draft.slides.count) slides → AI Draft")
                             .font(.system(size: 12, weight: .semibold))
                         Text(draft.summary)
                             .font(.system(size: 11))
@@ -317,20 +319,70 @@ private struct AgentComposerRoot: View {
                         .buttonStyle(.plain)
                         .font(.system(size: 12))
                         .foregroundStyle(.white.opacity(0.55))
-                    Button("Apply") { applied = session.applyDraft() }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(ComposerInk.accent)
+                    Button("Apply") {
+                        if let placement = session.applyDraft() {
+                            appliedLabel = placement.label
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(ComposerInk.accent)
                 }
                 .padding(.horizontal, 12)
                 .padding(.bottom, 4)
             }
-            if let applied {
-                Text(applied > 0 ? "Added \(applied) to AI Draft." : "Nothing applied.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.white.opacity(0.45))
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 4)
+            if let appliedLabel {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(appliedLabel)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.8))
+                        .textSelection(.enabled)
+                    if let placement = session.lastPlacement {
+                        Text(placement.deepLink)
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(ComposerInk.accent.opacity(0.9))
+                            .textSelection(.enabled)
+                        HStack(spacing: 10) {
+                            Button("Open in show") { session.openPlacement(placement) }
+                            Button("Copy link") {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(placement.deepLink, forType: .string)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(ComposerInk.accent)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 4)
+            }
+
+            // Recent persisted turns (capped) when idle reply is showing history
+            if !session.isRunning, session.draft == nil, !session.persistedEntries.isEmpty, rows.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Recent")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.4))
+                    ForEach(session.persistedEntries.suffix(6).reversed()) { entry in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(entry.role == "user" ? "You" : "Agent")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(.white.opacity(0.35))
+                            Text(entry.text)
+                                .font(.system(size: 12))
+                                .foregroundStyle(.white.opacity(0.75))
+                                .lineLimit(3)
+                            if let link = entry.deepLink, let label = entry.locationLabel {
+                                Button(label) { session.openDeepLink(link) }
+                                    .buttonStyle(.plain)
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(ComposerInk.accent)
+                            }
+                        }
+                    }
+                }
+                .padding(12)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -349,7 +401,7 @@ private struct AgentComposerRoot: View {
         if !ProShowFeatureFlags.aiComposeV1 {
             ProShowFeatureFlags.aiComposeV1 = true
         }
-        applied = nil
+        appliedLabel = nil
         session.send(prompt)
         prompt = ""
     }

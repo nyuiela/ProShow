@@ -51,7 +51,7 @@ struct AIDeskView: View {
     @State private var prompt = ""
     @State private var keyEntry = ""
     @State private var showKeyField = false
-    @State private var applied: Int?
+    @State private var appliedLabel: String?
     @State private var flagOn = ProShowFeatureFlags.aiComposeV1
 
     var body: some View {
@@ -137,7 +137,13 @@ struct AIDeskView: View {
             }
             Spacer()
             Button("Discard") { session.discardDraft() }
-            Button("Apply to AI Draft") { applied = session.applyDraft() }
+            Button("Apply to AI Draft") {
+                    if let placement = session.applyDraft() {
+                        appliedLabel = placement.label
+                    } else {
+                        appliedLabel = nil
+                    }
+                }
                 .buttonStyle(.borderedProminent)
                 .tint(DeskInk.accent)
         }
@@ -164,15 +170,28 @@ struct AIDeskView: View {
                         .disabled(prompt.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
-            if let applied {
-                Text(applied > 0 ? "Added \(applied) slides to AI Draft." : "Nothing applied.")
-                    .font(.system(size: 11)).foregroundStyle(.white.opacity(0.55))
+            if let appliedLabel {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(appliedLabel).font(.system(size: 11)).foregroundStyle(.white.opacity(0.75))
+                    if let placement = session.lastPlacement {
+                        HStack(spacing: 8) {
+                            Button("Open") { session.openPlacement(placement) }
+                            Button("Copy link") {
+                                #if os(macOS)
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(placement.deepLink, forType: .string)
+                                #endif
+                            }
+                        }
+                        .font(.system(size: 11, weight: .medium))
+                    }
+                }
             }
         }
     }
 
     private func send() {
-        applied = nil
+        appliedLabel = nil
         session.send(prompt)
         prompt = ""
     }
@@ -206,6 +225,7 @@ struct AgentRow: Identifiable {
         case let .toolResult(n, _, ok, s): kind = ok ? .tool : .warn; text = "\(n): \(s)"
         case let .confirmRequired(t, r): kind = .warn; text = "Needs you: \(t). \(r)"
         case let .draftReady(n, _): kind = .info; text = "Draft ready: \(n) slides"
+        case let .slidesCreated(_, _, label, link, _): kind = .info; text = "\(label) · \(link)"
         case let .contextPackUpdated(v, p): kind = .info; text = "Context updated \(p) to \(v)"
         case .done: kind = .info; text = "Done"
         case .cancelled: kind = .warn; text = "Stopped"

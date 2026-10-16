@@ -1378,6 +1378,17 @@ enum CanvasResolution: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+extension EditorCanvasFrame {
+    /// Portrait phone artboard: exact phone presets, 9:16 design (e.g. 2160x3840), or named Phone.
+    var isPhoneArtboard: Bool {
+        guard !isPrimary else { return false }
+        if CanvasResolution.screenFamily(width: width, height: height) == .phone { return true }
+        if name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "phone" { return true }
+        return height > width * 1.15
+    }
+}
+
+
 enum EditorCatalog {
     static let buildAnimations = ["Dissolve", "Push", "Wipe", "Fly-in"]
     static let autoClearRules = ["Never", "After Delay", "On Next Slide"]

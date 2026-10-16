@@ -30,14 +30,25 @@ final class AIAgentSession {
     private(set) var draft: ComposePatch?
     private(set) var keyConnected = XAIKeyStore.isConnected
     private(set) var packVersion = ""
+    /// Persisted display history for Ask overlay / Settings (survives relaunch).
+    private(set) var persistedEntries: [AgentHistoryStore.Entry] = []
+    private(set) var lastPlacement: AgentSlidePlacement?
 
     private var seq = 0
     private var history: [AgentMessage] = []
     private var seenPackVersion: String?
     private var turnTask: Task<Void, Never>?
     private let maxEvents = 400
+    private var projectKey = "global"
 
-    func attach(_ controller: ShowController) { self.controller = controller }
+    func attach(_ controller: ShowController) {
+        self.controller = controller
+        let key = controller.show.id.uuidString
+        if key != projectKey || persistedEntries.isEmpty {
+            projectKey = key
+            loadPersistedHistory()
+        }
+    }
 
     func saveKey(_ key: String) -> Bool {
         let ok = XAIKeyStore.save(key)
@@ -57,7 +68,18 @@ final class AIAgentSession {
         history = []
         events = []
         draft = nil
+        lastPlacement = nil
         seenPackVersion = nil
+        persistedEntries = []
+        AgentHistoryStore.clear(projectKey: projectKey)
+        persistHistory()
+    }
+
+    func clearPersistedHistory() {
+        persistedEntries = []
+        history = []
+        AgentHistoryStore.clear(projectKey: projectKey)
+        persistHistory()
     }
 
     func cancel() {
@@ -72,16 +94,58 @@ final class AIAgentSession {
 
     /// Operator gate. Only path from agent output into the show.
     @discardableResult
-    func applyDraft() -> Int {
-        guard let draft, let controller else { return 0 }
+    func applyDraft() -> AgentSlidePlacement? {
+        guard let draft, let controller else { return nil }
         do {
-            let ids = try controller.applyComposePatch(draft)
+            let placement = try controller.applyComposePatch(draft)
             self.draft = nil
-            return ids.count
+            lastPlacement = placement
+            emit(.slidesCreated(
+                groupName: placement.groupName,
+                slideCount: placement.slideIDs.count,
+                label: placement.label,
+                deepLink: placement.deepLink,
+                slideIDs: placement.slideIDs
+            ))
+            appendPersisted(
+                role: "assistant",
+                text: placement.label + " · " + placement.deepLink,
+                placement: placement
+            )
+            if let first = placement.slideIDs.first {
+                controller.select(first)
+            }
+            return placement
         } catch {
             emit(.error("Apply failed: \(error)"))
-            return 0
+            return nil
         }
+    }
+
+    /// Jump to a created slide in the rundown / canvas.
+    func openPlacement(_ placement: AgentSlidePlacement) {
+        guard let controller, let first = placement.slideIDs.first else { return }
+        controller.select(first)
+        if !controller.isCanvasEditorPresented {
+            controller.openEditor(.presentation)
+        }
+    }
+
+    func openDeepLink(_ link: String) {
+        guard let id = Self.slideID(fromDeepLink: link) else { return }
+        controller?.select(id)
+        if let controller, !controller.isCanvasEditorPresented {
+            controller.openEditor(.presentation)
+        }
+    }
+
+    private static func slideID(fromDeepLink link: String) -> UUID? {
+        // proshow://slide/<uuid> or proshow://show/<show>/slide/<uuid>
+        let parts = link.split(separator: "/").map(String.init)
+        guard let idx = parts.lastIndex(of: "slide"), idx + 1 < parts.count else {
+            return UUID(uuidString: parts.last ?? "")
+        }
+        return UUID(uuidString: parts[idx + 1])
     }
 
     func send(_ prompt: String) {
@@ -123,7 +187,13 @@ final class AIAgentSession {
         if !deskNote.isEmpty {
             ephemeral.append(AgentMessage(role: .system, content: AgentContextPack.deskUpdateBlock(deskNote)))
         }
+        if Self.userRequestsStreamOnly(prompt) {
+            ephemeral.append(AgentMessage(role: .system, content: #"[Canvas policy] Operator asked for Stream-only. You may set designMeta.streamOnly true and canvases ["stream"]."#))
+        } else {
+            ephemeral.append(AgentMessage(role: .system, content: #"[Canvas policy] Default is dual canvas. Author Stream 16:9 and Phone 9:16. designMeta.canvases must be ["stream","phone"] unless the operator explicitly waived Phone."#))
+        }
         history.append(AgentMessage(role: .user, content: prompt))
+        appendPersisted(role: "user", text: prompt)
 
         var context: [AgentMessage] = [AgentMessage(role: .system, content: pack.systemPrompt())] + ephemeral + trimmedHistory()
         let provider = chatProvider()
@@ -172,7 +242,11 @@ final class AIAgentSession {
                 }
             }
             history.append(AgentMessage(role: .assistant, content: finalText))
+            if !finalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                appendPersisted(role: "assistant", text: finalText)
+            }
             seenPackVersion = pack.version
+            persistHistory()
             emit(.done(text: finalText))
         } catch is CancellationError {
             // cancel() already emitted.
@@ -216,6 +290,7 @@ final class AIAgentSession {
         let show = controller.show
         let slides = show.allSlides
         let hasPhone = slides.contains { controller.phoneCanvasBoard(on: $0) != nil }
+        // Dual-canvas is the product default; Phone board is ensured on Apply.
         var fonts = Set<String>()
         for slide in slides { for object in slide.canvas { fonts.insert(object.typography.fontFamily) } }
         if fonts.isEmpty { fonts.insert("Inter") }
@@ -229,9 +304,15 @@ final class AIAgentSession {
                 "safeMarginFraction": 0.05, "lowerThirdBand": [0.72, 0.92], "headerBand": [0.04, 0.14], "footerTicker": [0.93, 0.99],
             ],
             "phone": [
-                "enabled": hasPhone, "aspect": "9:16", "designWidth": 2160, "designHeight": 3840,
-                "policy": hasPhone ? "author_phone_variant" : "fit_from_stream",
+                "enabled": true,
+                "presentInShow": hasPhone,
+                "aspect": "9:16",
+                "designWidth": 2160,
+                "designHeight": 3840,
+                "policy": "author_both_by_default",
+                "note": "Always author Phone unless the operator says Stream-only. Apply creates a Phone board when missing.",
             ],
+            "canvasDefault": ["stream", "phone"],
             "targetAspect": settings.targetAspect.rawValue,
             "frameRate": "\(settings.frameRate)",
             "theme": [
@@ -304,9 +385,23 @@ final class AIAgentSession {
                     if !notes.isEmpty { payload["notes"] = notes }
                     return AgentToolOutcome(result: json(payload), ok: true, summary: "Valid, \(patch.slides.count) slides")
                 }
-                var payload: [String: Any] = ["ok": true, "staged": true, "slides": patch.slides.count, "next": "Operator reviews and taps Apply"]
+                let canvases = patch.designMeta.canvases.map { $0.lowercased() }
+                var payload: [String: Any] = [
+                    "ok": true,
+                    "staged": true,
+                    "slides": patch.slides.count,
+                    "group": AIComposeAPI.draftGroupName,
+                    "canvases": canvases,
+                    "locationHint": "After Apply: group \(AIComposeAPI.draftGroupName)",
+                    "next": "Operator reviews and taps Apply, then opens the group link",
+                ]
                 if !notes.isEmpty { payload["notes"] = notes }
-                return AgentToolOutcome(result: json(payload), ok: true, summary: "Draft staged", draft: patch)
+                return AgentToolOutcome(
+                    result: json(payload),
+                    ok: true,
+                    summary: "Draft staged → \(AIComposeAPI.draftGroupName) (\(patch.slides.count))",
+                    draft: patch
+                )
             } catch {
                 let e = error as? ComposeError ?? .invalidJSON(String(describing: error))
                 let preview = String(call.arguments.prefix(280))
@@ -328,6 +423,64 @@ final class AIAgentSession {
         else { return "{}" }
         return String(decoding: data, as: UTF8.self)
     }
+
+
+    // MARK: - History persistence
+
+    private func loadPersistedHistory() {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let doc = AgentHistoryStore.load(projectKey: projectKey)
+        persistedEntries = doc.entries
+        history = doc.wire.compactMap { wire in
+            guard let role = AgentMessage.Role(rawValue: wire.role) else { return nil }
+            return AgentMessage(role: role, content: wire.content, toolCallID: wire.toolCallID)
+        }
+    }
+
+    private func persistHistory() {
+        var doc = AgentHistoryStore.Document(projectKey: projectKey)
+        doc.entries = persistedEntries
+        doc.wire = history.compactMap { message in
+            // Skip bulky tool payloads; keep user/assistant for continuity.
+            guard message.role == .user || message.role == .assistant else { return nil }
+            let text = (message.content ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { return nil }
+            return AgentHistoryStore.WireMessage(role: message.role.rawValue, content: String(text.prefix(4000)), toolCallID: message.toolCallID)
+        }
+        AgentHistoryStore.save(doc)
+    }
+
+    private func appendPersisted(role: String, text: String, placement: AgentSlidePlacement? = nil) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let entry = AgentHistoryStore.Entry(
+            id: UUID(),
+            ts: .now,
+            role: role,
+            text: String(trimmed.prefix(4000)),
+            groupName: placement?.groupName,
+            slideIDs: placement?.slideIDs ?? [],
+            slideTitles: placement?.slideTitles ?? [],
+            deepLink: placement?.deepLink
+        )
+        persistedEntries.append(entry)
+        if persistedEntries.count > AgentHistoryStore.maxEntries {
+            persistedEntries = Array(persistedEntries.suffix(AgentHistoryStore.maxEntries))
+        }
+        persistHistory()
+    }
+
+    private static func userRequestsStreamOnly(_ prompt: String) -> Bool {
+        let lower = prompt.lowercased()
+        let needles = [
+            "stream only", "stream-only", "no phone", "without phone",
+            "16:9 only", "skip phone", "don't make phone", "do not make phone",
+            "dont make phone", "desktop only",
+        ]
+        return needles.contains { lower.contains($0) }
+    }
+
 
     /// Best-effort parse of model tool arguments. Empty dict on failure (never throws).
     private static func parseToolArguments(_ text: String) -> [String: Any] {

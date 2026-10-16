@@ -97,9 +97,7 @@ enum PhoneBoardState: Equatable, Sendable {
 
 enum PhoneSlideRouting {
     static func state(boards: [EditorCanvasFrame]) -> PhoneBoardState {
-        let phone = boards.contains { board in
-            !board.isPrimary && CanvasResolution.screenFamily(width: board.width, height: board.height) == .phone
-        }
+        let phone = boards.contains { $0.isPhoneArtboard }
         return phone ? .present : .absent
     }
 

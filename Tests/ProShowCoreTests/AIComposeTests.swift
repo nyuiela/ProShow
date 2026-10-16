@@ -42,6 +42,12 @@ struct AIComposeTests {
         patch = try ComposeCodec.decodePatch(Self.fixture())
         patch.designMeta.canvases = ["phone"]
         #expect(throws: ComposeError.missingStreamCanvas) { try ComposeDesignValidator.validate(patch) }
+        patch = try ComposeCodec.decodePatch(Self.fixture())
+        patch.designMeta.canvases = ["stream"]
+        patch.designMeta.streamOnly = nil
+        #expect(throws: ComposeError.missingPhoneCanvas) { try ComposeDesignValidator.validate(patch) }
+        patch.designMeta.streamOnly = true
+        try ComposeDesignValidator.validate(patch)
     }
 
     @Test @MainActor func routesReturn409WhenFlagOff() throws {

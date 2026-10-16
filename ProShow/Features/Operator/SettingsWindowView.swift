@@ -348,6 +348,38 @@ struct SettingsWindowView: View {
                 .lineLimit(2...4)
                 .textFieldStyle(.roundedBorder)
             }
+
+            SettingsGroup(
+                title: "Conversation history",
+                footnote: "Stored under Application Support/ProShow/Agent/History. Cap \(AgentHistoryStore.maxEntries) entries per show."
+            ) {
+                SettingsRow(
+                    title: "Saved turns",
+                    detail: AIAgentSession.shared.persistedEntries.isEmpty
+                        ? "No Ask history for this show yet."
+                        : "\(AIAgentSession.shared.persistedEntries.count) entries on this Mac."
+                ) {
+                    Button("Clear") { AIAgentSession.shared.clearPersistedHistory() }
+                        .disabled(AIAgentSession.shared.persistedEntries.isEmpty)
+                }
+                if let last = AIAgentSession.shared.persistedEntries.last(where: { $0.deepLink != nil }) {
+                    SettingsRow(title: "Last slide link", detail: last.locationLabel ?? last.deepLink) {
+                        Button("Open") {
+                            if let link = last.deepLink {
+                                AIAgentSession.shared.openDeepLink(link)
+                            }
+                        }
+                    }
+                }
+            }
+
+            SettingsGroup(title: "Canvases", footnote: "Ask always authors Stream 16:9 and Phone 9:16 unless you say Stream-only.") {
+                SettingsRow(title: "Default", detail: "stream + phone") {
+                    Text("Dual")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(ProShowTheme.accent)
+                }
+            }
         }
     }
 

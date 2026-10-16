@@ -367,12 +367,14 @@
   "rundownBlocks": [],
   "designMeta": {
     "canvases": [
-      "stream"
+      "stream",
+      "phone"
     ],
     "tokenSet": "proshow-desk-v1",
     "grid": "4/8",
     "backgroundToken": "canvas",
     "accentToken": "accent",
-    "notes": "Stream only. Phone Fit-from-Stream until dual authored. Colors #121214 bg; accents via theme."
+    "notes": "Stream + Phone dual canvas default.",
+    "streamOnly": false
   }
 }

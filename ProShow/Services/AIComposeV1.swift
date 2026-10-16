@@ -41,6 +41,8 @@ struct ComposeDesignMeta: Codable, Hashable, Sendable {
     var backgroundToken: String?
     var accentToken: String?
     var notes: String?
+    /// When true, Phone 9:16 may be omitted. Default is dual Stream + Phone.
+    var streamOnly: Bool? = nil
 }
 
 struct ComposeRundownBlock: Codable, Hashable, Sendable {
@@ -85,6 +87,7 @@ enum ComposeError: Error, Equatable {
     case unknownRecipe(String)
     case noSlides
     case missingStreamCanvas
+    case missingPhoneCanvas
     case offTokenColor(String)
     case unknownProvider(String)
     case missingPatch
@@ -97,6 +100,7 @@ enum ComposeError: Error, Equatable {
         case .unknownRecipe: "unknown_recipe"
         case .noSlides: "no_slides"
         case .missingStreamCanvas: "missing_stream_canvas"
+        case .missingPhoneCanvas: "missing_phone_canvas"
         case .offTokenColor: "off_token_color"
         case .unknownProvider: "unknown_provider"
         case .missingPatch: "missing_patch"
@@ -111,6 +115,7 @@ enum ComposeError: Error, Equatable {
         case let .unknownRecipe(id): id
         case .noSlides: "Patch has no slides"
         case .missingStreamCanvas: "designMeta.canvases needs stream"
+        case .missingPhoneCanvas: "designMeta.canvases needs phone (or set streamOnly true when the operator asked for Stream-only)"
         case let .offTokenColor(hex): hex
         case let .unknownProvider(p): p
         case .missingPatch: "Practice needs an inline patch"
@@ -296,8 +301,13 @@ enum ComposeDesignValidator {
             throw ComposeError.unknownRecipe(patch.recipeId)
         }
         guard !patch.slides.isEmpty else { throw ComposeError.noSlides }
-        guard patch.designMeta.canvases.map({ $0.lowercased() }).contains("stream") else {
+        let canvases = patch.designMeta.canvases.map { $0.lowercased() }
+        guard canvases.contains("stream") else {
             throw ComposeError.missingStreamCanvas
+        }
+        let streamOnly = patch.designMeta.streamOnly == true
+        if !streamOnly && !canvases.contains("phone") {
+            throw ComposeError.missingPhoneCanvas
         }
         for slide in patch.slides {
             let hex = slide.backgroundHex.trimmingCharacters(in: .whitespaces)
@@ -373,9 +383,11 @@ enum AIComposeAPI {
 
 extension ShowController {
     /// Appends patch slides to a named group. Fresh ids so repeat applies never collide.
+    /// Ensures a Phone 9:16 board exists unless the patch is stream-only.
     @discardableResult
-    func applyComposePatch(_ patch: ComposePatch, groupName: String = AIComposeAPI.draftGroupName) throws -> [SlideID] {
+    func applyComposePatch(_ patch: ComposePatch, groupName: String = AIComposeAPI.draftGroupName) throws -> AgentSlidePlacement {
         try ComposeDesignValidator.validate(patch)
+        let wantPhone = patch.designMeta.streamOnly != true
         let slides = patch.slides.map { source -> Slide in
             var slide = source
             slide.id = UUID()
@@ -384,10 +396,57 @@ extension ShowController {
                 copy.id = UUID()
                 return copy
             }
+            if wantPhone {
+                Self.ensurePhoneEditorCanvas(on: &slide, backgroundHex: slide.backgroundHex)
+            } else {
+                Self.ensurePrimaryEditorCanvas(on: &slide, backgroundHex: slide.backgroundHex)
+            }
             return slide
         }
         appendSlides(slides, toGroupNamed: groupName, colorHex: "#6B9FE0")
-        return slides.map(\.id)
+        return AgentSlidePlacement(
+            groupName: groupName,
+            slideIDs: slides.map(\.id),
+            slideTitles: slides.map(\.title),
+            showID: show.id
+        )
+    }
+
+    /// Stream primary (16:9 design space) when the slide has no boards yet.
+    static func ensurePrimaryEditorCanvas(on slide: inout Slide, backgroundHex: String) {
+        if slide.editorCanvases.contains(where: \.isPrimary) { return }
+        let primary = EditorCanvasFrame(
+            id: UUID(),
+            name: "Stream",
+            width: CanvasConfig.width,
+            height: CanvasConfig.height,
+            originX: 0,
+            originY: 0,
+            isPrimary: true,
+            backgroundEnabled: slide.backgroundEnabled,
+            backgroundHex: backgroundHex.isEmpty ? "#121214" : backgroundHex
+        )
+        slide.editorCanvases.insert(primary, at: 0)
+    }
+
+    /// Dual-canvas default: Stream primary + Phone secondary at 2160x3840 design space.
+    static func ensurePhoneEditorCanvas(on slide: inout Slide, backgroundHex: String) {
+        ensurePrimaryEditorCanvas(on: &slide, backgroundHex: backgroundHex)
+        let hasPhone = slide.editorCanvases.contains { $0.isPhoneArtboard }
+        guard !hasPhone else { return }
+        let primary = slide.editorCanvases.first(where: \.isPrimary) ?? slide.editorCanvases[0]
+        let phone = EditorCanvasFrame(
+            id: UUID(),
+            name: "Phone",
+            width: 2160,
+            height: 3840,
+            originX: primary.originX + primary.width + 480,
+            originY: primary.originY,
+            isPrimary: false,
+            backgroundEnabled: true,
+            backgroundHex: backgroundHex.isEmpty ? "#121214" : backgroundHex
+        )
+        slide.editorCanvases.append(phone)
     }
 
     func handleAICompose(method: String, parts: [String], body: Data?) -> (Int, String)? {
@@ -412,12 +471,15 @@ extension ShowController {
                 if show.id == ProgramOutlinePresentation.showID {
                     return (409, ControlJSON.encode(["ok": false, "error": "program_outline", "message": "Open a show first"]))
                 }
-                let ids = try applyComposePatch(patch, groupName: group)
+                let placement = try applyComposePatch(patch, groupName: group)
                 return (200, ControlJSON.encode([
                     "ok": true,
-                    "group": group,
-                    "slide_count": ids.count,
-                    "slide_ids": ids.map(\.uuidString),
+                    "group": placement.groupName,
+                    "slide_count": placement.slideIDs.count,
+                    "slide_ids": placement.slideIDs.map(\.uuidString),
+                    "slide_titles": placement.slideTitles,
+                    "deep_link": placement.deepLink,
+                    "label": placement.label,
                     "show_id": show.id.uuidString,
                 ]))
             } catch {

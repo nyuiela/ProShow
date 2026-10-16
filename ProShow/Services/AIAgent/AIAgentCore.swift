@@ -12,6 +12,7 @@ struct AgentEvent: Identifiable, Hashable, Sendable {
         case toolResult(name: String, callID: String, ok: Bool, summary: String)
         case confirmRequired(tool: String, reason: String)
         case draftReady(slideCount: Int, summary: String)
+        case slidesCreated(groupName: String, slideCount: Int, label: String, deepLink: String, slideIDs: [UUID])
         case contextPackUpdated(version: String, previous: String)
         case done(text: String)
         case cancelled
@@ -25,6 +26,7 @@ struct AgentEvent: Identifiable, Hashable, Sendable {
             case .toolResult: "tool_result"
             case .confirmRequired: "confirm_required"
             case .draftReady: "draft_ready"
+            case .slidesCreated: "slides_created"
             case .contextPackUpdated: "context_pack_updated"
             case .done: "done"
             case .cancelled: "cancelled"
@@ -47,6 +49,9 @@ struct AgentEvent: Identifiable, Hashable, Sendable {
         case let .toolResult(n, c, ok, s): data["tool"] = n; data["callId"] = c; data["ok"] = ok; data["summary"] = s
         case let .confirmRequired(t, r): data["tool"] = t; data["reason"] = r
         case let .draftReady(n, s): data["slideCount"] = n; data["summary"] = s
+        case let .slidesCreated(g, n, label, link, ids):
+            data["group"] = g; data["slideCount"] = n; data["label"] = label; data["deepLink"] = link
+            data["slideIds"] = ids.map(\.uuidString)
         case let .contextPackUpdated(v, p): data["version"] = v; data["previousVersion"] = p
         case let .done(t): data["text"] = t
         case .cancelled: break
@@ -170,7 +175,9 @@ enum AgentPromptPacks {
 
     static let fallbackBrief = """
     # ProShow creative design agent
-    You design broadcast slides for ProShow. Follow the contract: ComposePatch v1, Stream 16:9 always, Phone 9:16 only when the project has it.
+    You design broadcast slides for ProShow. Follow the contract: ComposePatch v1.
+    Default: author BOTH Stream 16:9 and Phone 9:16 (designMeta.canvases = ["stream","phone"]).
+    Only skip Phone when the operator explicitly says Stream-only or no Phone (then set designMeta.streamOnly = true and canvases = ["stream"]).
     Use graphite #121214 backgrounds and the accent #6B9FE0 unless the theme says otherwise. Keep text inside safe margins (5 percent).
     Genres (news desk, lower third, mosaic, keynote, workshop) are vocabulary, not a menu. Explain bends in `summary`.
     """
@@ -184,6 +191,8 @@ enum AgentPromptPacks {
     5. Keep replies short. Say what you staged and what the operator should check.
     6. recipeId: use "freeform" for invented layouts.
     7. Tool argument `patch` must be a raw JSON object only. No markdown fences, no prose around it, no stringified JSON.
+    8. Default canvases are ["stream","phone"]. Set designMeta.streamOnly true only when the operator asks for Stream-only.
+    9. After staging, tell the operator the draft will land in group "AI Draft" so they can find it after Apply.
     """
 }
 
