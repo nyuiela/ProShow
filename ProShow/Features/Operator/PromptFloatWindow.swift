@@ -51,6 +51,7 @@ final class PromptFloatController: NSObject, NSWindowDelegate {
             panel.minSize = NSSize(width: 360, height: 72)
             panel.maxSize = NSSize(width: 2200, height: 1400)
             hosting.view.autoresizingMask = [.width, .height]
+            FloatingPanelTransparency.apply(to: panel, hosting: hosting)
             if let hostingView = hosting.view as? NSHostingView<PromptFloatRoot> {
                 hostingView.safeAreaRegions = []
             }

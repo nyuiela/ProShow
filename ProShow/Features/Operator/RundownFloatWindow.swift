@@ -118,6 +118,7 @@ final class RundownFloatController: NSObject, NSWindowDelegate {
             panel.minSize = RundownFloatWindowLayout.minimumSize
             panel.maxSize = RundownFloatWindowLayout.maximumSize
             hosting.view.autoresizingMask = [.width, .height]
+            FloatingPanelTransparency.apply(to: panel, hosting: hosting)
             if let hostingView = hosting.view as? NSHostingView<RundownFloatRoot> {
                 hostingView.safeAreaRegions = []
             }

@@ -328,6 +328,7 @@ final class StudioGlassController: NSObject, NSWindowDelegate {
         panel.isMovable = false
         panel.isReleasedWhenClosed = false
         hosting.view.autoresizingMask = [.width, .height]
+        FloatingPanelTransparency.apply(to: panel, hosting: hosting)
         if let hostingView = hosting.view as? NSHostingView<StudioGlassEdgeRoot> {
             hostingView.safeAreaRegions = []
         }
@@ -390,6 +391,7 @@ final class StudioGlassController: NSObject, NSWindowDelegate {
         panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
         panel.standardWindowButton(.zoomButton)?.isHidden = true
         hosting.view.autoresizingMask = [.width, .height]
+        FloatingPanelTransparency.apply(to: panel, hosting: hosting)
         if let hostingView = hosting.view as? NSHostingView<StudioGlassRoot> {
             hostingView.safeAreaRegions = []
         }
