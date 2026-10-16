@@ -320,8 +320,10 @@ final class VideoIngestEngine {
     private var lastScreenRestartAt: [String: Date] = [:]
     private var spaceChangeObserver: NSObjectProtocol?
     #endif
-    @ObservationIgnored private var lanePublishCoalesced = false
-    @ObservationIgnored private var pendingLanePublish: (() -> Void)?
+    /// Written from the capture queue, drained on main: always accessed under `lanePublishLock`.
+    @ObservationIgnored nonisolated(unsafe) private var lanePublishCoalesced = false
+    @ObservationIgnored nonisolated(unsafe) private var pendingLanePublish: (@MainActor () -> Void)?
+    @ObservationIgnored private nonisolated let lanePublishLock = NSLock()
     /// Invoked on `videoIngestQueue` — must not hop through MainActor (live stream latency).
     @ObservationIgnored nonisolated(unsafe) var onCaptureAudio: ((AudioChannelRole, [Float], Double) -> Void)?
     @ObservationIgnored nonisolated(unsafe) var onCaptureAudioPeak: ((AudioChannelRole, Double) -> Void)?
@@ -1133,17 +1135,26 @@ final class VideoIngestEngine {
     }
 
     /// Collapse bursty SCK/AVF callbacks into one MainActor publish per run loop (keeps UI/stream smooth while dragging windows).
-    private func scheduleLanePublish(_ publish: @escaping @MainActor () -> Void) {
+    /// Called from capture queues. The pending closure (which strongly retains its CVPixelBuffer) is swapped under
+    /// a lock and taken out on main before it runs, so the capture thread can't release it mid-call. Before this,
+    /// the closure var was raced across threads and the 100 ms throttle made a use-after-free likely (EXC_BAD_ACCESS
+    /// in CVPixelBufferGetIOSurface).
+    nonisolated private func scheduleLanePublish(_ publish: @escaping @MainActor () -> Void) {
+        lanePublishLock.lock()
         pendingLanePublish = publish
-        guard !lanePublishCoalesced else { return }
+        let alreadyScheduled = lanePublishCoalesced
         lanePublishCoalesced = true
-        // Perf: lane state drives SwiftUI; cap UI publishes at ~10 Hz. Preview pixels
-        // go through the layer-backed monitors, not this path.
+        lanePublishLock.unlock()
+        guard !alreadyScheduled else { return }
+        // Perf: lane state drives SwiftUI; cap UI publishes at ~10 Hz.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             guard let self else { return }
-            self.lanePublishCoalesced = false
-            self.pendingLanePublish?()
+            self.lanePublishLock.lock()
+            let next = self.pendingLanePublish
             self.pendingLanePublish = nil
+            self.lanePublishCoalesced = false
+            self.lanePublishLock.unlock()
+            MainActor.assumeIsolated { next?() }
         }
     }
 
@@ -1851,6 +1862,9 @@ enum CameraFrameCopy {
         let format = CVPixelBufferGetPixelFormatType(source)
         guard width > 0, height > 0, let dest = take(width: width, height: height, format: format) else { return nil }
         #if canImport(VideoToolbox)
+        // Session create/use/invalidate are serialized: `reset()` could invalidate it mid-transfer.
+        lock.lock()
+        defer { lock.unlock() }
         guard let session = transferSession(),
               VTPixelTransferSessionTransferImage(session, from: source, to: dest) == noErr
         else { return nil }
