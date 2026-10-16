@@ -2,8 +2,8 @@
 import AppKit
 import SwiftUI
 
-/// ChatGPT / Apple Intelligence style agent composer. Floats above the desk on the
-/// active screen. Option-Command-A toggles; Escape dismisses.
+/// iOS 27 Siri / Search-or-Ask style composer. Idle = glass capsule only.
+/// Option-Command-A toggles; Escape dismisses. Agent settings live in Settings > AI.
 @MainActor
 @Observable
 final class AgentComposerController: NSObject, NSWindowDelegate {
@@ -14,8 +14,8 @@ final class AgentComposerController: NSObject, NSWindowDelegate {
     private var escapeMonitor: Any?
     private var localKeyMonitor: Any?
 
-    private let compactSize = NSSize(width: 680, height: 92)
-    private let expandedSize = NSSize(width: 720, height: 420)
+    private let pillSize = NSSize(width: 560, height: 56)
+    private let expandedSize = NSSize(width: 600, height: 360)
 
     func toggle(controller: ShowController) {
         AIAgentSession.shared.attach(controller)
@@ -25,7 +25,7 @@ final class AgentComposerController: NSObject, NSWindowDelegate {
     func open() {
         ensurePanel()
         guard let panel else { return }
-        placeOnActiveScreen(expanded: hasReplySurface)
+        placeOnActiveScreen(expanded: false)
         panel.makeKeyAndOrderFront(nil)
         FloatingPanelTransparency.clearChain(panel)
         NSApp.activate(ignoringOtherApps: true)
@@ -42,13 +42,12 @@ final class AgentComposerController: NSObject, NSWindowDelegate {
 
     func resizeForContent(expanded: Bool) {
         guard let panel, isOpen else { return }
-        let size = expanded ? expandedSize : compactSize
+        let size = expanded ? expandedSize : pillSize
         var frame = panel.frame
-        let bottom = frame.minY
         let midX = frame.midX
+        let bottom = frame.minY
         frame.size = size
         frame.origin.x = midX - size.width / 2
-        // Keep the input bar anchored near the lower third while growing upward.
         frame.origin.y = bottom
         if let screen = panel.screen ?? NSScreen.main {
             let visible = screen.visibleFrame
@@ -59,16 +58,11 @@ final class AgentComposerController: NSObject, NSWindowDelegate {
         FloatingPanelTransparency.clearChain(panel)
     }
 
-    private var hasReplySurface: Bool {
-        let session = AIAgentSession.shared
-        return session.isRunning || session.draft != nil || !session.events.isEmpty
-    }
-
     private func ensurePanel() {
         if panel != nil { return }
         let hosting = NSHostingController(rootView: AgentComposerRoot())
         let panel = AgentComposerPanel(
-            contentRect: NSRect(origin: .zero, size: compactSize),
+            contentRect: NSRect(origin: .zero, size: pillSize),
             styleMask: [.borderless, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -88,8 +82,8 @@ final class AgentComposerController: NSObject, NSWindowDelegate {
         panel.titlebarAppearsTransparent = true
         panel.isReleasedWhenClosed = false
         panel.delegate = self
-        panel.minSize = NSSize(width: 480, height: 80)
-        panel.maxSize = NSSize(width: 900, height: 640)
+        panel.minSize = NSSize(width: 420, height: 52)
+        panel.maxSize = NSSize(width: 720, height: 520)
         hosting.view.autoresizingMask = [.width, .height]
         FloatingPanelTransparency.apply(to: panel, hosting: hosting)
         self.panel = panel
@@ -100,10 +94,9 @@ final class AgentComposerController: NSObject, NSWindowDelegate {
         let screen = screenUnderMouse() ?? NSApp.keyWindow?.screen ?? NSScreen.main
         guard let screen else { return }
         let visible = screen.visibleFrame
-        let size = expanded ? expandedSize : compactSize
+        let size = expanded ? expandedSize : pillSize
         let x = visible.midX - size.width / 2
-        // Lower third of the active display (Spotlight-adjacent).
-        let y = visible.minY + max(72, visible.height * 0.18)
+        let y = visible.minY + max(80, visible.height * 0.22)
         panel.setFrame(NSRect(x: x, y: y, width: size.width, height: size.height), display: true)
     }
 
@@ -119,12 +112,15 @@ final class AgentComposerController: NSObject, NSWindowDelegate {
                 self?.close()
                 return nil
             }
+            // Return without Shift → send. Shift+Return → newline (pass through).
+            if event.keyCode == 36, !event.modifierFlags.contains(.shift) {
+                NotificationCenter.default.post(name: .agentComposerSubmit, object: nil)
+                return nil
+            }
             return event
         }
         escapeMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            // Global Escape only while we are open; does not steal text input elsewhere.
             guard self?.isOpen == true, event.keyCode == 53 else { return }
-            // Global monitors cannot swallow; close only if our panel is key.
             if self?.panel?.isKeyWindow == true {
                 DispatchQueue.main.async { self?.close() }
             }
@@ -152,7 +148,6 @@ final class AgentComposerController: NSObject, NSWindowDelegate {
     }
 }
 
-/// Panel that can become key so the composer text field accepts typing.
 private final class AgentComposerPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
@@ -160,48 +155,47 @@ private final class AgentComposerPanel: NSPanel {
 
 extension Notification.Name {
     static let agentComposerDidOpen = Notification.Name("proshow.agentComposer.didOpen")
+    static let agentComposerSubmit = Notification.Name("proshow.agentComposer.submit")
 }
 
-// MARK: - Root view
+// MARK: - Root
 
 private enum ComposerInk {
-    static let graphite = Color(red: 0x12 / 255, green: 0x12 / 255, blue: 0x14 / 255)
+    static let accent = Color(red: 0x6B / 255, green: 0x9F / 255, blue: 0xE0 / 255)
     static let surface = Color(red: 0x1B / 255, green: 0x1B / 255, blue: 0x1F / 255)
     static let raised = Color(red: 0x25 / 255, green: 0x25 / 255, blue: 0x2A / 255)
-    static let accent = Color(red: 0x6B / 255, green: 0x9F / 255, blue: 0xE0 / 255)
 }
 
 private struct AgentComposerRoot: View {
     @Bindable private var session = AIAgentSession.shared
     @State private var prompt = ""
-    @State private var showKeyField = false
-    @State private var keyEntry = ""
     @State private var applied: Int?
+    @State private var baselineSeq = 0
     @FocusState private var inputFocused: Bool
 
+    /// Expand only for this open session's activity or a staged draft.
     private var showReply: Bool {
-        session.isRunning || session.draft != nil || !session.events.isEmpty
+        if session.isRunning || session.draft != nil { return true }
+        return session.events.contains { $0.seq > baselineSeq }
     }
 
     var body: some View {
-        DeskGlassGroup(spacing: 12) {
-            VStack(spacing: 0) {
+        DeskGlassGroup(spacing: 10) {
+            VStack(spacing: 8) {
                 if showReply {
                     replyLayer
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
-                inputBar
+                searchPill
             }
-            .padding(10)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-            .deskChromeGlass(in: RoundedRectangle(cornerRadius: 22, style: .continuous), interactive: true)
-            .shadow(color: .black.opacity(0.35), radius: 28, y: 12)
         }
         .padding(2)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.clear)
         .foregroundStyle(.white.opacity(0.92))
         .onAppear {
+            baselineSeq = session.events.last?.seq ?? 0
             inputFocused = true
             AgentComposerController.shared.resizeForContent(expanded: showReply)
         }
@@ -209,35 +203,81 @@ private struct AgentComposerRoot: View {
             AgentComposerController.shared.resizeForContent(expanded: expanded)
         }
         .onReceive(NotificationCenter.default.publisher(for: .agentComposerDidOpen)) { _ in
+            baselineSeq = session.events.last?.seq ?? 0
+            prompt = ""
+            applied = nil
             inputFocused = true
+            AgentComposerController.shared.resizeForContent(expanded: false)
         }
-        .animation(.spring(response: 0.32, dampingFraction: 0.86), value: showReply)
+        .onReceive(NotificationCenter.default.publisher(for: .agentComposerSubmit)) { _ in
+            send()
+        }
+        .animation(.spring(response: 0.28, dampingFraction: 0.88), value: showReply)
     }
+
+    // MARK: Idle pill (reference)
+
+    private var searchPill: some View {
+        HStack(spacing: 10) {
+            glowingCaret
+            TextField("Search or Ask", text: $prompt, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(.system(size: 16, weight: .regular))
+                .lineLimit(1...4)
+                .focused($inputFocused)
+                .foregroundStyle(.white.opacity(0.92))
+                // Enter is handled by the key monitor so Shift+Enter can newline.
+                .onSubmit { /* swallowed by monitor; keep for accessibility */ }
+
+            if session.isRunning {
+                ProgressView()
+                    .controlSize(.small)
+                    .scaleEffect(0.85)
+                Button("Stop") { session.cancel() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(ComposerInk.accent)
+            }
+
+            Button(action: micStub) {
+                Image(systemName: "mic")
+                    .font(.system(size: 15, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.55))
+            }
+            .buttonStyle(.plain)
+            .help("Voice coming later")
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity)
+        .deskChromeGlass(in: Capsule(style: .continuous), interactive: true)
+        .shadow(color: .black.opacity(0.28), radius: 20, y: 10)
+    }
+
+    private var glowingCaret: some View {
+        Capsule()
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.45, green: 0.75, blue: 1.0),
+                        Color(red: 1.0, green: 0.85, blue: 0.35),
+                        Color(red: 0.95, green: 0.95, blue: 1.0),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .frame(width: 2.5, height: 22)
+            .shadow(color: Color(red: 0.45, green: 0.75, blue: 1.0).opacity(0.85), radius: 4)
+            .shadow(color: Color(red: 1.0, green: 0.85, blue: 0.35).opacity(0.55), radius: 6)
+            .opacity(inputFocused && prompt.isEmpty ? 1 : (inputFocused ? 0.35 : 0.2))
+            .accessibilityHidden(true)
+    }
+
+    // MARK: Thin reply layer
 
     private var replyLayer: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Text("Agent")
-                    .font(.system(size: 12, weight: .semibold))
-                statusChip
-                Spacer()
-                if session.isRunning {
-                    Button("Stop") { session.cancel() }
-                        .buttonStyle(.borderless)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(ComposerInk.accent)
-                }
-                Button {
-                    session.reset()
-                    applied = nil
-                } label: {
-                    Image(systemName: "arrow.counterclockwise")
-                }
-                .buttonStyle(.borderless)
-                .help("New session")
-            }
-            .padding(.horizontal, 4)
-
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 6) {
@@ -246,155 +286,51 @@ private struct AgentComposerRoot: View {
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(10)
+                    .padding(12)
                 }
                 .frame(maxHeight: .infinity)
-                .background(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(ComposerInk.surface.opacity(0.55))
-                )
                 .onChange(of: session.events.count) { _, _ in
                     if let last = rows.last { proxy.scrollTo(last.id, anchor: .bottom) }
                 }
             }
 
             if let draft = session.draft {
-                draftCard(draft)
+                HStack(spacing: 8) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Draft · \(draft.slides.count) slides")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text(draft.summary)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.white.opacity(0.55))
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                    Button("Discard") { session.discardDraft() }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white.opacity(0.55))
+                    Button("Apply") { applied = session.applyDraft() }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(ComposerInk.accent)
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 4)
             }
             if let applied {
-                Text(applied > 0 ? "Added \(applied) slides to AI Draft." : "Nothing applied.")
+                Text(applied > 0 ? "Added \(applied) to AI Draft." : "Nothing applied.")
                     .font(.system(size: 11))
-                    .foregroundStyle(.white.opacity(0.55))
-                    .padding(.horizontal, 4)
+                    .foregroundStyle(.white.opacity(0.45))
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 4)
             }
         }
-        .padding(.bottom, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .deskChromeGlass(in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .shadow(color: .black.opacity(0.22), radius: 16, y: 8)
     }
 
-    private var inputBar: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if showKeyField || (!session.keyConnected && session.provider == .xai) {
-                keyRow
-            }
-            HStack(alignment: .bottom, spacing: 10) {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(ComposerInk.accent)
-                        TextField("Ask ProShow to design slides…", text: $prompt, axis: .vertical)
-                            .textFieldStyle(.plain)
-                            .font(.system(size: 15))
-                            .lineLimit(1...5)
-                            .focused($inputFocused)
-                            .onSubmit(send)
-                        if !session.deskUpdate.isEmpty {
-                            Text("Desk note")
-                                .font(.system(size: 10, weight: .semibold))
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Capsule().fill(ComposerInk.accent.opacity(0.25)))
-                        }
-                    }
-                    TextField("Desk update for next turn (optional)", text: $session.deskUpdate)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.white.opacity(0.55))
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(ComposerInk.raised.opacity(0.72))
-                )
-
-                VStack(spacing: 6) {
-                    Picker("", selection: $session.provider) {
-                        ForEach(AIAgentSession.ProviderChoice.allCases) { Text($0.label).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 120)
-
-                    if session.isRunning {
-                        Button("Stop") { session.cancel() }
-                            .buttonStyle(.bordered)
-                    } else {
-                        Button(action: send) {
-                            Image(systemName: "arrow.up.circle.fill")
-                                .font(.system(size: 28))
-                                .foregroundStyle(canSend ? ComposerInk.accent : .white.opacity(0.25))
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(!canSend)
-                        .help("Send")
-                    }
-
-                    Button { showKeyField.toggle() } label: {
-                        Image(systemName: "key")
-                            .font(.system(size: 12))
-                    }
-                    .buttonStyle(.borderless)
-                    .help("xAI key")
-                }
-            }
-            HStack {
-                statusChip
-                Spacer()
-                Text("⌥⌘A hide · Esc dismiss")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.35))
-            }
-            .padding(.horizontal, 4)
-        }
-    }
-
-    private var keyRow: some View {
-        HStack {
-            SecureField("xAI API key", text: $keyEntry)
-                .textFieldStyle(.roundedBorder)
-            Button("Save") {
-                if session.saveKey(keyEntry) {
-                    keyEntry = ""
-                    showKeyField = false
-                }
-            }
-            .disabled(keyEntry.trimmingCharacters(in: .whitespaces).isEmpty)
-            if session.keyConnected {
-                Button("Remove") { session.clearKey() }
-            }
-        }
-        .font(.system(size: 12))
-    }
-
-    private var statusChip: some View {
-        Label(
-            session.keyConnected ? "xAI Connected" : "xAI Missing",
-            systemImage: session.keyConnected ? "checkmark.circle.fill" : "exclamationmark.circle"
-        )
-        .font(.system(size: 10, weight: .medium))
-        .foregroundStyle(session.keyConnected ? ComposerInk.accent : .white.opacity(0.45))
-    }
-
-    private func draftCard(_ draft: ComposePatch) -> some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Draft ready · \(draft.slides.count) slides")
-                    .font(.system(size: 13, weight: .semibold))
-                Text(draft.summary)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.white.opacity(0.6))
-                    .lineLimit(2)
-            }
-            Spacer()
-            Button("Discard") { session.discardDraft() }
-            Button("Apply to AI Draft") { applied = session.applyDraft() }
-                .buttonStyle(.borderedProminent)
-                .tint(ComposerInk.accent)
-        }
-        .padding(10)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(ComposerInk.raised.opacity(0.85)))
-    }
+    private func micStub() {}
 
     private var canSend: Bool {
         !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !session.isRunning
@@ -412,7 +348,7 @@ private struct AgentComposerRoot: View {
 
     private var rows: [AgentRow] {
         var out: [AgentRow] = []
-        for event in session.events {
+        for event in session.events where event.seq > baselineSeq {
             if case let .delta(text) = event.kind, let last = out.last, last.kind == .text {
                 out[out.count - 1].text += text
                 continue
@@ -434,10 +370,10 @@ private struct ComposerRowView: View {
                 .textSelection(.enabled)
         default:
             HStack(spacing: 6) {
-                Circle().fill(color).frame(width: 6, height: 6)
+                Circle().fill(color).frame(width: 5, height: 5)
                 Text(row.text)
                     .font(.system(size: 11, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.6))
+                    .foregroundStyle(.white.opacity(0.55))
             }
         }
     }
@@ -447,7 +383,7 @@ private struct ComposerRowView: View {
         case .tool: ComposerInk.accent
         case .warn: .orange
         case .error: .red
-        default: .white.opacity(0.4)
+        default: .white.opacity(0.35)
         }
     }
 }

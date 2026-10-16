@@ -19,12 +19,19 @@ enum XAIKeyStore {
 
 enum XAIConfig {
     static let modelKey = "proshow.xai.model"
+    static let providerKey = "proshow.ai.provider"
     static let defaultModel = "grok-4"
     static let endpoint = URL(string: "https://api.x.ai/v1/chat/completions")!
 
     static var model: String {
-        let value = UserDefaults.standard.string(forKey: modelKey) ?? ""
-        return value.isEmpty ? defaultModel : value
+        get {
+            let value = UserDefaults.standard.string(forKey: modelKey) ?? ""
+            return value.isEmpty ? defaultModel : value
+        }
+        set {
+            let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            UserDefaults.standard.set(trimmed.isEmpty ? defaultModel : trimmed, forKey: modelKey)
+        }
     }
 }
 
@@ -41,7 +48,7 @@ enum ProviderError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .missingKey: "xAI key missing. Add it in AI Desk."
+        case .missingKey: "xAI key missing. Add it in Settings > AI."
         case let .http(code, message): "xAI \(code): \(message)"
         case .badStream: "xAI stream ended early"
         }

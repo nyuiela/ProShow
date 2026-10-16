@@ -407,7 +407,7 @@ enum SettingsNavSection: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .show: [.general, .teleprompter, .groups]
         case .output: [.streaming, .screens, .audio, .recording]
-        case .studio: [.inputs, .media, .network, .integrations]
+        case .studio: [.inputs, .media, .network, .integrations, .ai]
         case .machine: [.cloud, .updates]
         }
     }
@@ -423,6 +423,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable, Sendable {
     case recording
     case media
     case integrations
+    case ai
     case groups
     case teleprompter
     case cloud
@@ -441,6 +442,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable, Sendable {
         case .recording: "Recording"
         case .media: "Media"
         case .integrations: "Integrations"
+        case .ai: "AI"
         case .groups: "Groups"
         case .teleprompter: "Teleprompter"
         case .cloud: "Backups"
@@ -459,6 +461,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable, Sendable {
         case .recording: "Program and ISO files next to the project bundle."
         case .media: "How imported files land in the project and how previews are built."
         case .integrations: "Stream Deck, Companion, and outbound show hooks."
+        case .ai: "Ask ProShow agent, xAI key, model, and practice mode."
         case .groups: "Slide group colors used for search and rundown marks."
         case .teleprompter: "CueLog word clock, pause holds, and how the prompt draws each word."
         case .cloud: "Copies of the project stay on this Mac unless you choose a folder."
@@ -477,6 +480,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable, Sendable {
         case .recording: "record.circle"
         case .media: "folder"
         case .integrations: "puzzlepiece.extension"
+        case .ai: "sparkles"
         case .groups: "tag"
         case .teleprompter: "text.word.spacing"
         case .cloud: "icloud"
@@ -495,6 +499,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable, Sendable {
         case .recording: ["iso", "prores", "hevc", "split"]
         case .media: ["import", "thumbnail", "waveform", "copy"]
         case .integrations: ["webhook", "stream deck", "companion", "chat"]
+        case .ai: ["xai", "grok", "agent", "compose", "practice", "ask", "key", "model"]
         case .groups: ["verse", "chorus", "label", "color"]
         case .teleprompter: ["prompt", "pause", "wpm", "kinetic", "scroll", "cuelog"]
         case .cloud: ["sync", "backup"]

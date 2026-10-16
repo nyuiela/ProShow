@@ -15,7 +15,15 @@ final class AIAgentSession {
     }
 
     weak var controller: ShowController?
-    var provider: ProviderChoice = XAIKeyStore.isConnected ? .xai : .practice
+    var provider: ProviderChoice = {
+        if let raw = UserDefaults.standard.string(forKey: XAIConfig.providerKey),
+           let choice = ProviderChoice(rawValue: raw) {
+            return choice
+        }
+        return XAIKeyStore.isConnected ? .xai : .practice
+    }() {
+        didSet { UserDefaults.standard.set(provider.rawValue, forKey: XAIConfig.providerKey) }
+    }
     var deskUpdate = ""
     private(set) var events: [AgentEvent] = []
     private(set) var isRunning = false
@@ -83,8 +91,12 @@ final class AIAgentSession {
             emit(.error("AI compose is off. Turn on proshow.aiComposeV1."))
             return
         }
-        let note = deskUpdate.trimmingCharacters(in: .whitespacesAndNewlines)
+        var note = deskUpdate.trimmingCharacters(in: .whitespacesAndNewlines)
         deskUpdate = ""
+        if note.isEmpty {
+            note = (UserDefaults.standard.string(forKey: "proshow.ai.deskUpdateDefault") ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
         isRunning = true
         turnTask = Task { [weak self] in
             await self?.runTurn(prompt: trimmed, deskNote: note)
