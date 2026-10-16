@@ -183,6 +183,7 @@ enum AgentPromptPacks {
     4. Never call take, hold, arm_destinations. They need the operator and do nothing for you.
     5. Keep replies short. Say what you staged and what the operator should check.
     6. recipeId: use "freeform" for invented layouts.
+    7. Tool argument `patch` must be a raw JSON object only. No markdown fences, no prose around it, no stringified JSON.
     """
 }
 

@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// Floating desk panels (Studio, Rundown, Prompt) must composite over the desktop with no plate.
+/// Floating desk panels (Studio, Rundown, Prompt, Ask) must composite over the desktop with no plate.
 ///
 /// Root cause of the black plate: clearing `NSPanel.backgroundColor` once at creation is not enough.
 /// The hosting view, the content view, and the window frame view (NSThemeFrame) each get a backing
@@ -10,9 +10,11 @@ import SwiftUI
 /// backdrop) on macOS 26+. Everything outside the rounded SwiftUI glass then shows as black.
 ///
 /// Fix: clear the whole chain at creation, again after the panel is first ordered in, and on
-/// every resize / screen / key change, and hide any frame-view backdrop that is not ours.
+/// every resize / screen / key change (always via MainActor Task, never assumeIsolated), and hide
+/// any frame-view backdrop that is not ours.
 enum FloatingPanelTransparency {
     @MainActor private static var observed = Set<ObjectIdentifier>()
+    @MainActor private static var pending = Set<ObjectIdentifier>()
 
     @MainActor
     static func apply<Content: View>(to panel: NSPanel, hosting: NSHostingController<Content>) {
@@ -33,14 +35,32 @@ enum FloatingPanelTransparency {
         ]
         for name in names {
             NotificationCenter.default.addObserver(forName: name, object: panel, queue: .main) { [weak panel] _ in
-                MainActor.assumeIsolated {
-                    if let panel { clearChain(panel) }
+                // Never MainActor.assumeIsolated here: NotificationCenter .main is the main
+                // thread, not always the MainActor executor. assumeIsolated traps (SIGTRAP).
+                guard let panel else { return }
+                Task { @MainActor in
+                    scheduleClear(panel)
                 }
             }
         }
-        // Layers are created lazily on first display; clear again once the panel is on screen.
         DispatchQueue.main.async { [weak panel] in
-            if let panel { clearChain(panel) }
+            Task { @MainActor in
+                if let panel { clearChain(panel) }
+            }
+        }
+    }
+
+    /// Coalesce bursty resize/key notifications so we do not re-enter layout mid-pass.
+    @MainActor
+    private static func scheduleClear(_ panel: NSWindow) {
+        let id = ObjectIdentifier(panel)
+        guard !pending.contains(id) else { return }
+        pending.insert(id)
+        DispatchQueue.main.async {
+            Task { @MainActor in
+                pending.remove(id)
+                clearChain(panel)
+            }
         }
     }
 

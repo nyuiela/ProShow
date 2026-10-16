@@ -72,4 +72,37 @@ struct AIComposeTests {
         #expect(controller.show.groups.contains { $0.name == "AI Draft" && $0.slides.count == 8 })
         #expect(!controller.streaming.isLive)
     }
+
+
+    @Test func flexibleDecodeAcceptsFencedAndStringifiedPatch() throws {
+        let fixture = String(decoding: try Self.fixture(), as: UTF8.self)
+        let fenced = "```json\n\(fixture)\n```"
+        let (a, notesA) = try ComposeCodec.decodePatchFlexible(fenced)
+        #expect(a.slides.count == 8)
+        #expect(notesA.contains { $0.contains("fence") || $0.contains("extracted") || $0.contains("string") })
+
+        let stringified = fixture
+        let (b, _) = try ComposeCodec.decodePatchFlexible(stringified)
+        #expect(b.slides.count == 8)
+
+        let wrapped = "{\"patch\": \(fixture)}"
+        let (c, notesC) = try ComposeCodec.decodePatchFlexible(wrapped)
+        #expect(c.slides.count == 8)
+        #expect(notesC.contains { $0.contains("unwrapped") || $0.contains("extracted") })
+    }
+
+    @Test func flexibleDecodeStripsUnknownKeysAndNeverThrowsCrash() throws {
+        var object = try JSONSerialization.jsonObject(with: Self.fixture()) as! [String: Any]
+        object["surprise"] = 1
+        let (patch, notes) = try ComposeCodec.decodePatchFlexible(object, stripUnknownKeys: true)
+        #expect(patch.slides.count == 8)
+        #expect(notes.contains { $0.contains("surprise") })
+    }
+
+    @Test func flexibleDecodeReportsPreviewOnGarbage() {
+        #expect(throws: ComposeError.self) {
+            _ = try ComposeCodec.decodePatchFlexible("not json at all {{{")
+        }
+    }
+
 }

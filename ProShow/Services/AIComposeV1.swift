@@ -119,16 +119,144 @@ enum ComposeError: Error, Equatable {
 }
 
 enum ComposeCodec {
-    /// Strict decode: top-level patch keys must be known.
+    /// Strict decode: top-level patch keys must be known. Used by Control API fixtures.
     static func decodePatch(_ data: Data) throws -> ComposePatch {
         if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             try checkKeys(object)
         }
+        return try decodePatchObject(data)
+    }
+
+    /// Agent / model path: accept messy payloads, strip fences, extract `{...}`, tolerate stringified JSON.
+    /// Never crashes the desk. Returns a clear ComposeError with a truncated preview.
+    static func decodePatchFlexible(_ raw: Any, stripUnknownKeys: Bool = true) throws -> (patch: ComposePatch, notes: [String]) {
+        var notes: [String] = []
+        let data: Data
         do {
-            return try JSONDecoder().decode(ComposePatch.self, from: data)
+            data = try coerceToPatchData(raw, notes: &notes)
+        } catch let error as ComposeError {
+            throw error
         } catch {
             throw ComposeError.invalidJSON(String(describing: error))
         }
+        var object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+        if stripUnknownKeys {
+            let known = Set(ComposePatch.CodingKeys.allCases.map(\.rawValue))
+            let extra = object.keys.filter { !known.contains($0) }.sorted()
+            if !extra.isEmpty {
+                notes.append("stripped_unknown_keys:\(extra.joined(separator: ","))")
+                for key in extra { object.removeValue(forKey: key) }
+            }
+        } else {
+            try checkKeys(object)
+        }
+        let cleaned = try JSONSerialization.data(withJSONObject: object)
+        let patch = try decodePatchObject(cleaned)
+        return (patch, notes)
+    }
+
+    private static func decodePatchObject(_ data: Data) throws -> ComposePatch {
+        do {
+            return try JSONDecoder().decode(ComposePatch.self, from: data)
+        } catch {
+            let preview = String(decoding: data.prefix(280), as: UTF8.self)
+            throw ComposeError.invalidJSON("\(error) | preview=\(preview)")
+        }
+    }
+
+    /// Coerce tool-arg `patch` (dict, string, Data) into JSON object bytes.
+    static func coerceToPatchData(_ raw: Any, notes: inout [String]) throws -> Data {
+        if let data = raw as? Data {
+            return try sanitizeJSONData(data, notes: &notes)
+        }
+        if let dict = raw as? [String: Any] {
+            guard JSONSerialization.isValidJSONObject(dict) else {
+                throw ComposeError.invalidJSON("patch object is not JSON-serializable | preview=\(previewAny(dict))")
+            }
+            return try JSONSerialization.data(withJSONObject: dict)
+        }
+        if let string = raw as? String {
+            notes.append("patch_was_string")
+            return try sanitizeJSONData(Data(string.utf8), notes: &notes)
+        }
+        if let number = raw as? NSNumber {
+            throw ComposeError.invalidJSON("patch must be an object, got number \(number)")
+        }
+        throw ComposeError.invalidJSON("patch must be an object or JSON string | preview=\(previewAny(raw))")
+    }
+
+    /// Strip markdown fences, extract the first JSON object, repair light damage.
+    static func sanitizeJSONData(_ data: Data, notes: inout [String]) throws -> Data {
+        var text = String(decoding: data, as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.hasPrefix("```") {
+            notes.append("stripped_markdown_fence")
+            text = stripMarkdownFence(text)
+        }
+        // Some models wrap the patch again: {"patch":{...}}
+        if let unwrapped = unwrapNestedPatch(text) {
+            notes.append("unwrapped_nested_patch")
+            text = unwrapped
+        }
+        if let start = text.firstIndex(of: "{"), let end = text.lastIndex(of: "}"), start < end {
+            let sliced = String(text[start...end])
+            if sliced != text {
+                notes.append("extracted_object_span")
+                text = sliced
+            }
+        }
+        // Common damage: trailing commas before } or ]
+        let repaired = text
+            .replacingOccurrences(of: ",\\s*}", with: "}", options: .regularExpression)
+            .replacingOccurrences(of: ",\\s*]", with: "]", options: .regularExpression)
+        if repaired != text {
+            notes.append("repaired_trailing_commas")
+            text = repaired
+        }
+        guard let out = text.data(using: .utf8) else {
+            throw ComposeError.invalidJSON("UTF-8 encode failed | preview=\(String(text.prefix(240)))")
+        }
+        do {
+            let obj = try JSONSerialization.jsonObject(with: out)
+            guard obj is [String: Any] else {
+                throw ComposeError.invalidJSON("Top-level JSON must be an object | preview=\(String(text.prefix(240)))")
+            }
+            return out
+        } catch {
+            throw ComposeError.invalidJSON("\(error) | preview=\(String(text.prefix(240)))")
+        }
+    }
+
+    private static func stripMarkdownFence(_ text: String) -> String {
+        var lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        if lines.first?.hasPrefix("```") == true { lines.removeFirst() }
+        if lines.last?.hasPrefix("```") == true { lines.removeLast() }
+        return lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func unwrapNestedPatch(_ text: String) -> String? {
+        guard let data = text.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              object.keys.count == 1,
+              let inner = object["patch"]
+        else { return nil }
+        if let dict = inner as? [String: Any],
+           let data = try? JSONSerialization.data(withJSONObject: dict),
+           let s = String(data: data, encoding: .utf8) {
+            return s
+        }
+        if let s = inner as? String { return s }
+        return nil
+    }
+
+    private static func previewAny(_ value: Any) -> String {
+        if let s = value as? String { return String(s.prefix(240)) }
+        if JSONSerialization.isValidJSONObject(value),
+           let data = try? JSONSerialization.data(withJSONObject: value),
+           let s = String(data: data, encoding: .utf8) {
+            return String(s.prefix(240))
+        }
+        return String(describing: value).prefix(240).description
     }
 
     static func checkKeys(_ object: [String: Any]) throws {
@@ -142,7 +270,8 @@ enum ComposeCodec {
               let object = try? JSONSerialization.jsonObject(with: body) as? [String: Any]
         else { throw ComposeError.invalidJSON("Body is not a JSON object") }
         guard let inner = object[key] else { return (object, nil) }
-        let data = try JSONSerialization.data(withJSONObject: inner)
+        var notes: [String] = []
+        let data = try coerceToPatchData(inner, notes: &notes)
         return (object, data)
     }
 
@@ -173,7 +302,8 @@ enum ComposeDesignValidator {
         for slide in patch.slides {
             let hex = slide.backgroundHex.trimmingCharacters(in: .whitespaces)
             if hex.isEmpty { continue }
-            if !allowedBackgrounds.contains(hex.uppercased()) {
+            let allowed = Set(allowedBackgrounds.map { $0.uppercased() })
+            if !allowed.contains(hex.uppercased()) {
                 throw ComposeError.offTokenColor(hex)
             }
         }

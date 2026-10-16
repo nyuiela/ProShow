@@ -41,6 +41,14 @@ final class AgentComposerController: NSObject, NSWindowDelegate {
     }
 
     func resizeForContent(expanded: Bool) {
+        // Defer past the current SwiftUI/AttributeGraph pass. Growing the NSPanel
+        // during glass layout previously collided with CoreInteractionEffect.
+        DispatchQueue.main.async { [weak self] in
+            self?.applyResize(expanded: expanded)
+        }
+    }
+
+    private func applyResize(expanded: Bool) {
         guard let panel, isOpen else { return }
         let size = expanded ? expandedSize : pillSize
         var frame = panel.frame
@@ -54,7 +62,7 @@ final class AgentComposerController: NSObject, NSWindowDelegate {
             frame.origin.x = min(max(frame.origin.x, visible.minX + 16), visible.maxX - size.width - 16)
             frame.origin.y = min(max(frame.origin.y, visible.minY + 24), visible.maxY - size.height - 24)
         }
-        panel.setFrame(frame, display: true, animate: true)
+        panel.setFrame(frame, display: true, animate: false)
         FloatingPanelTransparency.clearChain(panel)
     }
 
@@ -250,7 +258,7 @@ private struct AgentComposerRoot: View {
         .padding(.horizontal, 18)
         .padding(.vertical, 14)
         .frame(maxWidth: .infinity)
-        .deskChromeGlass(in: Capsule(style: .continuous), interactive: true)
+        .deskChromeGlass(in: Capsule(style: .continuous), interactive: false)
         .shadow(color: .black.opacity(0.28), radius: 20, y: 10)
     }
 

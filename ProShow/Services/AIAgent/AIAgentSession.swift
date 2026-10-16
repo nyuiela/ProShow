@@ -140,7 +140,7 @@ final class AIAgentSession {
                     switch event {
                     case let .delta(text):
                         roundText += text
-                        emit(.delta(text))
+                        await emitOnMain(.delta(text))
                     case let .toolCalls(found):
                         calls = found
                     }
@@ -193,6 +193,11 @@ final class AIAgentSession {
         seq += 1
         events.append(AgentEvent(seq: seq, ts: .now, kind: kind))
         if events.count > maxEvents { events.removeFirst(events.count - maxEvents) }
+    }
+
+    /// Stream callbacks may resume off-main; always publish events on the main actor.
+    private func emitOnMain(_ kind: AgentEvent.Kind) async {
+        await MainActor.run { emit(kind) }
     }
 
     func events(after seq: Int) -> [AgentEvent] { events.filter { $0.seq > seq } }
@@ -267,7 +272,7 @@ final class AIAgentSession {
             let reason = call.name == "import_slides" ? "Use File > Import Slides." : "Operator only. Not run."
             return AgentToolOutcome(result: json(["ok": false, "error": "needs_confirmation", "message": reason]), ok: false, summary: reason, needsConfirmation: reason)
         }
-        let args = (try? JSONSerialization.jsonObject(with: Data(call.arguments.utf8))) as? [String: Any] ?? [:]
+        let args = Self.parseToolArguments(call.arguments)
         switch call.name {
         case "get_project_context":
             return AgentToolOutcome(result: json(projectContext()), ok: true, summary: "Context read")
@@ -283,16 +288,34 @@ final class AIAgentSession {
             return AgentToolOutcome(result: json(["note": "Inspiration only", "recipes": ComposeRecipe.all.map { ["id": $0.id, "name": $0.name] }, "packs": ["Rollup", "Bloomberg nameplate", "Guest mosaic 2/3/5", "Cam + Slide", "Milk Road"]]), ok: true, summary: "Templates listed")
         case "compose_patch_validate", "compose_patch_apply_preview":
             do {
-                guard let raw = args["patch"] else { throw ComposeError.missingPatch }
-                let patch = try ComposeCodec.decodePatch(try JSONSerialization.data(withJSONObject: raw))
+                let raw: Any
+                if let value = args["patch"] {
+                    raw = value
+                } else if args.isEmpty, !call.arguments.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    // Entire arguments blob may itself be the patch or a fenced object.
+                    raw = call.arguments
+                } else {
+                    throw ComposeError.missingPatch
+                }
+                let (patch, notes) = try ComposeCodec.decodePatchFlexible(raw, stripUnknownKeys: true)
                 try ComposeDesignValidator.validate(patch)
                 if call.name == "compose_patch_validate" {
-                    return AgentToolOutcome(result: json(["ok": true, "slides": patch.slides.count]), ok: true, summary: "Valid, \(patch.slides.count) slides")
+                    var payload: [String: Any] = ["ok": true, "slides": patch.slides.count]
+                    if !notes.isEmpty { payload["notes"] = notes }
+                    return AgentToolOutcome(result: json(payload), ok: true, summary: "Valid, \(patch.slides.count) slides")
                 }
-                return AgentToolOutcome(result: json(["ok": true, "staged": true, "slides": patch.slides.count, "next": "Operator reviews and taps Apply"]), ok: true, summary: "Draft staged", draft: patch)
+                var payload: [String: Any] = ["ok": true, "staged": true, "slides": patch.slides.count, "next": "Operator reviews and taps Apply"]
+                if !notes.isEmpty { payload["notes"] = notes }
+                return AgentToolOutcome(result: json(payload), ok: true, summary: "Draft staged", draft: patch)
             } catch {
                 let e = error as? ComposeError ?? .invalidJSON(String(describing: error))
-                return AgentToolOutcome(result: json(["ok": false, "error": e.code, "message": e.detail]), ok: false, summary: e.code)
+                let preview = String(call.arguments.prefix(280))
+                NSLog("ProShow AI compose tool \(call.name) failed: \(e.code) \(e.detail) raw=\(preview)")
+                return AgentToolOutcome(
+                    result: json(["ok": false, "error": e.code, "message": e.detail, "rawPreview": preview]),
+                    ok: false,
+                    summary: e.code
+                )
             }
         default:
             return AgentToolOutcome(result: json(["ok": false, "error": "not_implemented"]), ok: false, summary: "Not implemented")
@@ -305,7 +328,21 @@ final class AIAgentSession {
         else { return "{}" }
         return String(decoding: data, as: UTF8.self)
     }
+
+    /// Best-effort parse of model tool arguments. Empty dict on failure (never throws).
+    private static func parseToolArguments(_ text: String) -> [String: Any] {
+        var notes: [String] = []
+        if let data = try? ComposeCodec.sanitizeJSONData(Data(text.utf8), notes: &notes),
+           let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            return object
+        }
+        if let object = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any] {
+            return object
+        }
+        return [:]
+    }
 }
+
 
 extension ShowController {
     /// Read-only agent routes: /v1/ai/agent/{status,context,tools,events}. No key material is ever returned.
