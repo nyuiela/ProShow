@@ -125,6 +125,9 @@ struct ProShowApp: App {
                 Button("Open Project…") { openFromMenu() }
                     .keyboardShortcut("o", modifiers: [.command])
                 Button("Open Program Rundown…") { openProgramRundown(session: session) }
+                Button("Import Slides…") { session.controller.presentImportSlides() }
+                    .keyboardShortcut("i", modifiers: [.command, .shift])
+                    .disabled(session.phase != .desk)
                 Divider()
                 Button("Save Project") { _ = session.saveProject() }
                     .keyboardShortcut("s", modifiers: [.command])

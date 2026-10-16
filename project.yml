@@ -37,6 +37,7 @@ targets:
         INFOPLIST_KEY_NSCameraUsageDescription: "ProShow uses the Mac camera as a video input layer."
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "ProShow uses the microphone for program and ISO audio."
         INFOPLIST_KEY_NSScreenCaptureUsageDescription: "ProShow captures a display for the screen-share input."
+        INFOPLIST_KEY_NSAppleEventsUsageDescription: "ProShow asks Keynote to render PowerPoint slides for Import Slides."
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_NAME: ProShow
         TARGETED_DEVICE_FAMILY: "1,2"

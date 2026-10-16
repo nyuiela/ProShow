@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		3B33FED38E2B33812B3D87E5 /* FloatingPanelTransparency.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25ACA0AC1A4A6935B1346764 /* FloatingPanelTransparency.swift */; };
+		70DDF89D710261CCFD3CFF63 /* SlideDeckImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 394D828F02D4E088EA8AF2F8 /* SlideDeckImporter.swift */; };
 		A10000000000000000000001 /* ProShowApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* ProShowApp.swift */; };
 		A10000000000000000000002 /* ShowModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000002 /* ShowModels.swift */; };
 		A10000000000000000000003 /* SampleContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* SampleContent.swift */; };
@@ -403,6 +404,7 @@
 
 /* Begin PBXFileReference section */
 		25ACA0AC1A4A6935B1346764 /* FloatingPanelTransparency.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FloatingPanelTransparency.swift; sourceTree = "<group>"; };
+		394D828F02D4E088EA8AF2F8 /* SlideDeckImporter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SlideDeckImporter.swift; sourceTree = "<group>"; };
 		A20000000000000000000001 /* ProShowApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProShowApp.swift; sourceTree = "<group>"; };
 		A20000000000000000000002 /* ShowModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShowModels.swift; sourceTree = "<group>"; };
 		A20000000000000000000003 /* SampleContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleContent.swift; sourceTree = "<group>"; };
@@ -1078,6 +1080,7 @@
 				C7E40C000000000000000002 /* CaptureBudget.swift */,
 				A20000000000000000000037 /* PathGeometryEngine.swift */,
 				A20000000000000000000038 /* RTMPStreamTransport.swift */,
+				394D828F02D4E088EA8AF2F8 /* SlideDeckImporter.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -1748,6 +1751,7 @@
 				A10000000000000000000029 /* LiveChatEngine.swift in Sources */,
 				A1000000000000000000002A /* ProShowVirtualCam.swift in Sources */,
 				3B33FED38E2B33812B3D87E5 /* FloatingPanelTransparency.swift in Sources */,
+				70DDF89D710261CCFD3CFF63 /* SlideDeckImporter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

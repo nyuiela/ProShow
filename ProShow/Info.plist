@@ -30,6 +30,8 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>ProShow asks Keynote to render PowerPoint slides for Import Slides.</string>
 	<key>PROSHOW_LINKEDIN_CLIENT_ID</key>
 	<string>77rs1uq31c0vpl</string>
 	<key>PROSHOW_X_CLIENT_ID</key>
