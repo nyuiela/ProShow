@@ -3373,6 +3373,19 @@ final class ShowController {
         case "add_pack":
             addBroadcastTemplatePack()
             return ["ok": true, "group": show.groups.last?.name ?? ""]
+        case "build_spec":
+            // Writes a NEW bundle at `out` from a JSON spec; never touches the open project.
+            guard let spec = args["spec"], let out = args["out"], out.hasSuffix(".proshow"),
+                  !FileManager.default.fileExists(atPath: out) || args["overwrite"] == "1" else {
+                return ["ok": false, "error": "bad_args_or_exists"]
+            }
+            do {
+                let count = try SpecProjectBuilder.build(specURL: URL(fileURLWithPath: spec), root: URL(fileURLWithPath: out),
+                                                         programURL: args["program"].map { URL(fileURLWithPath: $0, isDirectory: true) })
+                return ["ok": true, "slides": count]
+            } catch {
+                return ["ok": false, "error": "\(error)"]
+            }
         case "remove_group":
             return ["ok": true, "removed": removeGroups(named: args["group"] ?? "")]
         case "golive":

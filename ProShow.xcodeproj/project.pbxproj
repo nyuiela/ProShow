@@ -7,15 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A455B12D8FD39A3C8FB94791 /* AIAgentCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 833632A23808345937921080 /* AIAgentCore.swift */; };
-		2E9527966B09EE72E0408029 /* XAIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE742513DC6377110BA776A3 /* XAIProvider.swift */; };
-		55C4BCC80F6B123CCF63895C /* AIAgentSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FA5466F322705B2EF1530B3 /* AIAgentSession.swift */; };
-		EBEE41AD8B46469F806AFF82 /* AgentHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB87794D07C049F88D052558 /* AgentHistoryStore.swift */; };
-		8DC5C336478DBEEDF37396E5 /* AIDeskWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 175E580C434437AB5ACE6109 /* AIDeskWindow.swift */; };
 		20B40C8DC25E4974AB401A9E /* AgentComposerOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C096765363C4945A1F7CECC /* AgentComposerOverlay.swift */; };
-		A5C6F72375DEFD397688A45C /* PROSHOW_CREATIVE_DESIGN_AGENT.md in Resources */ = {isa = PBXBuildFile; fileRef = 66903F9BF1565A22D565FAD1 /* PROSHOW_CREATIVE_DESIGN_AGENT.md */; };
+		2E9527966B09EE72E0408029 /* XAIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE742513DC6377110BA776A3 /* XAIProvider.swift */; };
 		3B33FED38E2B33812B3D87E5 /* FloatingPanelTransparency.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25ACA0AC1A4A6935B1346764 /* FloatingPanelTransparency.swift */; };
+		55C4BCC80F6B123CCF63895C /* AIAgentSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FA5466F322705B2EF1530B3 /* AIAgentSession.swift */; };
 		70DDF89D710261CCFD3CFF63 /* SlideDeckImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 394D828F02D4E088EA8AF2F8 /* SlideDeckImporter.swift */; };
+		7C3216A31314A00C649B21F8 /* SpecProjectBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E7705E0267DB911C4F1EB98 /* SpecProjectBuilder.swift */; };
+		8DC5C336478DBEEDF37396E5 /* AIDeskWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 175E580C434437AB5ACE6109 /* AIDeskWindow.swift */; };
 		9B2308FCF47F11FFD0EAD05C /* BroadcastTemplatePack.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69E78DF0B0D4828910EF0123 /* BroadcastTemplatePack.swift */; };
 		A10000000000000000000001 /* ProShowApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* ProShowApp.swift */; };
 		A10000000000000000000002 /* ShowModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000002 /* ShowModels.swift */; };
@@ -178,8 +176,8 @@
 		A100000000000000000000D2 /* NDISessions.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000D2 /* NDISessions.swift */; };
 		A100000000000000000000F1 /* ThemeTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000F1 /* ThemeTokens.swift */; };
 		A1A100000000000000000C01 /* AIComposeV1.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2A200000000000000000C01 /* AIComposeV1.swift */; };
-		A1A1000000000000000AA001 /* AIAgentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2A2000000000000000AA001 /* AIAgentTests.swift */; };
 		A1A100000000000000000C02 /* AIComposeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2A200000000000000000C02 /* AIComposeTests.swift */; };
+		A1A1000000000000000AA001 /* AIAgentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2A2000000000000000AA001 /* AIAgentTests.swift */; };
 		A1T000000000000000000001 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000001 /* TestSupport.swift */; };
 		A1T000000000000000000002 /* CompositorEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000002 /* CompositorEngineTests.swift */; };
 		A1T000000000000000000003 /* CueTransportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000003 /* CueTransportTests.swift */; };
@@ -231,6 +229,8 @@
 		A1T000000000000000000038 /* BroadcastGoLiveTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000038 /* BroadcastGoLiveTests.swift */; };
 		A1T000000000000000000039 /* MultiViewerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000039 /* MultiViewerTests.swift */; };
 		A1T00000000000000000003A /* ActionStackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T00000000000000000003A /* ActionStackTests.swift */; };
+		A455B12D8FD39A3C8FB94791 /* AIAgentCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 833632A23808345937921080 /* AIAgentCore.swift */; };
+		A5C6F72375DEFD397688A45C /* PROSHOW_CREATIVE_DESIGN_AGENT.md in Resources */ = {isa = PBXBuildFile; fileRef = 66903F9BF1565A22D565FAD1 /* PROSHOW_CREATIVE_DESIGN_AGENT.md */; };
 		AKLINK000000000000000001 /* AudioKit in Frameworks */ = {isa = PBXBuildFile; productRef = AKPROD000000000000000001 /* AudioKit */; };
 		AKLINK000000000000000002 /* AudioKitUI in Frameworks */ = {isa = PBXBuildFile; productRef = AKPROD000000000000000002 /* AudioKitUI */; };
 		AKLINK000000000000000003 /* Controls in Frameworks */ = {isa = PBXBuildFile; productRef = AKPROD000000000000000003 /* Controls */; };
@@ -394,6 +394,7 @@
 		C8F312000000000000000013 /* RundownFloatWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F322000000000000000013 /* RundownFloatWindow.swift */; };
 		C8F314000000000000000014 /* StudioGlassLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F324000000000000000014 /* StudioGlassLayout.swift */; };
 		C8F315000000000000000015 /* StudioGlassWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F325000000000000000015 /* StudioGlassWindow.swift */; };
+		EBEE41AD8B46469F806AFF82 /* AgentHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB87794D07C049F88D052558 /* AgentHistoryStore.swift */; };
 		LKBLD0000000000000000001 /* LiveKitAccessToken.swift in Sources */ = {isa = PBXBuildFile; fileRef = LKREF0000000000000000001 /* LiveKitAccessToken.swift */; };
 		LKBLD0000000000000000002 /* LiveKitDeskConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = LKREF0000000000000000002 /* LiveKitDeskConfig.swift */; };
 		LKBLD0000000000000000003 /* LiveKitGuestCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = LKREF0000000000000000003 /* LiveKitGuestCatalog.swift */; };
@@ -412,16 +413,15 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		833632A23808345937921080 /* AIAgentCore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIAgentCore.swift; sourceTree = "<group>"; };
-		BE742513DC6377110BA776A3 /* XAIProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = XAIProvider.swift; sourceTree = "<group>"; };
-		7FA5466F322705B2EF1530B3 /* AIAgentSession.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIAgentSession.swift; sourceTree = "<group>"; };
-		DB87794D07C049F88D052558 /* AgentHistoryStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentHistoryStore.swift; sourceTree = "<group>"; };
 		175E580C434437AB5ACE6109 /* AIDeskWindow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIDeskWindow.swift; sourceTree = "<group>"; };
-		5C096765363C4945A1F7CECC /* AgentComposerOverlay.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentComposerOverlay.swift; sourceTree = "<group>"; };
-		66903F9BF1565A22D565FAD1 /* PROSHOW_CREATIVE_DESIGN_AGENT.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; name = PROSHOW_CREATIVE_DESIGN_AGENT.md; path = docs/PROSHOW_CREATIVE_DESIGN_AGENT.md; sourceTree = SOURCE_ROOT; };
 		25ACA0AC1A4A6935B1346764 /* FloatingPanelTransparency.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FloatingPanelTransparency.swift; sourceTree = "<group>"; };
 		394D828F02D4E088EA8AF2F8 /* SlideDeckImporter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SlideDeckImporter.swift; sourceTree = "<group>"; };
+		5C096765363C4945A1F7CECC /* AgentComposerOverlay.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentComposerOverlay.swift; sourceTree = "<group>"; };
+		5E7705E0267DB911C4F1EB98 /* SpecProjectBuilder.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpecProjectBuilder.swift; sourceTree = "<group>"; };
+		66903F9BF1565A22D565FAD1 /* PROSHOW_CREATIVE_DESIGN_AGENT.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; name = PROSHOW_CREATIVE_DESIGN_AGENT.md; path = docs/PROSHOW_CREATIVE_DESIGN_AGENT.md; sourceTree = SOURCE_ROOT; };
 		69E78DF0B0D4828910EF0123 /* BroadcastTemplatePack.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BroadcastTemplatePack.swift; sourceTree = "<group>"; };
+		7FA5466F322705B2EF1530B3 /* AIAgentSession.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIAgentSession.swift; sourceTree = "<group>"; };
+		833632A23808345937921080 /* AIAgentCore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIAgentCore.swift; sourceTree = "<group>"; };
 		A20000000000000000000001 /* ProShowApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProShowApp.swift; sourceTree = "<group>"; };
 		A20000000000000000000002 /* ShowModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShowModels.swift; sourceTree = "<group>"; };
 		A20000000000000000000003 /* SampleContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleContent.swift; sourceTree = "<group>"; };
@@ -586,8 +586,8 @@
 		A200000000000000000000F1 /* ThemeTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeTokens.swift; sourceTree = "<group>"; };
 		A200TEST000000000000000A /* ProShowTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ProShowTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A2A200000000000000000C01 /* AIComposeV1.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIComposeV1.swift; sourceTree = "<group>"; };
-		A2A2000000000000000AA001 /* AIAgentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIAgentTests.swift; sourceTree = "<group>"; };
 		A2A200000000000000000C02 /* AIComposeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIComposeTests.swift; sourceTree = "<group>"; };
+		A2A2000000000000000AA001 /* AIAgentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIAgentTests.swift; sourceTree = "<group>"; };
 		A2T000000000000000000001 /* TestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestSupport.swift; sourceTree = "<group>"; };
 		A2T000000000000000000002 /* CompositorEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompositorEngineTests.swift; sourceTree = "<group>"; };
 		A2T000000000000000000003 /* CueTransportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CueTransportTests.swift; sourceTree = "<group>"; };
@@ -643,6 +643,7 @@
 		B200000000000000000000B2 /* ProgramRenderContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramRenderContract.swift; sourceTree = "<group>"; };
 		B200000000000000000000B3 /* ProgramOutputBus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramOutputBus.swift; sourceTree = "<group>"; };
 		B200000000000000000000B4 /* ShowController+OutputBus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ShowController+OutputBus.swift"; sourceTree = "<group>"; };
+		BE742513DC6377110BA776A3 /* XAIProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = XAIProvider.swift; sourceTree = "<group>"; };
 		C6D200000000000000000001 /* TickerEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TickerEngine.swift; sourceTree = "<group>"; };
 		C6D200000000000000000002 /* MarqueeTickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarqueeTickerView.swift; sourceTree = "<group>"; };
 		C6D200000000000000000003 /* MarqueeTextLoopView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarqueeTextLoopView.swift; sourceTree = "<group>"; };
@@ -801,6 +802,7 @@
 		C8F322000000000000000013 /* RundownFloatWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RundownFloatWindow.swift; sourceTree = "<group>"; };
 		C8F324000000000000000014 /* StudioGlassLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioGlassLayout.swift; sourceTree = "<group>"; };
 		C8F325000000000000000015 /* StudioGlassWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioGlassWindow.swift; sourceTree = "<group>"; };
+		DB87794D07C049F88D052558 /* AgentHistoryStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentHistoryStore.swift; sourceTree = "<group>"; };
 		LKREF0000000000000000001 /* LiveKitAccessToken.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveKitAccessToken.swift; sourceTree = "<group>"; };
 		LKREF0000000000000000002 /* LiveKitDeskConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveKitDeskConfig.swift; sourceTree = "<group>"; };
 		LKREF0000000000000000003 /* LiveKitGuestCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveKitGuestCatalog.swift; sourceTree = "<group>"; };
@@ -1112,6 +1114,7 @@
 				394D828F02D4E088EA8AF2F8 /* SlideDeckImporter.swift */,
 				0691E04B54D3F397BF2A628D /* AIAgent */,
 				69E78DF0B0D4828910EF0123 /* BroadcastTemplatePack.swift */,
+				5E7705E0267DB911C4F1EB98 /* SpecProjectBuilder.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -1795,6 +1798,7 @@
 				20B40C8DC25E4974AB401A9E /* AgentComposerOverlay.swift in Sources */,
 				8DC5C336478DBEEDF37396E5 /* AIDeskWindow.swift in Sources */,
 				9B2308FCF47F11FFD0EAD05C /* BroadcastTemplatePack.swift in Sources */,
+				7C3216A31314A00C649B21F8 /* SpecProjectBuilder.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
