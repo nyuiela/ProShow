@@ -39,6 +39,10 @@ final class AIAgentSession {
     private var turnComposeAttempted = false
     private var turnLastComposeError: String?
     private var turnComposeFailures = 0
+    private var roundHadComposeFailure = false
+    private var roundHadComposeSuccess = false
+    private var turnPlainRejections = 0
+    private var roundHadPlain = false
     private var turnPrompt = ""
     private var turnLayoutSignatures = Set<String>()
 
@@ -217,6 +221,7 @@ final class AIAgentSession {
         turnComposeAttempted = false
         turnLastComposeError = nil
         turnComposeFailures = 0
+        turnPlainRejections = 0
         turnPrompt = prompt
         turnLayoutSignatures = []
 
@@ -270,6 +275,11 @@ final class AIAgentSession {
                 let assistant = AgentMessage(role: .assistant, content: roundText, toolCalls: calls)
                 context.append(assistant)
                 history.append(assistant)
+                // Parallel calls in one round count as one attempt, so 4 bad calls at once can't end the turn.
+                roundHadComposeFailure = false
+                roundHadPlain = false
+                roundHadComposeSuccess = false
+                let failuresBeforeRound = turnComposeFailures
                 for call in calls {
                     emit(.toolCall(name: call.name, callID: call.id))
                     let outcome = execute(call)
@@ -283,6 +293,9 @@ final class AIAgentSession {
                     context.append(toolMessage)
                     history.append(toolMessage)
                 }
+                if roundHadPlain { turnPlainRejections += 1 }
+                if roundHadComposeSuccess { turnComposeFailures = 0 }
+                else if roundHadComposeFailure { turnComposeFailures = failuresBeforeRound + 1 }
                 if turnComposeFailures >= AgentToolRegistry.maxComposeFailures { break }
             }
             // Never report success when nothing was staged or the last compose call failed.
@@ -437,17 +450,17 @@ final class AIAgentSession {
             let outcome = call.truncated
                 ? AgentToolOutcome(result: json(["ok": false, "error": "output_truncated", "message": "Your template_instantiate call was cut off by the output limit, so addElements was incomplete. Send one slide per call with fewer, shorter elements."]), ok: false, summary: "output_truncated")
                 : instantiateTool(args)
-            if outcome.ok { turnComposeFailures = 0 } else { turnComposeFailures += 1; turnLastComposeError = outcome.summary }
+            if outcome.ok { roundHadComposeSuccess = true } else { roundHadComposeFailure = true; turnLastComposeError = outcome.summary }
+            return outcome
+        case "slide_add_elements":
+            turnComposeAttempted = true
+            let outcome = addElementsTool(args)
+            if outcome.ok { roundHadComposeSuccess = true } else { roundHadComposeFailure = true; turnLastComposeError = outcome.summary }
             return outcome
         case "compose_patch_validate", "compose_patch_apply_preview":
             turnComposeAttempted = true
             let outcome = composeTool(call, args: args)
-            if outcome.ok {
-                turnComposeFailures = 0
-            } else {
-                turnComposeFailures += 1
-                turnLastComposeError = outcome.summary
-            }
+            if outcome.ok { roundHadComposeSuccess = true } else { roundHadComposeFailure = true; turnLastComposeError = outcome.summary }
             return outcome
         default:
             return AgentToolOutcome(result: json(["ok": false, "error": "not_implemented"]), ok: false, summary: "Not implemented")
@@ -458,26 +471,33 @@ final class AIAgentSession {
         let id = (args["templateId"] as? String ?? "").trimmingCharacters(in: .whitespaces)
         do {
             let (slide, notes) = try AgentTemplateCatalog.instantiate(id, args: args)
+            var plainWarning: String?
             if id == "blank" {
                 // Plainness is judged on the final composed slide: text, shapes, video panes and images all count.
                 let visuals = slide.canvas.filter { $0.name != "Background" }
                 let received = AgentTemplateCatalog.addElementList(args).count
                 if visuals.count <= 1, !plainAllowed {
                     let have = visuals.first.map { "1 \($0.kind.rawValue) ('\($0.name)')" } ?? "nothing but the background"
-                    let hint = received == 0
-                        ? "addElements was missing or unreadable (got \(String(describing: type(of: args["addElements"] ?? "none")))). Send addElements as a JSON array of objects."
-                        : "Received \(received) addElements but only \(visuals.count) were created; check each has kind and x,y,w,h fractions 0-1."
-                    return AgentToolOutcome(result: json(["ok": false, "error": "too_plain", "message": "The slide has \(have). Add at least one more element via addElements, e.g. a label text, a rect plate/card, a rule, or a video pane. \(hint)"]), ok: false, summary: "too_plain")
+                    let sent = AgentTemplateCatalog.addElementList(args).isEmpty
+                        ? (args.keys.contains { ["addElements", "elements", "add_elements"].contains($0) } ? "addElements was unreadable" : "no addElements key was sent (args: \(args.keys.sorted().joined(separator: ", ")))")
+                        : "received \(received) addElements but only \(visuals.count) were created; each needs kind and x,y,w,h (fractions 0-1)"
+                    let howTo = ##"Put the elements IN THIS CALL: "addElements":[{"kind":"rect","name":"Card","x":0.05,"y":0.2,"w":0.5,"h":0.5,"fill":"#1A1A1C","opacity":0.8,"cornerRadius":48},{"kind":"text","name":"Headline","text":"...","x":0.08,"y":0.25,"w":0.44,"h":0.1,"size":120},{"kind":"video","name":"Camera","x":0.6,"y":0.1,"w":0.35,"h":0.7,"borderColor":"#FF7A9A","borderWidth":6}]. Or stage it and call slide_add_elements with its title."##
+                    roundHadPlain = true
+                    if turnPlainRejections < 2 {
+                        return AgentToolOutcome(result: json(["ok": false, "error": "too_plain", "message": "The slide has \(have): \(sent). \(howTo)"]), ok: false, summary: "too_plain")
+                    }
+                    // Never leave the operator with zero slides: after 2 rejections stage it with a warning.
+                    plainWarning = "too_plain (staged anyway): slide has \(have). Call slide_add_elements with title '\(slide.title)' to add the layout."
                 }
                 let issues = AgentDesignLint.hardIssues(slide.canvas)
                 if !issues.isEmpty {
                     return AgentToolOutcome(result: json(["ok": false, "error": "design_rules", "issues": issues, "retry": "Fix these and call template_instantiate again."]), ok: false, summary: "design_rules")
                 }
                 let signature = AgentDesignLint.layoutSignature(slide.canvas)
-                if turnLayoutSignatures.contains(signature) {
+                if plainWarning == nil, turnLayoutSignatures.contains(signature) {
                     return AgentToolOutcome(result: json(["ok": false, "error": "duplicate_layout", "message": "Same layout structure as an earlier slide in this request. Change the column split, card count, alignment axis or image/text ratio."]), ok: false, summary: "duplicate_layout")
                 }
-                if existingLayoutSignatures().contains(signature) {
+                if plainWarning == nil, existingLayoutSignatures().contains(signature) {
                     return AgentToolOutcome(result: json(["ok": false, "error": "copies_existing_slide", "message": "Matches a slide already in the show. Compose a different structure."]), ok: false, summary: "copies_existing_slide")
                 }
                 turnLayoutSignatures.insert(signature)
@@ -501,6 +521,7 @@ final class AIAgentSession {
                                           "elementNames": slide.canvas.map(\.name)]
             if !notes.isEmpty { payload["notes"] = notes }
             if !lint.isEmpty { payload["lint"] = lint }
+            if let plainWarning { payload["warning"] = plainWarning }
             if (args["stage"] as? Bool) ?? true {
                 if let name = (args["groupName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
                     draftGroupName = String(name.prefix(80))
@@ -514,7 +535,7 @@ final class AIAgentSession {
                 }
                 turnStagedSlides += 1
                 payload["staged"] = true
-                if needsOpenShow { payload["warning"] = "No show open. Tell the operator to open a show before Apply." }
+                if needsOpenShow { payload["openShow"] = "No show open. Tell the operator to open a show before Apply." }
                 payload["draftSlides"] = staged.slides.count
                 payload["group"] = draftGroupName
                 return AgentToolOutcome(result: json(payload), ok: true, summary: "\(id) → \(slide.title) (S\(slide.canvas.count)/P\(phoneCount))", draft: staged)
@@ -530,6 +551,48 @@ final class AIAgentSession {
     }
 
     /// Build requests get rich slides; a lone text element is pushed back unless the operator asked for minimal.
+    /// Second step for models that stage blank slides first: append elements to a staged draft slide.
+    private func addElementsTool(_ args: [String: Any]) -> AgentToolOutcome {
+        guard var staged = draft else {
+            return AgentToolOutcome(result: json(["ok": false, "error": "no_draft", "message": "Nothing staged. Use template_instantiate with templateId blank and addElements."]), ok: false, summary: "no_draft")
+        }
+        let key = ((args["title"] ?? args["slide"] ?? args["patchId"]) as? String ?? "").lowercased()
+        let index = staged.slides.lastIndex { $0.title.lowercased() == key } ?? (key.isEmpty ? staged.slides.indices.last : nil)
+        guard let index else {
+            return AgentToolOutcome(result: json(["ok": false, "error": "slide_not_found", "titles": staged.slides.map(\.title)]), ok: false, summary: "slide_not_found")
+        }
+        let adds = AgentTemplateCatalog.addElementList(args)
+        guard !adds.isEmpty else {
+            return AgentToolOutcome(result: json(["ok": false, "error": "missing_addElements", "message": "Send addElements as a JSON array of element objects."]), ok: false, summary: "missing_addElements")
+        }
+        do {
+            let (built, notes) = try AgentTemplateCatalog.instantiate("blank", args: ["addElements": adds])
+            var slide = staged.slides[index]
+            let newStream = built.canvas.filter { $0.name != "Background" }
+            var merged = slide.canvas + newStream
+            for i in merged.indices { merged[i].zIndex = i }
+            let issues = AgentDesignLint.hardIssues(merged)
+            if !issues.isEmpty {
+                return AgentToolOutcome(result: json(["ok": false, "error": "design_rules", "issues": issues]), ok: false, summary: "design_rules")
+            }
+            slide.canvas = merged
+            if let p = slide.editorCanvases.firstIndex(where: \.isPhoneArtboard),
+               let bp = built.editorCanvases.first(where: \.isPhoneArtboard) {
+                var phone = slide.editorCanvases[p].objects + bp.objects.filter { $0.name != "Background" }
+                for i in phone.indices { phone[i].zIndex = i }
+                slide.editorCanvases[p].objects = phone
+            }
+            staged.slides[index] = slide
+            var payload: [String: Any] = ["ok": true, "title": slide.title, "streamElements": slide.canvas.count, "elementNames": slide.canvas.map(\.name), "draftSlides": staged.slides.count]
+            if !notes.isEmpty { payload["notes"] = notes }
+            let lint = AgentDesignLint.warnings(slide.canvas)
+            if !lint.isEmpty { payload["lint"] = lint }
+            return AgentToolOutcome(result: json(payload), ok: true, summary: "+\(newStream.count) → \(slide.title)", draft: staged)
+        } catch {
+            return AgentToolOutcome(result: json(["ok": false, "error": "build_failed", "message": "\(error)"]), ok: false, summary: "build_failed")
+        }
+    }
+
     private var plainAllowed: Bool {
         let lower = turnPrompt.lowercased()
         return ["minimal", "simple slide", "plain", "text only", "single line", "just text"].contains(where: { lower.contains($0) })
