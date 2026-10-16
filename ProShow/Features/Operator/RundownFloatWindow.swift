@@ -133,6 +133,7 @@ final class RundownFloatController: NSObject, NSWindowDelegate {
             panel?.setFrame(NSRect(origin: origin, size: defaultSize), display: true)
         }
         panel?.orderFrontRegardless()
+        if let p = panel as NSWindow? { FloatingPanelTransparency.clearChain(p) }
         isOpen = true
     }
 

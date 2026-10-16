@@ -96,6 +96,7 @@ final class StudioGlassController: NSObject, NSWindowDelegate {
         }
         if isMainPanelShown {
             panel.orderFrontRegardless()
+            if let p = panel as NSWindow? { FloatingPanelTransparency.clearChain(p) }
             NSApp.activate(ignoringOtherApps: true)
             markOpen()
             return
@@ -106,6 +107,7 @@ final class StudioGlassController: NSObject, NSWindowDelegate {
         panel.setFrame(frame, display: true)
         rememberedFrame = frame
         panel.orderFrontRegardless()
+        if let p = panel as NSWindow? { FloatingPanelTransparency.clearChain(p) }
         NSApp.activate(ignoringOtherApps: true)
         markOpen()
     }
@@ -149,6 +151,7 @@ final class StudioGlassController: NSObject, NSWindowDelegate {
             isZoomed = true
         }
         panel.orderFrontRegardless()
+        if let p = panel as NSWindow? { FloatingPanelTransparency.clearChain(p) }
         markOpen()
     }
 
@@ -164,6 +167,7 @@ final class StudioGlassController: NSObject, NSWindowDelegate {
         ensureEdgePanel()
         placeEdgePanel(on: screen)
         edgePanel?.orderFrontRegardless()
+        if let p = edgePanel as NSWindow? { FloatingPanelTransparency.clearChain(p) }
         markOpen()
     }
 
@@ -223,6 +227,7 @@ final class StudioGlassController: NSObject, NSWindowDelegate {
         panel.setFrame(frame, display: true)
         rememberedFrame = frame
         panel.orderFrontRegardless()
+        if let p = panel as NSWindow? { FloatingPanelTransparency.clearChain(p) }
         NSApp.activate(ignoringOtherApps: true)
         markOpen()
     }
