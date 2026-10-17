@@ -7352,6 +7352,22 @@ final class ShowController {
         persistStudio()
     }
 
+    /// Live props in their Phone layout, scaled onto a Phone board, for monitors that draw without the encoder.
+    func livePhonePropObjects(width: Double, height: Double) -> [CanvasObject] {
+        let live = inspector.props.filter(\.isActive)
+        return phonePropCanvases(for: live).flatMap { canvas -> [CanvasObject] in
+            let sx = width / max(1, canvas.canvasWidth), sy = height / max(1, canvas.canvasHeight)
+            return canvas.objects.map { object in
+                var o = object
+                o.transform.x *= sx; o.transform.y *= sy
+                o.transform.width *= sx; o.transform.height *= sy
+                o.typography.fontSize *= min(sx, sy)
+                o.zIndex += 100_000
+                return o
+            }
+        }
+    }
+
     func syncActivePropsToCompositor() {
         let live = inspector.props.filter { $0.isActive || propBuildClearStartedAt[$0.id] != nil }
         PhonePropCanvasStore.shared.set(phonePropCanvases(for: live))

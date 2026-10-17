@@ -189,7 +189,7 @@ private struct PhoneLivePixelSurface: View {
                 ProgramSlideThumbnailPreview(
                     controller: controller,
                     slide: slide,
-                    objects: controller.resolvedCanvasObjects(board.objects),
+                    objects: controller.resolvedCanvasObjects(board.objects) + controller.livePhonePropObjects(width: board.width, height: board.height),
                     canvasWidth: board.width,
                     canvasHeight: board.height
                 )
