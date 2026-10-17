@@ -3199,6 +3199,9 @@ final class ShowController {
                 textContext: work.textContext,
                 objectLivePixels: phonePixels,
                 buildPlayback: work.buildPlayback,
+                // Same phases as the Stream render. Without this, Build Out ran right after Build In
+                // and the Phone design image and camera frame dissolved away on air.
+                buildPhaseFilter: work.buildPhaseFilter,
                 renderNow: work.renderNow,
                 marketStreamItems: work.marketStreamItems,
                 tickerColorConfig: work.tickerColorConfig,
