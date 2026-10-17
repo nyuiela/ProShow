@@ -220,12 +220,21 @@ final class PhoneComposedFrame: @unchecked Sendable {
     static let shared = PhoneComposedFrame()
     private let lock = NSLock()
     private var buffer: CVPixelBuffer?
+    private var storedAt: Date = .distantPast
 
     func store(_ buffer: CVPixelBuffer) {
         let owned = ProgramOutputComposer.snapshot(buffer)
         lock.lock()
         self.buffer = owned
+        storedAt = Date()
         lock.unlock()
+    }
+
+    /// The composed Phone frame only while the program keeps producing it; a stale frame (old timer text) is ignored.
+    func fresh(maxAge: TimeInterval = 0.75) -> CVPixelBuffer? {
+        lock.lock()
+        defer { lock.unlock() }
+        return Date().timeIntervalSince(storedAt) <= maxAge ? buffer : nil
     }
 
     func current() -> CVPixelBuffer? {

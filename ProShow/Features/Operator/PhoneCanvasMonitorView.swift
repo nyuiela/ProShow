@@ -176,7 +176,7 @@ private struct PhoneLivePixelSurface: View {
 
     @ViewBuilder
     private var content: some View {
-        if let buffer = PhoneComposedFrame.shared.current(),
+        if let buffer = PhoneComposedFrame.shared.fresh(),
            let image = InputPreviewImaging.image(from: buffer) {
             #if os(macOS)
             Image(nsImage: image)

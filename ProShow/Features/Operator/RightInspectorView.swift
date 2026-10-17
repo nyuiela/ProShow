@@ -1593,8 +1593,10 @@ private struct PropActionPane: View {
                                     }
                                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                                     .overlay(alignment: .topTrailing) {
-                                        Button {
-                                            controller.setPropShowOn(id: prop.id, target: prop.showOn.next)
+                                        Menu {
+                                            ForEach(PropOutputTarget.allCases) { target in
+                                                Button(target.title) { controller.setPropShowOn(id: prop.id, target: target) }
+                                            }
                                         } label: {
                                             Text(prop.showOn.badge)
                                                 .font(.system(size: 9, weight: .bold))
@@ -1603,8 +1605,10 @@ private struct PropActionPane: View {
                                                 .foregroundStyle(.white)
                                                 .background(prop.showOn == .both ? Color.black.opacity(0.55) : ProShowTheme.accent, in: Capsule())
                                         }
-                                        .buttonStyle(.plain)
-                                        .help("Show on: \(prop.showOn.title). Click to change.")
+                                        .menuStyle(.borderlessButton)
+                                        .menuIndicator(.hidden)
+                                        .fixedSize()
+                                        .help("Show on: \(prop.showOn.title). Click to choose.")
                                         .padding(4)
                                     }
                                 Text(prop.name)

@@ -371,6 +371,16 @@ final class StreamingEngine {
         }
         phoneLane = phone
         pushPhoneCanvas()
+        // The RTMP handshake and publish run in waitUntilReady. Without it the Phone socket opens
+        // but never publishes, so the lane never sends a frame and Phone destinations stay blank.
+        Task { @MainActor [weak self] in
+            let ready = await phone.transport.waitUntilReady(timeoutMs: 12_000)
+            guard let self, self.phoneLane === phone else { return }
+            if !ready {
+                let name = ingests.first?.name ?? "Phone"
+                self.phoneLaneError = "\(name) could not connect."
+            }
+        }
         return true
         #else
         return false
