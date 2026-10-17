@@ -58,6 +58,7 @@ enum ControlHTTP {
         case 403: return "Forbidden"
         case 404: return "Not Found"
         case 405: return "Method Not Allowed"
+        case 409: return "Conflict"
         default: return "Error"
         }
     }
@@ -71,6 +72,12 @@ enum ControlHTTP {
             return method == "POST" || method == "GET"
         }
         if parts.contains("soundboard"), parts.last == "play" {
+            return method == "POST"
+        }
+        if parts == ["v1", "ai", "agent", "send"] || parts == ["v1", "ai", "agent", "apply_draft"] || parts == ["v1", "ai", "agent", "render_last"] || parts == ["v1", "ai", "agent", "delete_group"] || parts == ["v1", "ai", "agent", "delete_test_content"] {
+            return method == "POST"
+        }
+        if parts == ["v1", "ai", "compose"] || parts == ["v1", "ai", "apply"] {
             return method == "POST"
         }
         if parts == ["v1", "chat", "overlay"]
@@ -88,6 +95,9 @@ enum ControlHTTP {
             || parts == ["v1", "market", "ticker"]
             || parts == ["v1", "project", "open"]
             || parts == ["v1", "project", "close"]
+            || parts == ["v1", "ui", "addshot"]
+            || parts == ["v1", "ui", "snapshot"]
+            || parts == ["v1", "ui", "qa"]
             || parts == ["v1", "backstage", "connect"]
             || parts == ["v1", "backstage", "disconnect"] {
             return method == "POST"

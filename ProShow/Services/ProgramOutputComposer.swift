@@ -68,6 +68,7 @@ final class ProgramOutputComposer: @unchecked Sendable {
     static let previewEndpoint = "program.encode"
 
     static func needsLiveVideoPixel(for object: CanvasObject) -> Bool {
+        if object.isUnfilledPlaceholder { return false }
         switch object.assignedSource?.sourceType {
         case .systemCamera, .systemDisplay, .systemWindow, .ndiSource, .rendezvousGuest, .srtStream:
             return true
@@ -156,9 +157,11 @@ final class ProgramOutputComposer: @unchecked Sendable {
         textContext: DynamicTextContext?,
         objectLivePixels: [UUID: CVPixelBuffer],
         buildPlayback: BuildPlayback = .rest,
+        buildPhaseFilter: Set<BuildPhase>? = nil,
         renderNow: Date,
         marketStreamItems: [MarketTickerItem] = [],
-        tickerColorConfig: TickerColorConfig = TickerColorConfig()
+        tickerColorConfig: TickerColorConfig = TickerColorConfig(),
+        propCanvases: [PropCanvas] = []
     ) -> CVPixelBuffer? {
         var stack = RenderStack.idle
         stack.screenColorHex = backgroundHex
@@ -168,7 +171,10 @@ final class ProgramOutputComposer: @unchecked Sendable {
         stack.slideCanvasHeight = canvasHeight
         stack.slideBackgroundEnabled = backgroundEnabled
         stack.slideBackgroundHex = backgroundHex
-        stack.cleared = Set(RenderLayer.allCases.map(\.rawValue).filter { $0 != RenderLayer.slide.rawValue })
+        stack.cleared = Set(RenderLayer.allCases.map(\.rawValue).filter {
+            $0 != RenderLayer.slide.rawValue && !(propCanvases.isEmpty == false && $0 == RenderLayer.props.rawValue)
+        })
+        stack.activeProps = propCanvases.map(\.name)
         return render(
             stack: stack,
             width: width,
@@ -178,8 +184,10 @@ final class ProgramOutputComposer: @unchecked Sendable {
             media: nil,
             videoFrame: nil,
             textContext: textContext,
+            propCanvases: propCanvases,
             objectLivePixels: objectLivePixels,
             buildPlayback: buildPlayback,
+            buildPhaseFilter: buildPhaseFilter,
             renderNow: renderNow,
             marketStreamItems: marketStreamItems,
             tickerColorConfig: tickerColorConfig,
@@ -427,6 +435,8 @@ final class ProgramOutputComposer: @unchecked Sendable {
         let videoSpaceW = max(stack.slideCanvasWidth, Double(width), CanvasConfig.width, 1)
         let videoSpaceH = max(stack.slideCanvasHeight, Double(height), CanvasConfig.height, 1)
 
+        // Pooled buffers keep old pixels; a transparent screen colour must not show the previous frame.
+        ctx.clear(CGRect(x: 0, y: 0, width: width, height: height))
         fill(ctx, color: stack.screenColorHex, rect: CGRect(x: 0, y: 0, width: width, height: height))
         if stack.isVisible(.screenColor, onStage: false) {
             covered.append(RenderLayer.screenColor.rawValue)
@@ -591,6 +601,8 @@ final class ProgramOutputComposer: @unchecked Sendable {
         let videoSpaceW = max(stack.slideCanvasWidth, Double(width), CanvasConfig.width, 1)
         let videoSpaceH = max(stack.slideCanvasHeight, Double(height), CanvasConfig.height, 1)
 
+        // Pooled buffers keep old pixels; a transparent screen colour must not show the previous frame.
+        ctx.clear(CGRect(x: 0, y: 0, width: width, height: height))
         fill(ctx, color: stack.screenColorHex, rect: CGRect(x: 0, y: 0, width: width, height: height))
         if stack.isVisible(.screenColor, onStage: false) {
             covered.append(RenderLayer.screenColor.rawValue)
@@ -1416,6 +1428,7 @@ final class ProgramOutputComposer: @unchecked Sendable {
     #endif
 
     private func shouldBlitLiveVideo(_ object: CanvasObject) -> Bool {
+        if object.isUnfilledPlaceholder { return false }
         switch object.assignedSource?.sourceType {
         case .systemCamera, .systemDisplay, .systemWindow, .ndiSource:
             return true
@@ -1464,9 +1477,8 @@ final class ProgramOutputComposer: @unchecked Sendable {
     private func cgImage(at path: String) -> CGImage? {
         #if os(macOS)
         let resolved = MediaPath.resolve(path)?.path ?? path
-        guard let nsImage = NSImage(contentsOfFile: resolved) else { return nil }
-        var rect = CGRect(origin: .zero, size: nsImage.size)
-        return nsImage.cgImage(forProposedRect: &rect, context: nil, hints: nil)
+        // Decoded once and kept; this runs every program frame.
+        return DecodedImageCache.shared.image(atPath: resolved, maxLongSide: nil)
         #else
         return nil
         #endif

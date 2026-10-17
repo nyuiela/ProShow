@@ -96,6 +96,7 @@ final class StudioGlassController: NSObject, NSWindowDelegate {
         }
         if isMainPanelShown {
             panel.orderFrontRegardless()
+            if let p = panel as NSWindow? { FloatingPanelTransparency.clearChain(p) }
             NSApp.activate(ignoringOtherApps: true)
             markOpen()
             return
@@ -106,6 +107,7 @@ final class StudioGlassController: NSObject, NSWindowDelegate {
         panel.setFrame(frame, display: true)
         rememberedFrame = frame
         panel.orderFrontRegardless()
+        if let p = panel as NSWindow? { FloatingPanelTransparency.clearChain(p) }
         NSApp.activate(ignoringOtherApps: true)
         markOpen()
     }
@@ -149,6 +151,7 @@ final class StudioGlassController: NSObject, NSWindowDelegate {
             isZoomed = true
         }
         panel.orderFrontRegardless()
+        if let p = panel as NSWindow? { FloatingPanelTransparency.clearChain(p) }
         markOpen()
     }
 
@@ -164,6 +167,7 @@ final class StudioGlassController: NSObject, NSWindowDelegate {
         ensureEdgePanel()
         placeEdgePanel(on: screen)
         edgePanel?.orderFrontRegardless()
+        if let p = edgePanel as NSWindow? { FloatingPanelTransparency.clearChain(p) }
         markOpen()
     }
 
@@ -223,6 +227,7 @@ final class StudioGlassController: NSObject, NSWindowDelegate {
         panel.setFrame(frame, display: true)
         rememberedFrame = frame
         panel.orderFrontRegardless()
+        if let p = panel as NSWindow? { FloatingPanelTransparency.clearChain(p) }
         NSApp.activate(ignoringOtherApps: true)
         markOpen()
     }
@@ -328,6 +333,7 @@ final class StudioGlassController: NSObject, NSWindowDelegate {
         panel.isMovable = false
         panel.isReleasedWhenClosed = false
         hosting.view.autoresizingMask = [.width, .height]
+        FloatingPanelTransparency.apply(to: panel, hosting: hosting)
         if let hostingView = hosting.view as? NSHostingView<StudioGlassEdgeRoot> {
             hostingView.safeAreaRegions = []
         }
@@ -390,6 +396,7 @@ final class StudioGlassController: NSObject, NSWindowDelegate {
         panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
         panel.standardWindowButton(.zoomButton)?.isHidden = true
         hosting.view.autoresizingMask = [.width, .height]
+        FloatingPanelTransparency.apply(to: panel, hosting: hosting)
         if let hostingView = hosting.view as? NSHostingView<StudioGlassRoot> {
             hostingView.safeAreaRegions = []
         }

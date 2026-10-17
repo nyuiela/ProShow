@@ -353,6 +353,22 @@ final class LiveKitDeskSession: NSObject, RoomDelegate {
         }
     }
 
+    nonisolated func room(_ room: Room, participant: Participant, didUpdateMetadata metadata: String?) {
+        Task { @MainActor in publishGuestList() }
+    }
+
+    nonisolated func room(_ room: Room, participant: Participant, didUpdateAttributes attributes: [String: String]) {
+        Task { @MainActor in publishGuestList() }
+    }
+
+    nonisolated func room(_ room: Room, participant: Participant, didUpdateName name: String) {
+        Task { @MainActor in publishGuestList() }
+    }
+
+    nonisolated func room(_ room: Room, participant: Participant, trackPublication: TrackPublication, didUpdateIsMuted isMuted: Bool) {
+        Task { @MainActor in publishGuestList() }
+    }
+
     nonisolated func room(_ room: Room, participantDidConnect participant: RemoteParticipant) {
         Task { @MainActor in
             await considerAdmit(participant)
@@ -489,6 +505,19 @@ final class LiveKitDeskSession: NSObject, RoomDelegate {
             )
         }
         .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        var profiles: [String: GuestProfile] = [:]
+        for participant in room.remoteParticipants.values {
+            let identity = participant.identity?.stringValue ?? ""
+            guard !identity.isEmpty, participant.attributes["ps.role"] != "desk" else { continue }
+            let camera = participant.trackPublications.values.first { $0.source == .camera }
+            profiles[identity] = GuestProfileStore.make(
+                name: participant.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+                metadata: participant.metadata,
+                attributes: participant.attributes,
+                cameraLive: camera != nil && camera?.isMuted == false && camera?.isSubscribed == true
+            )
+        }
+        GuestProfileStore.shared.replaceAll(profiles)
         onGuests?(feeds)
         if feeds.isEmpty {
             onStatus?("In room. Waiting for guests.")
@@ -852,6 +881,8 @@ enum LiveKitRoomAdmin {
                 "canSubscribe": true,
                 "canPublish": true,
                 "canPublishData": true,
+                // Keep the guest able to attach its profile photo to metadata after admission.
+                "canUpdateMetadata": true,
             ],
             "attributes": [
                 "ps.state": "admitted",

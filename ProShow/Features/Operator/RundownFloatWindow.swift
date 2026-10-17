@@ -118,6 +118,7 @@ final class RundownFloatController: NSObject, NSWindowDelegate {
             panel.minSize = RundownFloatWindowLayout.minimumSize
             panel.maxSize = RundownFloatWindowLayout.maximumSize
             hosting.view.autoresizingMask = [.width, .height]
+            FloatingPanelTransparency.apply(to: panel, hosting: hosting)
             if let hostingView = hosting.view as? NSHostingView<RundownFloatRoot> {
                 hostingView.safeAreaRegions = []
             }
@@ -132,6 +133,7 @@ final class RundownFloatController: NSObject, NSWindowDelegate {
             panel?.setFrame(NSRect(origin: origin, size: defaultSize), display: true)
         }
         panel?.orderFrontRegardless()
+        if let p = panel as NSWindow? { FloatingPanelTransparency.clearChain(p) }
         isOpen = true
     }
 
@@ -310,7 +312,7 @@ struct RundownMiniOutlinePanel: View {
     }
 
     private var itemRunTimeRow: some View {
-        TimelineView(.periodic(from: .now, by: 0.25)) { _ in
+        TimelineView(.periodic(from: TimelineAnchor.start, by: 0.25)) { _ in
             HStack(alignment: .firstTextBaseline) {
                 Text("Item run time")
                     .font(.system(size: 10, weight: .bold))

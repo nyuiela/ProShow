@@ -344,7 +344,22 @@ enum BuildAnimationEngine {
             .sorted { $0.sequenceOrder < $1.sequenceOrder }
     }
 
+    private static let widthCache = NSCache<NSString, NSNumber>()
+
     static func measuredTextWidth(for object: CanvasObject) -> Double {
+        #if canImport(AppKit)
+        let t = object.typography
+        let key = "\(t.fontFamily)|\(t.fontSize)|\(t.fontWeight.rawValue)|\(t.isBold)|\(t.isItalic)|\(object.displayText)" as NSString
+        if let hit = widthCache.object(forKey: key) { return hit.doubleValue }
+        let width = measuredTextWidthUncached(for: object)
+        widthCache.setObject(NSNumber(value: width), forKey: key)
+        return width
+        #else
+        return measuredTextWidthUncached(for: object)
+        #endif
+    }
+
+    private static func measuredTextWidthUncached(for object: CanvasObject) -> Double {
         #if canImport(AppKit)
         let font = CanvasTypeface.nsFont(
             family: object.typography.fontFamily,
@@ -547,7 +562,7 @@ struct BuildAnimated<Content: View>: View {
     var body: some View {
         Group {
             if shouldTickLive && onScreen {
-                TimelineView(.periodic(from: .now, by: reduceMotion ? 1.0 / 15.0 : 1.0 / 30.0)) { timeline in
+                TimelineView(.periodic(from: TimelineAnchor.start, by: reduceMotion ? 1.0 / 15.0 : 1.0 / 30.0)) { timeline in
                     built(at: timeline.date)
                 }
             } else {
@@ -564,7 +579,14 @@ struct BuildAnimated<Content: View>: View {
     }
 
     private var shouldTickLive: Bool {
-        BuildAnimationEngine.shouldTickLive(
+        // Objects with no build steps of their own are static: don't run a 30 fps TimelineView for them.
+        // Before this, every object on every visible slide re-rendered 30x/s once the program clock started.
+        let steps = slideSteps.isEmpty ? object.resolvedBuildSteps : slideSteps
+        if clock.changeTimes[object.id] == nil, !object.textLayout.isLooping,
+           !steps.contains(where: { $0.elementId == object.id }) {
+            return false
+        }
+        return BuildAnimationEngine.shouldTickLive(
             mode: evaluationMode,
             clock: clock,
             objectID: object.id
@@ -614,3 +636,10 @@ struct BuildAnimated<Content: View>: View {
     }
 }
 #endif
+
+/// Perf: fixed start for every `.periodic` TimelineView. A schedule built from `.now` is a new value on each
+/// parent update, so SwiftUI treats it as changed and re-renders the timeline content on every update
+/// (~26k extra updates per 4 s in the SwiftUI trace).
+enum TimelineAnchor {
+    static let start = Date()
+}

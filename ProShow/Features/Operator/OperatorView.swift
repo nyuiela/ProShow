@@ -69,7 +69,8 @@ struct OperatorView: View {
                     maxWidth: AddShotModalView.modalMaxWidth,
                     maxHeight: AddShotModalView.modalMaxHeight
                 )
-                .frame(width: AddShotModalView.modalWidth, height: AddShotModalView.modalHeight)
+                .frame(minWidth: AddShotModalView.modalWidth, idealWidth: AddShotModalView.modalWidth, maxWidth: AddShotModalView.modalMaxWidth,
+               minHeight: AddShotModalView.modalHeight, idealHeight: AddShotModalView.modalHeight, maxHeight: AddShotModalView.modalMaxHeight)
         }
         .sheet(isPresented: $controller.isPreFlightPresented) {
             PreFlightHealthView(controller: controller)
@@ -80,7 +81,8 @@ struct OperatorView: View {
                     maxWidth: GoLiveSetupSheet.modalMaxWidth,
                     maxHeight: GoLiveSetupSheet.modalMaxHeight
                 )
-                .frame(width: GoLiveSetupSheet.modalWidth, height: GoLiveSetupSheet.modalHeight)
+                .frame(minWidth: GoLiveSetupSheet.modalWidth, idealWidth: GoLiveSetupSheet.modalWidth, maxWidth: GoLiveSetupSheet.modalMaxWidth,
+               minHeight: GoLiveSetupSheet.modalHeight, idealHeight: GoLiveSetupSheet.modalHeight, maxHeight: GoLiveSetupSheet.modalMaxHeight)
         }
     }
 

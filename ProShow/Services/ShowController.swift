@@ -1,10 +1,12 @@
 import Foundation
+import AppKit
 import Observation
 #if canImport(CoreVideo)
 import CoreVideo
 #endif
 #if canImport(CoreMedia)
 import CoreMedia
+import CoreImage
 #endif
 
 /// Exclusive highlight for the left workspace capsule (Show, Edit, Map, …).
@@ -159,6 +161,10 @@ final class ShowController {
     var videoInputRunning: Bool = false
 
     var selectedSlideID: SlideID?
+    /// Operator cleared the live-input (camera) layer; slide changes must not bring it back.
+    var operatorClearedLiveInput = false
+    /// Camera was put on air by a slide's video pane (not by the operator).
+    var liveInputAutoBoundBySlide = false
     var liveSlideID: SlideID?
     var activeSlideBuildStepIndex: Int = 0
     var liveBuildStartedAt: Date?
@@ -233,7 +239,7 @@ final class ShowController {
     /// Bumps when `liveQuotes` mutates so output surfaces refresh `dynamicText` (nested engine is not always tracked).
     private(set) var liveQuotePresentationStamp: UInt64 = 0
     /// Latest single-pass dynamic text + revision for program outputs.
-    var latestProgramRenderSnapshot: ProgramRenderSnapshot?
+    @ObservationIgnored var latestProgramRenderSnapshot: ProgramRenderSnapshot?
     /// Bumps when `FrameRevisionClock` advances (SwiftUI monitor `.id` + invalidation).
     var programFrameRevisionStamp: UInt64 = 0
     /// Bumps when project save/dirty state changes so desk chrome can refresh the ⚪ indicator.
@@ -723,10 +729,7 @@ final class ShowController {
             compositor.triggerCue(makeCue(for: slide, index: index))
         }
         applyMediaLayerDecision(decision)
-        if !compositor.isLayerLocked(.videoInput) {
-            ensureSlideLiveInputsOnMainLayer(slide)
-            compositor.restore(.videoInput)
-        }
+        syncSlideLiveInputLayer(slide)
         executeLinkedSlideMacros(slide)
         beginBoundTransition(presetID: slide.transition, workspace: .slideInspector, incomingSceneID: scenes.activeSceneID)
         resetLiveBuildClock()
@@ -1584,6 +1587,20 @@ final class ShowController {
         return prop
     }
 
+    /// Agent-made prop. Added off, in the "AI Props" collection.
+    @discardableResult
+    func addAgentProp(name: String, elements: [CanvasObject], phoneElements: [CanvasObject]?, phoneMode: PropPhoneMode, showOn: PropOutputTarget) -> ProShowProp {
+        let collection = "AI Props"
+        if !inspector.collections.contains(collection) { inspector.collections.append(collection) }
+        let prop = ProShowProp(name: name, elements: elements, collectionName: collection,
+                               phoneElements: phoneElements, phoneMode: phoneMode, showOn: showOn)
+        inspector.props.append(prop)
+        if editors.kind == .props { editors.insertDocument(from: prop) }
+        syncActivePropsToCompositor()
+        persistStudio()
+        return prop
+    }
+
     func assignPropCollection(id: UUID, collection: String) {
         inspector.setPropCollection(id: id, collection: collection)
         if editors.kind == .props,
@@ -1653,8 +1670,7 @@ final class ShowController {
         if show.id == ProgramOutlinePresentation.showID,
            ProgramOutlinePresentation.pageURL(in: cleaned) == nil,
            !compositor.isLayerLocked(.videoInput) {
-            ensureSlideLiveInputsOnMainLayer(cleaned)
-            compositor.restore(.videoInput)
+            syncSlideLiveInputLayer(cleaned)
         }
     }
 
@@ -1707,6 +1723,16 @@ final class ShowController {
         return slide
     }
 
+    /// Appends slides to a named group, creating it at the end if missing. Used by AI apply.
+    func appendSlides(_ slides: [Slide], toGroupNamed name: String, colorHex: String) {
+        if let index = show.groups.firstIndex(where: { $0.name == name }) {
+            show.groups[index].slides.append(contentsOf: slides)
+        } else {
+            show.groups.append(SlideGroup(name: name, colorHex: colorHex, slides: slides))
+        }
+        persistCurrentShow()
+    }
+
     func addEditorSlide() {
         rehydrateFromEditor(persist: true)
         _ = addSlide(named: "Slide \(show.allSlides.count + 1)")
@@ -1725,8 +1751,11 @@ final class ShowController {
     func toggleDefaultClear() {
         if isDefaultLayerCleared {
             compositor.restoreDefaultLayers()
+            operatorClearedLiveInput = false
         } else {
             compositor.clearDefaultLayers()
+            operatorClearedLiveInput = true
+            liveInputAutoBoundBySlide = false
         }
     }
 
@@ -2238,9 +2267,7 @@ final class ShowController {
 
     func phoneCanvasBoard(on slide: Slide?) -> EditorCanvasFrame? {
         guard let slide else { return nil }
-        return slide.editorCanvases.first {
-            !$0.isPrimary && CanvasResolution.screenFamily(width: $0.width, height: $0.height) == .phone
-        }
+        return slide.editorCanvases.first { $0.isPhoneArtboard }
     }
 
     func selectPhonePreviewFeed(_ feed: PreviewFeed) {
@@ -2422,11 +2449,9 @@ final class ShowController {
         }
         tickPlaceholderFailover()
         syncTextFieldsFromCanvas()
-        if isoRecorder.isRecording && !streaming.isLive {
-            liveQuoteRefreshMinInterval = 1.25
-        } else {
-            liveQuoteRefreshMinInterval = 0.5
-        }
+        // @Observable notifies on every set, even with an equal value; only write on change.
+        let quoteInterval = isoRecorder.isRecording && !streaming.isLive ? 1.25 : 0.5
+        if liveQuoteRefreshMinInterval != quoteInterval { liveQuoteRefreshMinInterval = quoteInterval }
         refreshLiveQuotes(now: now)
         ensureProgramMarketTickerFeeds(now: now)
         refreshRundownTick()
@@ -2474,13 +2499,13 @@ final class ShowController {
                 snapshot: renderSnapshot
             )
         }
-        isMediaPlaying = playback.isPlaying
+        if isMediaPlaying != playback.isPlaying { isMediaPlaying = playback.isPlaying }
         evaluateProgramClockState(now: now)
         syncStreamCapturePrivacyIfNeeded()
         programFrame &+= 1
         transportClock.programFrame = programFrame
-        transportClock.liveBuildStartedAt = liveBuildStartedAt
-        transportClock.boundSlideID = liveSlideID
+        if transportClock.liveBuildStartedAt != liveBuildStartedAt { transportClock.liveBuildStartedAt = liveBuildStartedAt }
+        if transportClock.boundSlideID != liveSlideID { transportClock.boundSlideID = liveSlideID }
     }
 
     /// The minute's page, snapshotted so the stream matches the audience picture.
@@ -2687,7 +2712,7 @@ final class ShowController {
             propCanvases: activePropCanvases,
             objectLivePixels: objectLivePixels,
             buildPlayback: slideEncodePlayback,
-            buildPhaseFilter: slideLeaveStartedAt != nil ? [.buildOut] : nil,
+            buildPhaseFilter: slideLeaveStartedAt != nil ? [.buildOut] : [.buildIn, .action],
             renderNow: now,
             programTransition: compositor.programTransition,
             propBuildPlayback: propBuildPlayback,
@@ -2988,7 +3013,7 @@ final class ShowController {
             existing.propCanvases = activePropCanvases
             existing.objectLivePixels = objectLivePixels
             existing.buildPlayback = slideEncodePlayback
-            existing.buildPhaseFilter = slideLeaveStartedAt != nil ? [.buildOut] : nil
+            existing.buildPhaseFilter = slideLeaveStartedAt != nil ? [.buildOut] : [.buildIn, .action]
             existing.renderNow = now
             existing.programTransition = compositor.programTransition
             existing.propBuildPlayback = propBuildPlayback
@@ -3019,7 +3044,7 @@ final class ShowController {
             propCanvases: activePropCanvases,
             objectLivePixels: objectLivePixels,
             buildPlayback: slideEncodePlayback,
-            buildPhaseFilter: slideLeaveStartedAt != nil ? [.buildOut] : nil,
+            buildPhaseFilter: slideLeaveStartedAt != nil ? [.buildOut] : [.buildIn, .action],
             renderNow: now,
             programTransition: compositor.programTransition,
             propBuildPlayback: propBuildPlayback,
@@ -3174,9 +3199,13 @@ final class ShowController {
                 textContext: work.textContext,
                 objectLivePixels: phonePixels,
                 buildPlayback: work.buildPlayback,
+                // Same phases as the Stream render. Without this, Build Out ran right after Build In
+                // and the Phone design image and camera frame dissolved away on air.
+                buildPhaseFilter: work.buildPhaseFilter,
                 renderNow: work.renderNow,
                 marketStreamItems: work.marketStreamItems,
-                tickerColorConfig: work.tickerColorConfig
+                tickerColorConfig: work.tickerColorConfig,
+                propCanvases: PhonePropCanvasStore.shared.get().filter { canvas in work.propCanvases.contains { $0.id == canvas.id } || PhonePropCanvasStore.shared.isPhoneOnly(canvas.id) }
             ) {
                 PhoneComposedFrame.shared.store(phoneFrame)
             }
@@ -3240,8 +3269,14 @@ final class ShowController {
         }
         rehydrateFromEditor(persist: true)
         syncPropsFromEditor()
+        // Placeholder mappings live in the studio manifest; save them or they are gone on reload.
+        persistStudio()
+        // Fill the pane in place. Do NOT take the source live on master layer 0 here: that added a
+        // separate camera shot that stayed on program (behind transparent slides) even when the edited
+        // slide was not on air. If the edited slide is live, rehydrate -> applyLiveSceneDelta ->
+        // syncSlideLiveInputLayer brings the feed up slide-bound, so it clears on slides without panes.
         if item.sourceType.needsMainLayerShot {
-            _ = ensureLiveInputOnMainLayer(item)
+            warmLiveCaptureForPreview(item)
         }
     }
 
@@ -3346,16 +3381,210 @@ final class ShowController {
         return shot
     }
 
+    /// Local QA hook for placeholder / live-input checks (no UI clicks).
+    func handleQARequest(_ args: [String: String]) -> [String: Any] {
+        func slide() -> Slide? {
+            guard let group = show.groups.first(where: { $0.name == args["group"] }) else { return nil }
+            let index = Int(args["slide"] ?? "0") ?? 0
+            return group.slides.indices.contains(index) ? group.slides[index] : nil
+        }
+        switch args["action"] ?? "state" {
+        case "add_pack":
+            addBroadcastTemplatePack()
+            return ["ok": true, "group": show.groups.last?.name ?? ""]
+        case "build_spec":
+            // Writes a NEW bundle at `out` from a JSON spec; never touches the open project.
+            guard let spec = args["spec"], let out = args["out"], out.hasSuffix(".proshow"),
+                  !FileManager.default.fileExists(atPath: out) || args["overwrite"] == "1" else {
+                return ["ok": false, "error": "bad_args_or_exists"]
+            }
+            do {
+                let count = try SpecProjectBuilder.build(specURL: URL(fileURLWithPath: spec), root: URL(fileURLWithPath: out),
+                                                         programURL: args["program"].map { URL(fileURLWithPath: $0, isDirectory: true) })
+                return ["ok": true, "slides": count]
+            } catch {
+                return ["ok": false, "error": "\(error)"]
+            }
+        case "remove_group":
+            return ["ok": true, "removed": removeGroups(named: args["group"] ?? "")]
+        case "prop_edit":
+            // Opens the prop editor on one prop; canvas=phone selects its Phone board. Never takes it live.
+            guard let prop = inspector.props.first(where: { $0.name == args["name"] }) else { return ["ok": false, "error": "no_prop"] }
+            editProp(id: prop.id)
+            if args["canvas"] == "phone" { editors.selectCanvas(EditorEngine.propPhoneBoardID(for: prop.id)) }
+            return ["ok": true, "phoneMode": editors.propPhoneMode(of: prop.id).rawValue, "showOn": prop.showOn.rawValue]
+        case "editor_view":
+            // Editor viewport for screenshots: zoom, and pan in canvas px from the primary board center.
+            let zoom = Double(args["zoom"] ?? "") ?? editors.zoom
+            editors.zoom = zoom
+            editors.canvasPanX = -(Double(args["cx"] ?? "0") ?? 0) * zoom
+            editors.canvasPanY = -(Double(args["cy"] ?? "0") ?? 0) * zoom
+            return ["ok": true, "zoom": zoom]
+        case "prop_create":
+            // Same path as the agent tool. args["json"] is the tool's JSON arguments.
+            guard let data = args["json"]?.data(using: .utf8), let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return ["ok": false, "error": "bad_json"] }
+            return AIAgentSession.runPropCreate(obj, controller: self).0
+        case "prop_delete":
+            guard let prop = inspector.props.first(where: { $0.name == args["name"] }) else { return ["ok": false, "error": "no_prop"] }
+            _ = inspector.deleteProp(id: prop.id)
+            if editors.kind == .props { editors.documents.removeAll { $0.id == prop.id } }
+            syncActivePropsToCompositor(); persistStudio()
+            return ["ok": true]
+        case "prop_info":
+            guard let prop = inspector.props.first(where: { $0.name == args["name"] }) else { return ["ok": false, "error": "no_prop"] }
+            return ["ok": true, "collection": prop.collectionName, "active": prop.isActive, "phoneMode": prop.phoneMode.rawValue, "showOn": prop.showOn.rawValue,
+                    "anchors": prop.elements.map { $0.propAnchor?.rawValue ?? "nil" }.joined(separator: ",")]
+        case "stream_local_test":
+            // QA only: Stream + Phone lanes to localhost RTMP listeners. Accounts live in memory and are never saved.
+            guard let su = args["stream"], let pu = args["phone"],
+                  [su, pu].allSatisfy({ $0.hasPrefix("rtmp://127.0.0.1:") || $0.hasPrefix("rtmp://localhost:") }),
+                  let sURL = URL(string: su), let pURL = URL(string: pu) else { return ["ok": false, "error": "localhost_rtmp_only"] }
+            guard !streaming.isLive else { return ["ok": false, "error": "already_streaming"] }
+            let sAcc = StreamAccount(accountName: "QA Local Stream", platform: .customRtmp, rtmpUrl: su, targetBitrateKbps: 4000)
+            var pAcc = StreamAccount(accountName: "QA Local Phone", platform: .customRtmp, rtmpUrl: pu, targetBitrateKbps: 4000)
+            pAcc.screenId = DestinationScreenKind.phone.rawValue
+            let ingests = [
+                ResolvedIngest(accountID: sAcc.id, name: sAcc.accountName, platform: .customRtmp, url: sURL, streamKey: ""),
+                ResolvedIngest(accountID: pAcc.id, name: pAcc.accountName, platform: .customRtmp, url: pURL, streamKey: ""),
+            ]
+            streaming.configureOutputs(ingests, accounts: [sAcc, pAcc])
+            if streaming.transport is MockStreamTransport == false {
+                streaming.transport = RTMPClient.fanoutConfigs(from: streaming.config).count > 1 ? MultiRTMPTransport() : RTMPStreamTransport()
+            }
+            let ok = streaming.start(ingestPolicies: [])
+            publishCurrentPhoneCanvas()
+            return ["ok": ok, "state": streaming.state.rawValue, "phoneLane": streaming.routingPlan?.phoneLane != nil]
+        case "stream_local_stop":
+            streaming.stop()
+            streaming.configureOutputs([], accounts: [])
+            return ["ok": true]
+        case "stream_info":
+            return ["ok": true, "state": streaming.state.rawValue, "phoneError": streaming.phoneLaneError ?? "", "lastError": streaming.lastError ?? "",
+                    "phone": streaming.phoneLaneDiagnostics]
+        case "timer":
+            guard let timer = inspector.timers.first(where: { $0.name == args["name"] }) else { return ["ok": false, "error": "no_timer"] }
+            switch args["op"] {
+            case "start": _ = inspector.startTimer(id: timer.id)
+            case "stop": _ = inspector.stopTimer(id: timer.id)
+            case "reset": _ = inspector.resetTimer(id: timer.id)
+            default: return ["ok": false, "error": "op"]
+            }
+            evaluateProgramClockState()
+            return ["ok": true]
+        case "prop_toggle":
+            guard let prop = inspector.props.first(where: { $0.name == args["name"] }) else { return ["ok": false, "error": "no_prop"] }
+            _ = toggleInspectorProp(id: prop.id)
+            return ["ok": true, "active": inspector.props.first(where: { $0.id == prop.id })?.isActive ?? false]
+        case "prop_close_editor":
+            closeEditor()
+            return ["ok": true]
+        case "prop_show_on":
+            guard let prop = inspector.props.first(where: { $0.name == args["name"] }),
+                  let target = PropOutputTarget(rawValue: args["target"] ?? "") else { return ["ok": false, "error": "bad_args"] }
+            setPropShowOn(id: prop.id, target: target)
+            return ["ok": true, "showOn": target.rawValue]
+        case "prop_list":
+            return ["ok": true, "props": inspector.props.map { "\($0.name)|\($0.phoneMode.rawValue)|\($0.showOn.rawValue)|\($0.phoneElements?.count ?? 0)" }.joined(separator: ";")]
+        case "render":
+            // Renders every canvas of one slide to PNGs (QA only; never goes live).
+            #if canImport(CoreVideo) && os(macOS)
+            guard let slide = slide(), let out = args["out"] else { return ["ok": false, "error": "no_slide"] }
+            var paths: [String] = []
+            let ctx = CIContext()
+            let prepared = prepareSlideForProgramCue(slide)
+            let wanted = Set((args["props"] ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) })
+            let overlayProps = inspector.props.filter { wanted.contains($0.name) }
+            for (i, board) in prepared.editorCanvases.enumerated() {
+                let isPhone = !board.isPrimary && board.height > board.width
+                let propLayer: [PropCanvas] = isPhone
+                    ? phonePropCanvases(for: overlayProps)
+                    : overlayProps.filter { PropCanvasLayout.shows($0, on: .stream) }.map { PropCanvas(id: $0.id, name: $0.name, objects: resolvedCanvasObjects($0.elements)) }
+                let boardObjects = resolvedCanvasObjects(board.isPrimary && board.objects.isEmpty
+                    ? prepared.audienceCanvas(variantOverrideID: nil, applicationOverride: prepared.themeApplication)
+                    : board.objects)
+                let scale = min(1.0, 1920.0 / max(board.width, board.height))
+                var probe = RenderStack.idle
+                probe.slideCanvas = boardObjects
+                let live = buildProgramObjectLivePixels(stack: probe, programVideo: nil, propCanvases: [])
+                guard let px = ProgramOutputComposer.shared.renderSlideBoard(
+                    objects: boardObjects, canvasWidth: board.width, canvasHeight: board.height,
+                    backgroundEnabled: board.backgroundEnabled, backgroundHex: board.backgroundHex,
+                    width: Int(board.width * scale), height: Int(board.height * scale),
+                    textContext: dynamicTextContext(), objectLivePixels: live, renderNow: Date(),
+                    propCanvases: propLayer) else { continue }
+                let path = "\(out)-\(i).png"
+                let image = CIImage(cvPixelBuffer: px)
+                if let cs = CGColorSpace(name: CGColorSpace.sRGB),
+                   (try? ctx.writePNGRepresentation(of: image, to: URL(fileURLWithPath: path), format: .RGBA8, colorSpace: cs)) != nil {
+                    paths.append(path)
+                }
+            }
+            return ["ok": true, "paths": paths]
+            #else
+            return ["ok": false, "error": "unsupported"]
+            #endif
+        case "golive":
+            guard let slide = slide() else { return ["ok": false, "error": "no_slide"] }
+            goLive(slideID: slide.id)
+        case "assign_camera":
+            guard let slide = slide() else { return ["ok": false, "error": "no_slide"] }
+            editSlide(id: slide.id)
+            guard let object = editors.selectedDocument?.objects.first(where: { $0.name == args["object"] }) else {
+                return ["ok": false, "error": "no_object"]
+            }
+            editors.selectedObjectIDs = [object.id]
+            guard let camera = preferredProgramCameraSource() else { return ["ok": false, "error": "no_camera"] }
+            assignSourceToSelectedEditorObjects(discoveredLiveInput(from: camera))
+        default:
+            break
+        }
+        let objects: [[String: Any]] = (slide().map { resolvedCanvasObjects($0.canvas) } ?? [])
+            .filter { $0.kind == .videoInput || $0.assignedSource != nil }
+            .map { ["name": $0.name, "kind": $0.kind.rawValue, "letter": $0.assignedPlaceholderLetter ?? "",
+                    "source": $0.assignedSource?.name ?? "", "type": $0.assignedSource?.sourceType.rawValue ?? ""] }
+        return [
+            "ok": true,
+            "layers": masterLayers.map { layer in
+                ["index": layer.index, "shots": layer.shots.map(\.name),
+                 "live": layer.shots.first(where: { $0.id == layer.liveShotID })?.name ?? ""] as [String: Any]
+            },
+            "videoInputOnProgram": compositor.stack.videoInput != nil && !compositor.stack.isCleared(.videoInput),
+            "autoBoundBySlide": liveInputAutoBoundBySlide,
+            "liveSlide": liveSlide?.title ?? "",
+            "slideObjects": objects,
+            "slideCount": show.allSlides.count,
+        ]
+    }
+
     @discardableResult
     func ensureLiveInputOnMainLayer(_ item: DiscoveredSourceItem) -> LayerShot? {
         guard item.sourceType.needsMainLayerShot, masterLayers.indices.contains(0) else { return nil }
         return upsertLiveShot(item, layerIndex: 0, goLive: true)
     }
 
+    /// Slide go-live: bring the camera up only for slides that actually have a live-input pane, and never
+    /// undo an operator Clear. Previously every slide change called restore(.videoInput), so a cleared camera
+    /// came back and showed through transparent slides; a camera auto-bound by one slide's pane also stayed on
+    /// for the next transparent slide.
+    func syncSlideLiveInputLayer(_ slide: Slide) {
+        guard !compositor.isLayerLocked(.videoInput) else { return }
+        let hasPane = !liveInputItems(on: slide).isEmpty
+            || resolvedCanvasObjects(slide.canvas).contains { $0.isLegacyUnassignedVideoPane }
+        if hasPane {
+            guard !operatorClearedLiveInput else { return }
+            ensureSlideLiveInputsOnMainLayer(slide)
+            compositor.restore(.videoInput)
+            liveInputAutoBoundBySlide = true
+        } else if liveInputAutoBoundBySlide {
+            compositor.clear(.videoInput)
+            liveInputAutoBoundBySlide = false
+        }
+    }
+
     func ensureSlideLiveInputsOnMainLayer(_ slide: Slide) {
         var items = liveInputItems(on: slide)
         if items.isEmpty,
-           resolvedCanvasObjects(slide.canvas).contains(where: { $0.kind == .videoInput }),
+           resolvedCanvasObjects(slide.canvas).contains(where: \.isLegacyUnassignedVideoPane),
            let source = preferredProgramCameraSource() {
             items = [discoveredLiveInput(from: source)]
         }
@@ -3368,7 +3597,7 @@ final class ShowController {
     func prepareSlidePreviewCapture(for slide: Slide) {
         var items = liveInputItems(on: slide)
         if items.isEmpty,
-           resolvedCanvasObjects(slide.canvas).contains(where: { $0.kind == .videoInput }),
+           resolvedCanvasObjects(slide.canvas).contains(where: \.isLegacyUnassignedVideoPane),
            let source = preferredProgramCameraSource() {
             items = [discoveredLiveInput(from: source)]
         }
@@ -3387,7 +3616,7 @@ final class ShowController {
                 return input
             }
         }
-        if resolvedCanvasObjects(slide.canvas).contains(where: { $0.kind == .videoInput }),
+        if resolvedCanvasObjects(slide.canvas).contains(where: \.isLegacyUnassignedVideoPane),
            let source = preferredProgramCameraSource() {
             return VideoInputSource(
                 id: source.id,
@@ -5708,6 +5937,7 @@ final class ShowController {
         if !libraries.isEmpty {
             contentLibraries = libraries
         }
+        attachOrphanPlaylists()
     }
 
     private func mergeMediaItems(_ existing: [MediaBinItem], _ incoming: [MediaBinItem]) -> [MediaBinItem] {
@@ -6280,6 +6510,56 @@ final class ShowController {
         show.groups = groups
         selectedSlideID = id
         persistCurrentShow()
+    }
+
+    /// Removes every group with this name (agent test cleanup). Returns how many were removed.
+    @discardableResult
+    /// Removes only groups that hold the given slides (test cleanup that never touches same-named groups).
+    func removeGroups(containing ids: Set<SlideID>) -> Int {
+        guard !ids.isEmpty else { return 0 }
+        let before = show.groups.count
+        let remaining = show.groups.filter { g in !g.slides.contains { ids.contains($0.id) } }
+        guard !remaining.isEmpty, remaining.count != before else { return 0 }
+        show.groups = remaining
+        selectedSlideID = remaining.first?.slides.first?.id
+        editors.syncPresentation(from: show, selectedSlideID: selectedSlideID)
+        persistCurrentShow()
+        rebuildSearchIndex()
+        return before - remaining.count
+    }
+
+    func removeGroups(named name: String) -> Int {
+        let before = show.groups.count
+        let remaining = show.groups.filter { $0.name != name }
+        guard !remaining.isEmpty, remaining.count != before else { return 0 }
+        show.groups = remaining
+        selectedSlideID = remaining.first?.slides.first?.id
+        editors.syncPresentation(from: show, selectedSlideID: selectedSlideID)
+        persistCurrentShow()
+        rebuildSearchIndex()
+        return before - remaining.count
+    }
+
+    /// Agent mock-run cleanup: drops "Agent * Test" groups and scripted mock slides ("Stablecoin rails slide N").
+    func removeAgentTestContent() -> Int {
+        var removed = 0
+        var groups = show.groups
+        for i in groups.indices {
+            let isTestGroup = groups[i].name.hasPrefix("Agent ") && groups[i].name.hasSuffix(" Test")
+            let before = groups[i].slides.count
+            groups[i].slides.removeAll { slide in
+                isTestGroup || (slide.lines.first?.hasPrefix("Stablecoin rails slide ") == true && slide.title.hasPrefix("Morapay Live "))
+            }
+            removed += before - groups[i].slides.count
+        }
+        groups.removeAll { $0.slides.isEmpty }
+        guard removed > 0, !groups.isEmpty else { return 0 }
+        show.groups = groups
+        selectedSlideID = groups.first?.slides.first?.id
+        editors.syncPresentation(from: show, selectedSlideID: selectedSlideID)
+        persistCurrentShow()
+        rebuildSearchIndex()
+        return removed
     }
 
     func moveSlideToEnd(_ id: SlideID) {
@@ -6878,6 +7158,7 @@ final class ShowController {
 
     func hideLayer(_ layer: RenderLayer) {
         compositor.clear(layer)
+        if layer == .videoInput { operatorClearedLiveInput = true; liveInputAutoBoundBySlide = false }
         if layer == .media {
             applyProgramAudioMute()
         }
@@ -6938,6 +7219,7 @@ final class ShowController {
         case .media:
             applyProgramAudioMute()
         case .videoInput:
+            operatorClearedLiveInput = false
             videoInputRunning = compositor.stack.videoInput != nil
         case .props, .messages, .announcements, .mask, .screenColor:
             break
@@ -6978,6 +7260,8 @@ final class ShowController {
         case .videoInput:
             compositor.clearProgramVideoInput()
             compositor.clear(.videoInput)
+            operatorClearedLiveInput = true
+            liveInputAutoBoundBySlide = false
             videoInputRunning = false
             reconcileAudioCaptureGraph()
         case .media:
@@ -7085,11 +7369,58 @@ final class ShowController {
         hideAllLayers()
     }
 
+    /// 9:16 Phone versions of props (from `ProShowProp.phoneElements`).
+    func phonePropCanvases(for props: [ProShowProp]) -> [PropCanvas] {
+        props.compactMap { prop in
+            guard PropCanvasLayout.shows(prop, on: .phone), let phone = PropCanvasLayout.phoneObjects(for: prop) else { return nil }
+            return PropCanvas(
+                id: prop.id,
+                name: prop.name,
+                objects: resolvedCanvasObjects(phone),
+                canvasWidth: 2160,
+                canvasHeight: 3840,
+                buildStartedAt: propBuildStartedAt[prop.id],
+                buildClearStartedAt: propBuildClearStartedAt[prop.id]
+            )
+        }
+    }
+
+    /// Per-prop output choice. Program and Phone both read it on the next sync.
+    func setPropShowOn(id: UUID, target: PropOutputTarget) {
+        guard let index = inspector.props.firstIndex(where: { $0.id == id }) else { return }
+        inspector.props[index].showOn = target
+        if editors.kind == .props, let d = editors.documents.firstIndex(where: { $0.id == id }) {
+            editors.documents[d].propShowOn = target
+        }
+        syncActivePropsToCompositor()
+        refreshLiveStack()
+        persistStudio()
+    }
+
+    /// Live props in their Phone layout, scaled onto a Phone board, for monitors that draw without the encoder.
+    func livePhonePropObjects(width: Double, height: Double) -> [CanvasObject] {
+        let live = inspector.props.filter(\.isActive)
+        return phonePropCanvases(for: live).flatMap { canvas -> [CanvasObject] in
+            let sx = width / max(1, canvas.canvasWidth), sy = height / max(1, canvas.canvasHeight)
+            return canvas.objects.map { object in
+                var o = object
+                o.transform.x *= sx; o.transform.y *= sy
+                o.transform.width *= sx; o.transform.height *= sy
+                o.typography.fontSize *= min(sx, sy)
+                o.zIndex += 100_000
+                return o
+            }
+        }
+    }
+
     func syncActivePropsToCompositor() {
         let live = inspector.props.filter { $0.isActive || propBuildClearStartedAt[$0.id] != nil }
+        PhonePropCanvasStore.shared.set(phonePropCanvases(for: live))
+        PhonePropCanvasStore.shared.setPhoneOnly(Set(live.filter { $0.showOn == .phone }.map(\.id)))
+        let stream = live.filter { PropCanvasLayout.shows($0, on: .stream) }
         compositor.setActiveProps(
-            live.map(\.name),
-            canvases: live.map {
+            stream.map(\.name),
+            canvases: stream.map {
                 PropCanvas(
                     id: $0.id,
                     name: $0.name,
@@ -7512,6 +7843,15 @@ final class ShowController {
             return RemoteControlBridge.apply(remote, to: self)
         }
         let parts = path.split(separator: "/").map(String.init)
+        if let agent = handleAIAgent(method: method, parts: parts) {
+            return agent
+        }
+        if let ai = handleAICompose(method: method, parts: parts, body: body) {
+            return ai
+        }
+        if method == "GET", parts == ["v1", "program", "probe"] {
+            return programMonitorProbe()
+        }
         if method == "GET", path == "/docs" || path == "/docs/" {
             return (200, ControlAPIOpenAPI.html(port: ControlAPIServer.defaultPort))
         }
@@ -7582,6 +7922,33 @@ final class ShowController {
             let ok = startProgramRecording()
             let path: Any = isoRecorder.programFileURL?.path ?? NSNull()
             return (200, ControlJSON.encode(["ok": ok, "is_recording": isoRecorder.isRecording, "path": path]))
+        }
+        if method == "POST", parts == ["v1", "ui", "addshot"] {
+            // Local QA hook: open/close the source picker without clicking through the desk.
+            switch ControlHTTP.jsonObject(body)["mode"] ?? "add" {
+            case "close": closeAddShot()
+            case "assign": openAddShotToAssign()
+            default: openAddShot()
+            }
+            return (200, #"{"ok":true}"#)
+        }
+        if method == "POST", parts == ["v1", "ui", "qa"] {
+            return (200, ControlJSON.encode(handleQARequest(ControlHTTP.jsonObject(body))))
+        }
+        if method == "POST", parts == ["v1", "ui", "snapshot"] {
+            // Renders this app's own windows (sheets included) to PNGs; no screen-recording permission needed.
+            var paths: [String] = []
+            for (i, w) in NSApp.windows.enumerated() where w.isVisible {
+                guard let v = w.contentView?.superview ?? w.contentView,
+                      let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) else { continue }
+                v.cacheDisplay(in: v.bounds, to: rep)
+                let path = NSTemporaryDirectory() + "proshow-ui-\(i).png"
+                if let data = rep.representation(using: .png, properties: [:]),
+                   (try? data.write(to: URL(fileURLWithPath: path))) != nil {
+                    paths.append("\(path) \(Int(w.frame.width))x\(Int(w.frame.height)) sheet=\(w.isSheet)")
+                }
+            }
+            return (200, ControlJSON.encode(["ok": true, "paths": paths]))
         }
         if method == "POST", parts == ["v1", "project", "open"] {
             let parsed = ControlHTTP.jsonObject(body)
@@ -7853,4 +8220,18 @@ struct DeskStatusAlert: Identifiable, Hashable {
     var id = UUID()
     var title: String
     var detail: String
+}
+
+
+/// Thread-safe snapshot of Phone prop canvases for the encode thread.
+final class PhonePropCanvasStore: @unchecked Sendable {
+    static let shared = PhonePropCanvasStore()
+    private let lock = NSLock()
+    private var canvases: [PropCanvas] = []
+    func set(_ value: [PropCanvas]) { lock.lock(); canvases = value; lock.unlock() }
+    func get() -> [PropCanvas] { lock.lock(); defer { lock.unlock() }; return canvases }
+    /// Phone-only props are not on the Stream props layer, so the Phone path keeps them by id.
+    private var phoneOnly: Set<UUID> = []
+    func setPhoneOnly(_ ids: Set<UUID>) { lock.lock(); phoneOnly = ids; lock.unlock() }
+    func isPhoneOnly(_ id: UUID) -> Bool { lock.lock(); defer { lock.unlock() }; return phoneOnly.contains(id) }
 }

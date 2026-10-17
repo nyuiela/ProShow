@@ -97,9 +97,7 @@ enum PhoneBoardState: Equatable, Sendable {
 
 enum PhoneSlideRouting {
     static func state(boards: [EditorCanvasFrame]) -> PhoneBoardState {
-        let phone = boards.contains { board in
-            !board.isPrimary && CanvasResolution.screenFamily(width: board.width, height: board.height) == .phone
-        }
+        let phone = boards.contains { $0.isPhoneArtboard }
         return phone ? .present : .absent
     }
 
@@ -222,12 +220,21 @@ final class PhoneComposedFrame: @unchecked Sendable {
     static let shared = PhoneComposedFrame()
     private let lock = NSLock()
     private var buffer: CVPixelBuffer?
+    private var storedAt: Date = .distantPast
 
     func store(_ buffer: CVPixelBuffer) {
         let owned = ProgramOutputComposer.snapshot(buffer)
         lock.lock()
         self.buffer = owned
+        storedAt = Date()
         lock.unlock()
+    }
+
+    /// The composed Phone frame only while the program keeps producing it; a stale frame (old timer text) is ignored.
+    func fresh(maxAge: TimeInterval = 0.75) -> CVPixelBuffer? {
+        lock.lock()
+        defer { lock.unlock() }
+        return Date().timeIntervalSince(storedAt) <= maxAge ? buffer : nil
     }
 
     func current() -> CVPixelBuffer? {
@@ -356,7 +363,8 @@ final class PhoneEncodeLane: @unchecked Sendable {
             encoder.teardown()
             return false
         }
-        encoder.onEncoded = { [transport] packet in
+        encoder.onEncoded = { [transport, weak self] packet in
+            self?.diagSent += 1
             let message = RTMPClient.videoMessage(packet)
             let kind: RTMPOutboundTag
             switch packet {
@@ -408,7 +416,7 @@ final class PhoneEncodeLane: @unchecked Sendable {
             self.state = state
             self.scaleMode = PhoneSlideRouting.scaleMode(requested: requested, state: state)
             guard state == .present, let board = boards.first(where: {
-                !$0.isPrimary && CanvasResolution.screenFamily(width: $0.width, height: $0.height) == .phone
+                $0.isPhoneArtboard
             }) else {
                 self.presentBuffer = nil
                 PhoneComposedFrame.shared.clear()
@@ -445,8 +453,23 @@ final class PhoneEncodeLane: @unchecked Sendable {
         ticker = timer
     }
 
+    /// Counters for the QA stream_info action.
+    private(set) var diagTicks = 0
+    private(set) var diagNotReady = 0
+    private(set) var diagNoFrame = 0
+    private(set) var diagEncodeCalls = 0
+    private(set) var diagSent = 0
+    var diagnostics: [String: Any] {
+        ["ticks": diagTicks, "notReady": diagNotReady, "noFrame": diagNoFrame, "encodeCalls": diagEncodeCalls,
+         "videoSent": diagSent, "encoded": encoder.encodedFrameCount, "encodeFailures": encoder.encodeFailureCount,
+         "lastStatus": Int(encoder.lastEncodeStatus), "prepared": encoder.isPrepared, "state": "\(state)",
+         "hasComposed": PhoneComposedFrame.shared.current() != nil, "hasPresent": presentBuffer != nil, "hasSource": latestSource != nil]
+    }
+
     private func emitTick() {
-        guard transport.isReady, !busy else { return }
+        diagTicks += 1
+        guard transport.isReady else { diagNotReady += 1; return }
+        guard !busy else { return }
         busy = true
         defer { busy = false }
         let frame: CVPixelBuffer
@@ -455,7 +478,10 @@ final class PhoneEncodeLane: @unchecked Sendable {
                 frame = live
             } else if let presentBuffer {
                 frame = presentBuffer
+            } else if let source = latestSource, let fitted = PhoneFrameFit.letterbox(source, destWidth: PhoneEncodeTemplate.width, destHeight: PhoneEncodeTemplate.height, mode: .fit) {
+                frame = fitted
             } else {
+                diagNoFrame += 1
                 return
             }
         } else if let latestSource {
@@ -471,8 +497,10 @@ final class PhoneEncodeLane: @unchecked Sendable {
         } else if let lastFitted {
             frame = lastFitted
         } else {
+            diagNoFrame += 1
             return
         }
+        diagEncodeCalls += 1
         let index = frameIndex
         frameIndex += 1
         let force = !sentWhileReady

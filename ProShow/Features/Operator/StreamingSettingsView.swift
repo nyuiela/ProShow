@@ -322,7 +322,7 @@ struct PhoneDestinationThumbnail: View {
 
     private var phoneBoard: EditorCanvasFrame? {
         boards.first {
-            !$0.isPrimary && CanvasResolution.screenFamily(width: $0.width, height: $0.height) == .phone
+            $0.isPhoneArtboard
         }
     }
 
@@ -331,7 +331,7 @@ struct PhoneDestinationThumbnail: View {
     }
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { _ in
+        TimelineView(.periodic(from: TimelineAnchor.start, by: 1)) { _ in
             frame(streamImage())
         }
         .frame(width: 40, height: 72)

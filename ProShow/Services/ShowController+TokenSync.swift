@@ -48,7 +48,9 @@ extension ShowController {
         if liveKitGuestReturnActive, !streaming.isLive, !isoRecorder.isRecording, !streamEncodePreviewEnabled {
             return false
         }
-        return wantsEncodedPreview || streaming.isLive || isoRecorder.isRecording
+        // Operator-desk preview alone keeps the SwiftUI program picture (same path Backstage uses),
+        // so Live paints canvas images without a guest room or encoder session.
+        return streamEncodePreviewEnabled || streaming.isLive || isoRecorder.isRecording
     }
 
     /// Single dynamic-text evaluation per program tick — shared by compositor and SwiftUI fallback.

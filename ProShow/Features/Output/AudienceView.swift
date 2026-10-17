@@ -158,7 +158,7 @@ struct StreamProgramView: View {
                 statusPill
                 Spacer()
                 if controller.streaming.isLive {
-                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                    TimelineView(.periodic(from: TimelineAnchor.start, by: 1)) { context in
                         Text(StreamingEngine.broadcastTimecode(from: controller.streaming.startedAt, now: context.date))
                             .font(DeskType.mono)
                             .foregroundStyle(ProShowTheme.primaryLabel)

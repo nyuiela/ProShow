@@ -1372,7 +1372,7 @@ private struct TimerActionPane: View {
                                 .font(.system(size: 12))
                                 .foregroundStyle(ShowSidebarPalette.subtitle)
                         }
-                        TimelineView(.periodic(from: .now, by: 0.25)) { _ in
+                        TimelineView(.periodic(from: TimelineAnchor.start, by: 0.25)) { _ in
                             let live = inspector.timer(id: timer.id) ?? timer
                             Text(ProgramTimecode.format(TimeInterval(live.displaySeconds)))
                                 .font(.system(size: 20, weight: .semibold, design: .monospaced))
@@ -1592,6 +1592,25 @@ private struct PropActionPane: View {
                                         )
                                     }
                                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                    .overlay(alignment: .topTrailing) {
+                                        Menu {
+                                            ForEach(PropOutputTarget.allCases) { target in
+                                                Button(target.title) { controller.setPropShowOn(id: prop.id, target: target) }
+                                            }
+                                        } label: {
+                                            Text(prop.showOn.badge)
+                                                .font(.system(size: 9, weight: .bold))
+                                                .padding(.horizontal, 5)
+                                                .padding(.vertical, 2)
+                                                .foregroundStyle(.white)
+                                                .background(prop.showOn == .both ? Color.black.opacity(0.55) : ProShowTheme.accent, in: Capsule())
+                                        }
+                                        .menuStyle(.borderlessButton)
+                                        .menuIndicator(.hidden)
+                                        .fixedSize()
+                                        .help("Show on: \(prop.showOn.title). Click to choose.")
+                                        .padding(4)
+                                    }
                                 Text(prop.name)
                                     .font(.system(size: 12))
                                     .foregroundStyle(ShowSidebarPalette.title)
@@ -1686,6 +1705,15 @@ private struct PropActionPane: View {
                 controller.syncActivePropsToCompositor()
                 controller.persistStudio()
                 _ = copy
+            }
+        }
+        Menu("Show on") {
+            ForEach(PropOutputTarget.allCases) { target in
+                Button {
+                    controller.setPropShowOn(id: prop.id, target: target)
+                } label: {
+                    if prop.showOn == target { Label(target.title, systemImage: "checkmark") } else { Text(target.title) }
+                }
             }
         }
         Menu("Auto Clear") {

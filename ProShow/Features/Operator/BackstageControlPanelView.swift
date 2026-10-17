@@ -49,6 +49,14 @@ struct BackstageControlPanelView: View {
         }
     }
 
+    @State private var roomNameDraft = ""
+    @State private var roomNameInvalid = false
+
+    private func applyRoomName() {
+        roomNameInvalid = !controller.setBackstageRoomName(roomNameDraft)
+        if !roomNameInvalid { roomNameDraft = "" }
+    }
+
     private var roomSection: some View {
         VStack(alignment: .leading, spacing: DeskSpace.xs) {
             DeskSectionTitle(title: "Backstage room")
@@ -64,6 +72,19 @@ struct BackstageControlPanelView: View {
                 Button("New room") { controller.newGuestRoom() }
                     .controlSize(.small)
                 Spacer(minLength: 0)
+            }
+            HStack(spacing: 6) {
+                TextField("Room name (e.g. stellar14)", text: $roomNameDraft)
+                    .textFieldStyle(.roundedBorder)
+                    .controlSize(.small)
+                    .onSubmit { applyRoomName() }
+                Button("Set") { applyRoomName() }
+                    .controlSize(.small)
+            }
+            if roomNameInvalid {
+                Text("Use 3–40 lowercase letters, numbers or dashes.")
+                    .font(DeskType.micro)
+                    .foregroundStyle(.red)
             }
         }
         .padding(10)

@@ -277,7 +277,7 @@ struct LayerContinuityTests {
 
 @Suite struct MediaHoldCodingTests {
     @Test func holdDecodesMissingAsOff() throws {
-        let json = #"{"id":"6E0F2C1A-0000-4000-8000-000000000001","title":"a","tintHex":"#000000","isImage":false}"#
+        let json = ##"{"id":"6E0F2C1A-0000-4000-8000-000000000001","title":"a","tintHex":"#000000","isImage":false}"##
         let action = try JSONDecoder().decode(MediaAction.self, from: Data(json.utf8))
         #expect(action.hold == false)
         var held = action

@@ -96,29 +96,11 @@ enum CoreTextRasterizer {
             return textRect.origin
         }
         let layoutHeight = measuredLayoutHeight(for: attributed, width: textRect.width)
-        let inkHeight = TextAttributeConverter.measureVerticalInkExtent(for: attributed)
-        let multiline = attributed.string.contains("\n") || layoutHeight > inkHeight * 1.4
-        if !multiline {
-            let line = CTLineCreateWithAttributedString(attributed as CFAttributedString)
-            let glyphBounds = CTLineGetBoundsWithOptions(line, [.useGlyphPathBounds, .useOpticalBounds])
-            let y: CGFloat
-            switch verticalAlign {
-            case .top:
-                y = textRect.minY - glyphBounds.minY
-            case .middle:
-                y = textRect.midY - glyphBounds.height / 2 - glyphBounds.minY
-            case .bottom, .baseline:
-                y = textRect.maxY - glyphBounds.height - glyphBounds.minY
-            }
-            return CGPoint(x: textRect.minX, y: y)
-        }
-        let alignHeight = layoutHeight
-        let frame = verticallyAlignedFrame(
-            contentHeight: alignHeight,
-            within: textRect,
-            align: verticalAlign
-        )
-        return frame.origin
+        let pathHeight = layoutHeight + 2
+        let framesetter = CTFramesetterCreateWithAttributedString(attributed as CFAttributedString)
+        let path = CGPath(rect: CGRect(x: 0, y: 0, width: textRect.width, height: pathHeight), transform: nil)
+        let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: 0, length: attributed.length), path, nil)
+        return CGPoint(x: textRect.minX, y: alignedLayoutTop(frame: frame, pathHeight: pathHeight, attributed: attributed, in: textRect, align: verticalAlign))
     }
 
     static func drawCanvasText(
@@ -188,42 +170,72 @@ enum CoreTextRasterizer {
         guard attributed.length > 0, bounds.width > 0, bounds.height > 0 else { return }
 
         let layoutHeight = measuredLayoutHeight(for: attributed, width: bounds.width)
-        let inkHeight = TextAttributeConverter.measureVerticalInkExtent(for: attributed)
-        let multiline = attributed.string.contains("\n") || layoutHeight > inkHeight * 1.4
-
-        if !multiline {
-            if usesProgramEncodeCoordinates(context) {
-                drawSingleLineInProgramSpace(attributed, in: bounds, verticalAlign: verticalAlign, context: context)
-            } else {
-                drawSingleLineInCanvasSpace(attributed, in: bounds, verticalAlign: verticalAlign, context: context)
-            }
-            return
-        }
+        let framesetter = CTFramesetterCreateWithAttributedString(attributed as CFAttributedString)
+        let pathHeight = layoutHeight + 2
+        let path = CGPath(rect: CGRect(x: 0, y: 0, width: bounds.width, height: pathHeight), transform: nil)
+        let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: 0, length: attributed.length), path, nil)
+        let layoutTop = alignedLayoutTop(frame: frame, pathHeight: pathHeight, attributed: attributed, in: bounds, align: verticalAlign)
 
         context.saveGState()
-
-        let framesetter = CTFramesetterCreateWithAttributedString(attributed as CFAttributedString)
-        let alignHeight = multiline ? layoutHeight : inkHeight
-        var frameRect = verticallyAlignedFrame(
-            contentHeight: alignHeight,
-            within: bounds,
-            align: verticalAlign
-        )
-        frameRect.size.height = min(bounds.height, max(layoutHeight, alignHeight))
-
-        let path = CGPath(rect: CGRect(origin: .zero, size: frameRect.size), transform: nil)
-        let frame = CTFramesetterCreateFrame(
-            framesetter,
-            CFRange(location: 0, length: attributed.length),
-            path,
-            nil
-        )
-
-        context.translateBy(x: frameRect.minX, y: frameRect.maxY)
+        context.translateBy(x: bounds.minX, y: layoutTop + pathHeight)
         context.scaleBy(x: 1, y: -1)
         CTFrameDraw(frame, context)
-
         context.restoreGState()
+    }
+
+    /// Visual text block = first baseline − font ascender … last baseline + font descender.
+    /// Excludes the extra space `lineHeightMultiple` puts above each line (the cause of top/middle
+    /// sitting low), and is font-size aware (pure font metrics, not string ink, so typing never jumps).
+    /// Returns the y (top-left space) where the layout's top must go so the visual block is aligned.
+    static func visualAlignedLayoutTop(
+        firstBaselineFromTop: CGFloat,
+        lastBaselineFromTop: CGFloat,
+        ascent: CGFloat,
+        descent: CGFloat,
+        in rect: CGRect,
+        align: TextVerticalAlign
+    ) -> CGFloat {
+        let visualTop = firstBaselineFromTop - ascent
+        let visualHeight = (lastBaselineFromTop + descent) - visualTop
+        let target: CGFloat
+        switch align {
+        case .top: target = rect.minY
+        case .middle: target = rect.midY - visualHeight / 2
+        case .bottom, .baseline: target = rect.maxY - visualHeight
+        }
+        return target - visualTop
+    }
+
+    static func fontMetrics(of attributed: NSAttributedString, at index: Int) -> (ascent: CGFloat, descent: CGFloat) {
+        guard attributed.length > 0 else { return (0, 0) }
+        let i = min(max(0, index), attributed.length - 1)
+        let font = (attributed.attribute(.font, at: i, effectiveRange: nil) as? NSFont) ?? NSFont.systemFont(ofSize: 12)
+        return (font.ascender, -font.descender)
+    }
+
+    private static func alignedLayoutTop(
+        frame: CTFrame,
+        pathHeight: CGFloat,
+        attributed: NSAttributedString,
+        in rect: CGRect,
+        align: TextVerticalAlign
+    ) -> CGFloat {
+        let lines = CTFrameGetLines(frame) as? [CTLine] ?? []
+        guard !lines.isEmpty else { return rect.minY }
+        var origins = [CGPoint](repeating: .zero, count: lines.count)
+        CTFrameGetLineOrigins(frame, CFRange(location: 0, length: 0), &origins)
+        let firstRange = CTLineGetStringRange(lines[0])
+        let lastRange = CTLineGetStringRange(lines[lines.count - 1])
+        let top = fontMetrics(of: attributed, at: firstRange.location)
+        let bottom = fontMetrics(of: attributed, at: lastRange.location)
+        return visualAlignedLayoutTop(
+            firstBaselineFromTop: pathHeight - origins[0].y,
+            lastBaselineFromTop: pathHeight - origins[lines.count - 1].y,
+            ascent: top.ascent,
+            descent: bottom.descent,
+            in: rect,
+            align: align
+        )
     }
 
     /// RTMP/ISO compositor flips the root context once; anchor with `midY` like `ProgramOutputComposer.drawLine`.
@@ -266,20 +278,13 @@ enum CoreTextRasterizer {
             x = bounds.minX - glyphBounds.minX
         }
 
-        let yAnchor: CGFloat
-        let textY: CGFloat
-        switch verticalAlign {
-        case .top:
-            yAnchor = bounds.minY
-            textY = -glyphBounds.maxY
-        case .bottom, .baseline:
-            yAnchor = bounds.maxY
-            textY = -glyphBounds.minY
-        case .middle:
-            yAnchor = bounds.midY
-            textY = -glyphBounds.height / 2
-        }
-
+        var ascent: CGFloat = 0, descent: CGFloat = 0, leading: CGFloat = 0
+        CTLineGetTypographicBounds(line, &ascent, &descent, &leading)
+        let yAnchor = visualAlignedLayoutTop(
+            firstBaselineFromTop: ascent, lastBaselineFromTop: ascent,
+            ascent: ascent, descent: descent, in: bounds, align: verticalAlign
+        ) + ascent // baseline y in top-left space
+        let textY: CGFloat = 0
         context.saveGState()
         context.translateBy(x: x, y: yAnchor)
         context.scaleBy(x: 1, y: -1)
@@ -309,20 +314,13 @@ enum CoreTextRasterizer {
             x = bounds.minX - glyphBounds.minX
         }
 
-        let yAnchor: CGFloat
-        let textY: CGFloat
-        switch verticalAlign {
-        case .top:
-            yAnchor = bounds.maxY
-            textY = -glyphBounds.maxY
-        case .bottom, .baseline:
-            yAnchor = bounds.minY
-            textY = -glyphBounds.minY
-        case .middle:
-            yAnchor = bounds.midY
-            textY = -glyphBounds.height / 2
-        }
-
+        var ascent: CGFloat = 0, descent: CGFloat = 0, leading: CGFloat = 0
+        CTLineGetTypographicBounds(line, &ascent, &descent, &leading)
+        let yAnchor = visualAlignedLayoutTop(
+            firstBaselineFromTop: ascent, lastBaselineFromTop: ascent,
+            ascent: ascent, descent: descent, in: bounds, align: verticalAlign
+        ) + ascent // baseline y in top-left space
+        let textY: CGFloat = 0
         context.saveGState()
         context.translateBy(x: x, y: yAnchor)
         context.scaleBy(x: 1, y: -1)
@@ -391,7 +389,8 @@ enum CoreTextRasterizer {
         align: TextVerticalAlign
     ) -> CGRect {
         var frame = bounds
-        frame.size.height = min(contentHeight, bounds.height)
+        // Allow overflow so an oversize line is still laid out (CTFrame drops lines that don't fit).
+        frame.size.height = contentHeight
         switch align {
         case .top:
             frame.origin.y = bounds.minY
@@ -404,6 +403,10 @@ enum CoreTextRasterizer {
     }
 
     /// Parity with SwiftUI `LoopingTextFit.minimumScaleFactor(0.2)` on program text (not marquees).
+    private static let fitCache: NSCache<NSString, NSNumber> = { let c = NSCache<NSString, NSNumber>(); c.countLimit = 4000; return c }()
+
+    /// Cached per text/font/box/scale: the 16-pass search used to run for every text object on every
+    /// redraw of the canvas, program monitor and each thumbnail.
     static func calculateFittedFontSize(
         object: CanvasObject,
         style: SlideTextAttributes,
@@ -412,8 +415,25 @@ enum CoreTextRasterizer {
         minimumScaleFactor: CGFloat = 0.2
     ) -> CGFloat {
         guard textRect.width > 1, textRect.height > 1 else { return style.font.pointSize }
+        let t = object.typography
+        let key = "\(t.hashValue)|\(object.textLayout.hashValue)|\(style.font.fontName)|\(Int(textRect.width * 4))x\(Int(textRect.height * 4))|\(scale)|\(minimumScaleFactor)|\(style.text)" as NSString
+        if let hit = fitCache.object(forKey: key) { return CGFloat(hit.doubleValue) }
+        let value = fittedFontSizeUncached(object: object, style: style, in: textRect, scale: scale, minimumScaleFactor: minimumScaleFactor)
+        fitCache.setObject(NSNumber(value: Double(value)), forKey: key)
+        return value
+    }
+
+    private static func fittedFontSizeUncached(
+        object: CanvasObject,
+        style: SlideTextAttributes,
+        in textRect: CGRect,
+        scale: CGFloat,
+        minimumScaleFactor: CGFloat
+    ) -> CGFloat {
         let initial = max(1, object.typography.fontSize * scale)
-        let minSize = max(8, initial * minimumScaleFactor)
+        // Floor must scale with the render (no absolute 8pt): an absolute floor made text in
+        // thumbnails / small monitors (scale ≈ 0.05–0.2) render far larger than its plates.
+        let minSize = max(0.5, initial * minimumScaleFactor)
         var low = minSize
         var high = initial
         var best = minSize
@@ -422,7 +442,8 @@ enum CoreTextRasterizer {
             ? singleLineHeight(for: object, at: initial, scale: scale)
             : textRect.height
 
-        for _ in 0..<10 {
+        let step = max(0.001, initial * 0.002) // relative, so thumbnails fit like full size
+        for _ in 0..<16 {
             let mid = (low + high) / 2
             let size = mid
             let font = CanvasTypeface.nsFont(
@@ -441,9 +462,9 @@ enum CoreTextRasterizer {
             )
             if measured.height <= maxHeight + 0.5, measured.width <= textRect.width + 0.5 {
                 best = mid
-                low = mid + 0.25
+                low = mid + step
             } else {
-                high = mid - 0.25
+                high = mid - step
             }
         }
         return best

@@ -584,13 +584,18 @@ enum DefaultSeedData {
         )
     }
 
+    /// Template props carry explicit anchors so Phone auto-fit keeps them in their corner.
+    static func anchored(_ objects: [CanvasObject]) -> [CanvasObject] {
+        objects.map { var o = $0; if o.propAnchor == nil { o.propAnchor = PropCanvasLayout.inferAnchor(for: o) }; return o }
+    }
+
     static func inspectorProps() -> [ProShowProp] {
         let documents = propDocuments()
         return [
             ProShowProp(
                 id: ActionSeedID.logoProp,
                 name: "Logo Bug",
-                elements: documents.first?.objects ?? [],
+                elements: anchored(documents.first?.objects ?? []),
                 transitionDuration: 0.5,
                 autoClearMode: .never,
                 collectionName: "Default Collection",
@@ -599,7 +604,7 @@ enum DefaultSeedData {
             ProShowProp(
                 id: ActionSeedID.alertProp,
                 name: "Emergency Alert Message",
-                elements: documents.dropFirst().first?.objects ?? [],
+                elements: anchored(documents.dropFirst().first?.objects ?? []),
                 transitionDuration: 0.5,
                 autoClearMode: .onNextSlide,
                 collectionName: "Default Collection",

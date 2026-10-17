@@ -30,6 +30,13 @@ struct ProShowStudioDeskView: NSViewControllerRepresentable {
         return root
     }
 
+    /// Perf: fill the proposal instead of letting SwiftUI ask the whole AppKit desk
+    /// subtree for `fittingSize` (rebuilt an Auto Layout engine on every update).
+    @available(macOS 13.0, *)
+    func sizeThatFits(_ proposal: ProposedViewSize, nsViewController: ProShow3ColumnDeskController, context: Context) -> CGSize? {
+        CGSize(width: proposal.width ?? 1200, height: proposal.height ?? 800)
+    }
+
     func updateNSViewController(_ nsViewController: ProShow3ColumnDeskController, context: Context) {
         _ = nsViewController
         _ = context

@@ -35,7 +35,7 @@ final class CompositorEngine {
     @ObservationIgnored private(set) var lastFrame: ProgramFrame?
     @ObservationIgnored private(set) var lastRaster: ProgramRaster?
     let programOutput = ProgramOutputStore()
-    private(set) var lastVideoFrame: VideoIngestFrame?
+    @ObservationIgnored private(set) var lastVideoFrame: VideoIngestFrame?
     @ObservationIgnored private(set) var frameIndex: Int = 0
     private(set) var mediaTransitionSeconds: TimeInterval = 0.5
     private(set) var mediaRevision: Int = 0

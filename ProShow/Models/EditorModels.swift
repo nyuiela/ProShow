@@ -94,7 +94,19 @@ enum FontWeightToken: String, CaseIterable, Identifiable, Codable, Sendable {
 
 #if canImport(AppKit)
 enum CanvasTypeface {
+    private static let fontCache: NSCache<NSString, NSFont> = { let c = NSCache<NSString, NSFont>(); c.countLimit = 2000; return c }()
+
+    /// Cached: building an NSFont through NSFontManager every frame made CoreText re-run shaping-glyph
+    /// setup for each new font instance (a background thread pegged at ~75% CPU while idle).
     static func nsFont(family: String, size: CGFloat, weight: FontWeightToken, bold: Bool, italic: Bool) -> NSFont {
+        let key = "\(family)|\(size)|\(weight.rawValue)|\(bold)|\(italic)" as NSString
+        if let hit = fontCache.object(forKey: key) { return hit }
+        let font = makeNSFont(family: family, size: size, weight: weight, bold: bold, italic: italic)
+        fontCache.setObject(font, forKey: key)
+        return font
+    }
+
+    private static func makeNSFont(family: String, size: CGFloat, weight: FontWeightToken, bold: Bool, italic: Bool) -> NSFont {
         let name = family.trimmingCharacters(in: .whitespacesAndNewlines)
         if name.isEmpty {
             let fallback = NSFont.systemFont(ofSize: size, weight: nsSystemWeight(weight, bold: bold))
@@ -635,6 +647,8 @@ struct CanvasObject: Identifiable, Hashable, Codable, Sendable {
     var themeSlot: ThemeSlotRole? = nil
     /// Order among equal slots when mapping by index.
     var themeSlotOrder: Int? = nil
+    /// Prop layout anchor for other aspect ratios. Nil reads as top left, so older props keep their place.
+    var propAnchor: PropAnchor? = nil
 
     var resolvedCountdownStartOn: CountdownBuildLink { countdownStartOn ?? .none }
     var resolvedCountdownResetOn: CountdownBuildLink { countdownResetOn ?? .none }
@@ -776,6 +790,22 @@ struct CanvasObject: Identifiable, Hashable, Codable, Sendable {
     }
 
     var isAudioMuted: Bool { audioMuted == true }
+
+    /// A lettered placeholder (A–I) that has no real source yet. It renders as an empty slot,
+    /// never as whatever camera happens to be on the live-input layer.
+    var isUnfilledPlaceholder: Bool {
+        guard assignedPlaceholderLetter != nil else { return false }
+        switch assignedSource?.sourceType {
+        case nil, .placeholderSlot?: return true
+        default: return false
+        }
+    }
+
+    /// A video pane from before placeholders: no letter, no source. Slides with one still
+    /// fall back to the preferred program camera.
+    var isLegacyUnassignedVideoPane: Bool {
+        kind == .videoInput && assignedSource == nil && assignedPlaceholderLetter == nil
+    }
 
     /// Live capture assigned to a shape (program outline camera rows, etc.).
     var rendersLiveVideoInputOnCanvas: Bool {
@@ -1123,6 +1153,9 @@ struct EditorDocument: Identifiable, Hashable, Codable, Sendable {
     var userGuides: [UserGuideLine]
     /// Extra screens on this slide, plus the primary frame once it has been moved or another frame exists.
     var boards: [EditorCanvasFrame]
+    /// Prop documents only: Phone canvas mode and outputs. Not part of the document's own coding.
+    var propPhoneMode: PropPhoneMode = .linked
+    var propShowOn: PropOutputTarget = .both
 
     init(
         id: UUID = UUID(),
@@ -1377,6 +1410,17 @@ enum CanvasResolution: String, CaseIterable, Identifiable, Sendable {
         exact(width: width, height: height)?.family ?? .custom
     }
 }
+
+extension EditorCanvasFrame {
+    /// Portrait phone artboard: exact phone presets, 9:16 design (e.g. 2160x3840), or named Phone.
+    var isPhoneArtboard: Bool {
+        guard !isPrimary else { return false }
+        if CanvasResolution.screenFamily(width: width, height: height) == .phone { return true }
+        if name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "phone" { return true }
+        return height > width * 1.15
+    }
+}
+
 
 enum EditorCatalog {
     static let buildAnimations = ["Dissolve", "Push", "Wipe", "Fly-in"]

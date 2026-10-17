@@ -84,8 +84,10 @@ struct AddShotModalView: View {
     }
 
     var body: some View {
+        // The sidebar rides in an overlay so it is always sized to the full modal height, even when the
+        // sheet lays out with an ideal (nil) height proposal and the HStack would otherwise centre a short sidebar.
         HStack(spacing: 0) {
-            sidebar
+            Color.clear.frame(width: 220)
             VStack(spacing: 0) {
                 header
                 if let accessMessage = discovery.accessMessage {
@@ -97,8 +99,13 @@ struct AddShotModalView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(ShowDrawerPalette.background(scheme))
         }
-        .frame(width: Self.modalWidth, height: Self.modalHeight)
-        .frame(maxWidth: Self.modalMaxWidth, maxHeight: Self.modalMaxHeight)
+        .overlay(alignment: .topLeading) {
+            sidebar
+                .frame(maxHeight: .infinity, alignment: .top)
+        }
+        // Fill the sheet (not a fixed 620 pt box centred in it) so the sidebar reaches the bottom edge.
+        .frame(minWidth: Self.modalWidth, idealWidth: Self.modalWidth, maxWidth: Self.modalMaxWidth,
+               minHeight: Self.modalHeight, idealHeight: Self.modalHeight, maxHeight: Self.modalMaxHeight)
         .background(ShowDrawerPalette.background(scheme))
         .clipShape(RoundedRectangle(cornerRadius: DeskRadius.sheet, style: .continuous))
         .modifier(ShowSidebarSystemScheme())
@@ -164,13 +171,19 @@ struct AddShotModalView: View {
             .frame(maxHeight: .infinity, alignment: .top)
             .focusEffectDisabled()
 
+            // Keep the list clear of the pinned Cancel row.
+            Color.clear.frame(height: 56)
+        }
+        .frame(width: 220, alignment: .leading)
+        .frame(maxHeight: .infinity, alignment: .top)
+        // Cancel is pinned to the sidebar's bottom edge (aligned with the footer row), independent of list height.
+        .overlay(alignment: .bottomLeading) {
             navButton("Cancel", systemImage: "xmark") {
                 controller.closeAddShot()
             }
             .padding(.bottom, 20)
             .keyboardShortcut(.cancelAction)
         }
-        .frame(width: 220, alignment: .leading)
         .background(ShowSidebarPalette.background(scheme))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Source categories")

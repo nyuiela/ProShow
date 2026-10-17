@@ -87,11 +87,8 @@ struct RundownWorkspaceView: View {
                 draft: $blockEditorDraft,
                 onSave: { saveBlockEditor($0) }
             )
-            .frame(
-                maxWidth: RundownBlockEditorSheet.modalMaxWidth,
-                maxHeight: RundownBlockEditorSheet.modalMaxHeight
-            )
-            .frame(width: RundownBlockEditorSheet.modalWidth, height: RundownBlockEditorSheet.modalHeight)
+            .frame(minWidth: RundownBlockEditorSheet.modalWidth, idealWidth: RundownBlockEditorSheet.modalWidth, maxWidth: RundownBlockEditorSheet.modalMaxWidth,
+                   minHeight: RundownBlockEditorSheet.modalHeight, idealHeight: RundownBlockEditorSheet.modalHeight, maxHeight: RundownBlockEditorSheet.modalMaxHeight)
         }
         .sheet(isPresented: $showTalentEditor) {
             RundownTalentEditorSheet(
@@ -157,7 +154,7 @@ struct RundownWorkspaceView: View {
 
             driftSummary
 
-            TimelineView(.periodic(from: .now, by: 0.5)) { context in
+            TimelineView(.periodic(from: TimelineAnchor.start, by: 0.5)) { context in
                 HStack(spacing: 20) {
                     clockColumn(
                         title: "Item run time",

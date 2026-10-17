@@ -798,6 +798,9 @@ struct DeskModalNavRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(DeskPressButtonStyle())
+        // A min-only frame accepts any taller proposal; without this a row (e.g. Cancel) swallows the
+        // sidebar's spare height and centres its label mid-modal.
+        .fixedSize(horizontal: false, vertical: true)
         .padding(.horizontal, 8)
         .accessibilityLabel(title)
         .accessibilityAddTraits(selected ? .isSelected : [])
@@ -1173,8 +1176,10 @@ enum ResolvedCanvasMedia {
         if let cached = AssetCacheManager.shared.object(forKey: path) as? NSImage {
             return Image(nsImage: cached)
         }
-        if let image = NSImage(contentsOfFile: path) {
-            AssetCacheManager.shared.setObject(image, forKey: path, cost: Self.imageCost(image.size))
+        // Previews draw at window size: keep a decoded, display-sized bitmap so SwiftUI never re-decodes the PNG.
+        if let cg = DecodedImageCache.shared.image(atPath: path, maxLongSide: DecodedImageCache.previewLongSide) {
+            let image = NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+            AssetCacheManager.shared.setObject(image, forKey: path, cost: cg.width * cg.height * 4)
             return Image(nsImage: image)
         }
         #else
@@ -1521,6 +1526,74 @@ struct LivePixelPreview: View {
             isPaused: isPaused
         )
         .accessibilityHidden(true)
+        .overlay { guestNameplate }
+    }
+
+    /// LiveKit guest with no live camera: show their nameplate card instead of a black pane.
+    @ViewBuilder
+    private var guestNameplate: some View {
+        if let endpoint, endpoint.hasPrefix("livekit://"), endpoint.hasSuffix("/camera"),
+           let identity = LiveKitGuestEndpoint.identity(from: endpoint),
+           let profile = GuestProfileStore.shared.profile(identity: identity),
+           !profile.cameraLive {
+            GuestNameplateCard(profile: profile)
+        }
+    }
+}
+
+/// Camera-off card for a guest: avatar circle, name, title. Desk graphite + accent.
+struct GuestNameplateCard: View {
+    var profile: GuestProfile
+
+    var body: some View {
+        GeometryReader { proxy in
+            let side = min(proxy.size.width, proxy.size.height)
+            let avatar = max(28, side * 0.34)
+            ZStack {
+                Color(red: 0x12 / 255, green: 0x12 / 255, blue: 0x14 / 255)
+                VStack(spacing: max(4, side * 0.04)) {
+                    avatarView
+                        .frame(width: avatar, height: avatar)
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(Color(red: 0x6B / 255, green: 0x9F / 255, blue: 0xE0 / 255), lineWidth: max(1.5, avatar * 0.035)))
+                    Text(profile.name)
+                        .font(.system(size: max(11, side * 0.085), weight: .semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                    if !profile.title.isEmpty {
+                        Text(profile.title)
+                            .font(.system(size: max(9, side * 0.06)))
+                            .foregroundStyle(Color(red: 0x6B / 255, green: 0x9F / 255, blue: 0xE0 / 255))
+                            .lineLimit(1)
+                    }
+                }
+                .padding(8)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(profile.title.isEmpty ? profile.name : "\(profile.name), \(profile.title)")
+    }
+
+    @ViewBuilder
+    private var avatarView: some View {
+        #if canImport(AppKit)
+        if let image = GuestProfileStore.shared.avatarImage(for: profile.avatarSource), image.size.width > 0 {
+            Image(nsImage: image).resizable().scaledToFill()
+        } else {
+            initials
+        }
+        #else
+        initials
+        #endif
+    }
+
+    private var initials: some View {
+        ZStack {
+            Color(red: 0x6B / 255, green: 0x9F / 255, blue: 0xE0 / 255).opacity(0.25)
+            Text(profile.name.split(separator: " ").prefix(2).compactMap(\.first).map(String.init).joined().uppercased())
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(.white)
+        }
     }
 }
 

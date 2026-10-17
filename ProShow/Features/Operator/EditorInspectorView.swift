@@ -1621,7 +1621,7 @@ struct EditorInspectorView: View {
                     .accessibilityLabel("Time format")
                 }
                 PropertyRow("Preview") {
-                    TimelineView(.periodic(from: .now, by: 0.25)) { _ in
+                    TimelineView(.periodic(from: TimelineAnchor.start, by: 0.25)) { _ in
                         let seconds = controller.programMediaClock().remaining
                         Text(CountdownFormatCatalog.format(seconds, token: common(\.token) ?? CountdownFormatCatalog.default))
                             .font(InspectorTokens.valueFont)
@@ -1720,7 +1720,7 @@ struct EditorInspectorView: View {
                     .accessibilityLabel("Time format")
                 }
                 PropertyRow("Preview") {
-                    TimelineView(.periodic(from: .now, by: 0.25)) { _ in
+                    TimelineView(.periodic(from: TimelineAnchor.start, by: 0.25)) { _ in
                         let live = controller.inspector.timer(id: timer.id) ?? timer
                         Text(CountdownFormatCatalog.format(live.displaySeconds, token: common(\.token) ?? CountdownFormatCatalog.default))
                             .font(InspectorTokens.valueFont)

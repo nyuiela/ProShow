@@ -280,7 +280,7 @@ final class StreamingEngine {
     func phoneEncodeBoard() -> EditorCanvasFrame? {
         guard ProShowFeatureFlags.multiDestinationRoutingV1, routingPlan?.phoneLane != nil else { return nil }
         return phoneCanvasBoards.first {
-            !$0.isPrimary && CanvasResolution.screenFamily(width: $0.width, height: $0.height) == .phone
+            $0.isPhoneArtboard
         }
     }
 
@@ -351,6 +351,14 @@ final class StreamingEngine {
         #endif
     }
 
+    var phoneLaneDiagnostics: [String: Any] {
+        #if canImport(CoreVideo)
+        return phoneLane?.diagnostics ?? ["lane": "none"]
+        #else
+        return [:]
+        #endif
+    }
+
     private func phoneIngests(in plan: EncodeLanePlan) -> [ResolvedIngest] {
         let ids = Set(plan.phoneLane?.members.map(\.id) ?? [])
         return routingIngests.filter { ids.contains($0.accountID) }
@@ -371,6 +379,16 @@ final class StreamingEngine {
         }
         phoneLane = phone
         pushPhoneCanvas()
+        // The RTMP handshake and publish run in waitUntilReady. Without it the Phone socket opens
+        // but never publishes, so the lane never sends a frame and Phone destinations stay blank.
+        Task { @MainActor [weak self] in
+            let ready = await phone.transport.waitUntilReady(timeoutMs: 12_000)
+            guard let self, self.phoneLane === phone else { return }
+            if !ready {
+                let name = ingests.first?.name ?? "Phone"
+                self.phoneLaneError = "\(name) could not connect."
+            }
+        }
         return true
         #else
         return false

@@ -1674,6 +1674,112 @@ final class EditorEngine {
     var activeCanvasID: UUID?
 
     func canvasBoards(in document: EditorDocument) -> [EditorCanvasFrame] {
+        if document.kind == .props, let phone = document.boards.firstIndex(where: { Self.isPropPhoneBoard($0, of: document) }) {
+            var derived = document
+            switch document.propPhoneMode {
+            case .custom: break
+            case .linked:
+                derived.boards[phone].objects = PropCanvasLayout.autoFit(document.objects, from: CGSize(width: document.canvasWidth, height: document.canvasHeight), to: PropCanvasLayout.phoneSize)
+            case .hidden:
+                derived.boards[phone].objects = []
+            }
+            return canvasBoardsBase(in: derived)
+        }
+        return canvasBoardsBase(in: document)
+    }
+
+    // MARK: Prop canvases
+
+    /// Stable id of a prop's Phone board, so selection survives reloads.
+    static func propPhoneBoardID(for propID: UUID) -> UUID {
+        var bytes = propID.uuid
+        bytes.15 ^= 0x5A; bytes.14 ^= 0xA5
+        return UUID(uuid: bytes)
+    }
+
+    static func isPropPhoneBoard(_ board: EditorCanvasFrame, of document: EditorDocument) -> Bool {
+        !board.isPrimary && board.id == propPhoneBoardID(for: document.id)
+    }
+
+    /// Editor document for a prop: Stream board plus a Phone board.
+    static func propDocument(from prop: ProShowProp) -> EditorDocument {
+        var document = EditorDocument(
+            id: prop.id,
+            name: prop.name,
+            kind: .props,
+            canvasWidth: CanvasConfig.width,
+            canvasHeight: CanvasConfig.height,
+            backgroundEnabled: false,
+            objects: prop.elements,
+            collectionName: prop.collectionName,
+            transition: prop.transition,
+            transitionDuration: prop.transitionDuration,
+            autoClear: prop.autoClearMode.title
+        )
+        document.propPhoneMode = prop.phoneMode
+        document.propShowOn = prop.showOn
+        var primary = EditorCanvasFrame.primary(for: document)
+        primary.name = "Stream"
+        let phone = EditorCanvasFrame(
+            id: propPhoneBoardID(for: prop.id),
+            name: "Phone",
+            width: PropCanvasLayout.phoneSize.width,
+            height: PropCanvasLayout.phoneSize.height,
+            originX: document.canvasWidth + 480,
+            originY: 0,
+            isPrimary: false,
+            backgroundEnabled: false,
+            backgroundHex: "#00000000",
+            showsCheckerboard: true,
+            showsGrid: false,
+            showsSafeAreas: true,
+            objects: prop.phoneMode == .custom ? (prop.phoneElements ?? []) : []
+        )
+        document.boards = [primary, phone]
+        return document
+    }
+
+    func propPhoneMode(of documentID: UUID) -> PropPhoneMode {
+        documents.first { $0.id == documentID }?.propPhoneMode ?? .linked
+    }
+
+    /// Switch a prop's Phone canvas. Custom starts from the auto-fit layout when it has nothing yet.
+    func setPropPhoneMode(_ mode: PropPhoneMode, documentID: UUID) {
+        guard kind == .props, let d = documents.firstIndex(where: { $0.id == documentID }) else { return }
+        registerUndo()
+        var document = documents[d]
+        if document.boards.firstIndex(where: { Self.isPropPhoneBoard($0, of: document) }) == nil {
+            var rebuilt = Self.propDocument(from: ProShowProp(id: document.id, name: document.name, elements: document.objects))
+            rebuilt.boards[1].objects = []
+            document.boards = rebuilt.boards
+        }
+        if mode == .custom, let p = document.boards.firstIndex(where: { Self.isPropPhoneBoard($0, of: document) }), document.boards[p].objects.isEmpty {
+            document.boards[p].objects = PropCanvasLayout.freshCopies(
+                PropCanvasLayout.autoFit(document.objects, from: CGSize(width: document.canvasWidth, height: document.canvasHeight), to: PropCanvasLayout.phoneSize)
+            )
+        }
+        document.propPhoneMode = mode
+        documents[d] = document
+        if mode != .custom, activeCanvasID == Self.propPhoneBoardID(for: documentID) {
+            activeCanvasID = document.id
+            selectedObjectIDs = []
+        }
+    }
+
+    func setPropShowOn(_ target: PropOutputTarget, documentID: UUID) {
+        guard kind == .props, let d = documents.firstIndex(where: { $0.id == documentID }) else { return }
+        registerUndo()
+        documents[d].propShowOn = target
+    }
+
+    /// Phone objects to save for a prop document: only Custom keeps its own layout.
+    static func propPhoneElements(of document: EditorDocument) -> [CanvasObject]? {
+        guard document.propPhoneMode == .custom,
+              let board = document.boards.first(where: { isPropPhoneBoard($0, of: document) }) else { return nil }
+        return board.objects
+    }
+
+    private func canvasBoardsBase(in document: EditorDocument) -> [EditorCanvasFrame] {
         if document.boards.isEmpty {
             return [.primary(for: document, guides: gridConfig, checkerboard: checkerboard)]
         }
@@ -1892,19 +1998,7 @@ final class EditorEngine {
             if kind == .props { selectDocument(prop.id) }
             return
         }
-        documents.append(
-            EditorDocument(
-                id: prop.id,
-                name: prop.name,
-                kind: .props,
-                backgroundEnabled: false,
-                objects: prop.elements,
-                collectionName: prop.collectionName,
-                transition: prop.transition,
-                transitionDuration: prop.transitionDuration,
-                autoClear: prop.autoClearMode.title
-            )
-        )
+        documents.append(Self.propDocument(from: prop))
         selectedDocumentID = prop.id
         selectedObjectIDs = []
     }
@@ -2288,19 +2382,7 @@ final class EditorEngine {
             ]
         case .props:
             return props.map { prop in
-                EditorDocument(
-                    id: prop.id,
-                    name: prop.name,
-                    kind: .props,
-                    canvasWidth: CanvasConfig.width,
-                    canvasHeight: CanvasConfig.height,
-                    backgroundEnabled: false,
-                    objects: prop.elements,
-                    collectionName: prop.collectionName,
-                    transition: prop.transition,
-                    transitionDuration: prop.transitionDuration,
-                    autoClear: prop.autoClearMode.title
-                )
+                Self.propDocument(from: prop)
             }
         case .masks:
             return [

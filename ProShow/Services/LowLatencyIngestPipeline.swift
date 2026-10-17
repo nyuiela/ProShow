@@ -57,7 +57,8 @@ final class LowLatencyIngestPipeline: @unchecked Sendable {
         if let metal = layer as? CAMetalLayer {
             metal.presentsWithTransaction = false
         }
-        if let surface = CVPixelBufferGetIOSurface(pixelBuffer)?.takeUnretainedValue() {
+        // Non-IOSurface-backed buffers return nil: skip the frame. Retain the surface while it is assigned.
+        if let surface = CVPixelBufferGetIOSurface(pixelBuffer)?.takeUnretainedValue() as IOSurface? {
             CATransaction.begin()
             CATransaction.setDisableActions(true)
             layer.contents = surface

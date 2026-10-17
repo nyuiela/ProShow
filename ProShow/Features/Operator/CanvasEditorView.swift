@@ -649,6 +649,8 @@ struct CanvasEditorView: View {
                 let boardH = board.height * scale
                 let selected = document.map { editor.isCanvasActive(board, in: $0) } ?? board.isPrimary
                 let objects = board.isPrimary ? (document?.objects ?? []) : board.objects
+                let propPhone = document.map { $0.kind == .props && EditorEngine.isPropPhoneBoard(board, of: $0) } ?? false
+                let propPhoneDerived = propPhone && document?.propPhoneMode != .custom
                 canvasSurface(
                     canvasWidth: board.width,
                     canvasHeight: board.height,
@@ -662,6 +664,15 @@ struct CanvasEditorView: View {
                     objects: objects
                 )
                 .frame(width: boardW, height: boardH, alignment: .topLeading)
+                .opacity(propPhoneDerived ? 0.45 : 1)
+                .allowsHitTesting(!propPhoneDerived)
+                .overlay(alignment: .bottomLeading) {
+                    if propPhone, let document {
+                        propPhoneControls(document)
+                            .offset(y: 40)
+                            .fixedSize()
+                    }
+                }
                 .overlay {
                     Rectangle()
                         .strokeBorder(selected ? ProShowTheme.accent : Color.white.opacity(0.35), lineWidth: selected ? 2 : 1)
@@ -676,6 +687,34 @@ struct CanvasEditorView: View {
                 .offset(x: CanvasEditorScreenAlign.screenPoint(screenX), y: CanvasEditorScreenAlign.screenPoint(screenY))
             }
         }
+    }
+
+    /// Phone canvas of a prop: Linked follows Stream, Custom is edited here, Hidden skips Phone.
+    private func propPhoneControls(_ document: EditorDocument) -> some View {
+        HStack(spacing: 8) {
+            Picker("Phone", selection: Binding(
+                get: { document.propPhoneMode },
+                set: { editor.setPropPhoneMode($0, documentID: document.id) }
+            )) {
+                ForEach(PropPhoneMode.allCases) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(width: 210)
+            if document.propPhoneMode == .linked {
+                Button("Customise for Phone") {
+                    editor.setPropPhoneMode(.custom, documentID: document.id)
+                    editor.selectCanvas(EditorEngine.propPhoneBoardID(for: document.id))
+                }
+                .controlSize(.small)
+            }
+            Text(document.propPhoneMode == .linked ? "Auto-fit from Stream" : (document.propPhoneMode == .hidden ? "Not on Phone" : "Own Phone layout"))
+                .font(DeskType.micro)
+                .foregroundStyle(.white.opacity(0.75))
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(Capsule(style: .continuous).fill(Color.black.opacity(0.78)))
     }
 
     private func canvasFrameLabel(_ board: EditorCanvasFrame, selected: Bool, scale: Double) -> some View {
@@ -2324,8 +2363,20 @@ private struct CanvasObjectView: View {
 
     @ViewBuilder
     private func objectLabelLiveText(_ state: TransformedRenderState) -> some View {
-        TimelineView(.periodic(from: .now, by: textTimelineInterval)) { timeline in
-            let context = countdownContext(at: timeline.date)
+        // Static text (60 s interval) skips TimelineView: a periodic schedule built from `.now` restarts on every
+        // parent update, so each text object re-rendered continuously (main thread pegged, editor lag).
+        if textTimelineInterval >= 60 {
+            objectLabelLiveTextContent(at: Date(), state)
+        } else {
+            TimelineView(.periodic(from: TimelineAnchor.start, by: textTimelineInterval)) { timeline in
+                objectLabelLiveTextContent(at: timeline.date, state)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func objectLabelLiveTextContent(at date: Date, _ state: TransformedRenderState) -> some View {
+            let context = countdownContext(at: date)
             let resolved = DynamicTextEngine.resolve(object, context: context)
             if object.textLayout.isLooping {
                 MarqueeTextLoopView(
@@ -2351,7 +2402,7 @@ private struct CanvasObjectView: View {
                     .allowsHitTesting(true)
             }
         }
-    }
+    
 
     private var textTimelineInterval: TimeInterval {
         if object.textLayout.isLooping, !editing {
@@ -2807,9 +2858,38 @@ private final class CanvasInputTextView: NSTextView {
         layoutManager.ensureLayout(for: textContainer)
 
         let used = layoutManager.usedRect(for: textContainer)
-        let contentHeight = max(used.height, 1)
+        let align = CanvasTextBoxLayout.coreTextVerticalAlignment(for: canvasObject)
         let contentTop: CGFloat
-        switch CanvasTextBoxLayout.coreTextVerticalAlignment(for: canvasObject) {
+        let glyphCount = layoutManager.numberOfGlyphs
+        if glyphCount > 0, let storage = textStorage, storage.length > 0 {
+            // Same visual-block rule as CoreTextRasterizer (font ascender/descender around baselines).
+            func baseline(_ glyph: Int) -> CGFloat {
+                layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil).minY
+                    + layoutManager.location(forGlyphAt: glyph).y
+            }
+            let lastGlyph = glyphCount - 1
+            let firstChar = layoutManager.characterIndexForGlyph(at: 0)
+            let lastFragment = layoutManager.lineFragmentRect(forGlyphAt: lastGlyph, effectiveRange: nil)
+            let lastLineFirstGlyph = layoutManager.glyphIndex(for: NSPoint(x: 0, y: lastFragment.midY), in: textContainer)
+            let lastChar = layoutManager.characterIndexForGlyph(at: lastLineFirstGlyph)
+            let topMetrics = CoreTextRasterizer.fontMetrics(of: storage, at: firstChar)
+            let bottomMetrics = CoreTextRasterizer.fontMetrics(of: storage, at: lastChar)
+            contentTop = CoreTextRasterizer.visualAlignedLayoutTop(
+                firstBaselineFromTop: baseline(0),
+                lastBaselineFromTop: baseline(lastGlyph),
+                ascent: topMetrics.ascent,
+                descent: bottomMetrics.descent,
+                in: textRect,
+                align: align
+            )
+            let target = NSSize(width: max(0, textRect.minX), height: max(0, contentTop))
+            if abs(textContainerInset.width - target.width) > 0.01 || abs(textContainerInset.height - target.height) > 0.01 {
+                textContainerInset = target
+            }
+            return
+        }
+        let contentHeight = max(used.height, 1)
+        switch align {
         case .top:
             contentTop = textRect.minY
         case .middle:

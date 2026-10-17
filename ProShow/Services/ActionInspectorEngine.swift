@@ -118,8 +118,17 @@ final class ActionInspectorEngine {
             props[index].transition = document.transition
             props[index].collectionName = document.collectionName
             props[index].transitionDuration = document.transitionDuration
+            // Phone fields only come from documents that carry the Phone board; others leave them as saved.
+            if document.boards.contains(where: { EditorEngine.isPropPhoneBoard($0, of: document) }) {
+                props[index].phoneMode = document.propPhoneMode
+                props[index].showOn = document.propShowOn
+                if let phone = EditorEngine.propPhoneElements(of: document) {
+                    props[index].phoneElements = phone
+                }
+            }
             return
         }
+        let hasPhoneBoard = document.boards.contains(where: { EditorEngine.isPropPhoneBoard($0, of: document) })
         props.append(
             ProShowProp(
                 id: document.id,
@@ -128,7 +137,10 @@ final class ActionInspectorEngine {
                 transitionDuration: document.transitionDuration,
                 autoClearMode: .parse(document.autoClear),
                 collectionName: document.collectionName,
-                transition: document.transition
+                transition: document.transition,
+                phoneElements: EditorEngine.propPhoneElements(of: document),
+                phoneMode: hasPhoneBoard ? document.propPhoneMode : nil,
+                showOn: hasPhoneBoard ? document.propShowOn : .both
             )
         )
         if selectedPropID == nil {
