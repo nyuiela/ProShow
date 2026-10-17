@@ -363,7 +363,8 @@ final class PhoneEncodeLane: @unchecked Sendable {
             encoder.teardown()
             return false
         }
-        encoder.onEncoded = { [transport] packet in
+        encoder.onEncoded = { [transport, weak self] packet in
+            self?.diagSent += 1
             let message = RTMPClient.videoMessage(packet)
             let kind: RTMPOutboundTag
             switch packet {
@@ -452,8 +453,23 @@ final class PhoneEncodeLane: @unchecked Sendable {
         ticker = timer
     }
 
+    /// Counters for the QA stream_info action.
+    private(set) var diagTicks = 0
+    private(set) var diagNotReady = 0
+    private(set) var diagNoFrame = 0
+    private(set) var diagEncodeCalls = 0
+    private(set) var diagSent = 0
+    var diagnostics: [String: Any] {
+        ["ticks": diagTicks, "notReady": diagNotReady, "noFrame": diagNoFrame, "encodeCalls": diagEncodeCalls,
+         "videoSent": diagSent, "encoded": encoder.encodedFrameCount, "encodeFailures": encoder.encodeFailureCount,
+         "lastStatus": Int(encoder.lastEncodeStatus), "prepared": encoder.isPrepared, "state": "\(state)",
+         "hasComposed": PhoneComposedFrame.shared.current() != nil, "hasPresent": presentBuffer != nil, "hasSource": latestSource != nil]
+    }
+
     private func emitTick() {
-        guard transport.isReady, !busy else { return }
+        diagTicks += 1
+        guard transport.isReady else { diagNotReady += 1; return }
+        guard !busy else { return }
         busy = true
         defer { busy = false }
         let frame: CVPixelBuffer
@@ -462,7 +478,10 @@ final class PhoneEncodeLane: @unchecked Sendable {
                 frame = live
             } else if let presentBuffer {
                 frame = presentBuffer
+            } else if let source = latestSource, let fitted = PhoneFrameFit.letterbox(source, destWidth: PhoneEncodeTemplate.width, destHeight: PhoneEncodeTemplate.height, mode: .fit) {
+                frame = fitted
             } else {
+                diagNoFrame += 1
                 return
             }
         } else if let latestSource {
@@ -478,8 +497,10 @@ final class PhoneEncodeLane: @unchecked Sendable {
         } else if let lastFitted {
             frame = lastFitted
         } else {
+            diagNoFrame += 1
             return
         }
+        diagEncodeCalls += 1
         let index = frameIndex
         frameIndex += 1
         let force = !sentWhileReady

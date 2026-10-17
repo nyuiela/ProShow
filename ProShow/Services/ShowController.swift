@@ -3456,7 +3456,8 @@ final class ShowController {
             streaming.configureOutputs([], accounts: [])
             return ["ok": true]
         case "stream_info":
-            return ["ok": true, "state": streaming.state.rawValue, "phoneError": streaming.phoneLaneError ?? "", "lastError": streaming.lastError ?? ""]
+            return ["ok": true, "state": streaming.state.rawValue, "phoneError": streaming.phoneLaneError ?? "", "lastError": streaming.lastError ?? "",
+                    "phone": streaming.phoneLaneDiagnostics]
         case "timer":
             guard let timer = inspector.timers.first(where: { $0.name == args["name"] }) else { return ["ok": false, "error": "no_timer"] }
             switch args["op"] {

@@ -351,6 +351,14 @@ final class StreamingEngine {
         #endif
     }
 
+    var phoneLaneDiagnostics: [String: Any] {
+        #if canImport(CoreVideo)
+        return phoneLane?.diagnostics ?? ["lane": "none"]
+        #else
+        return [:]
+        #endif
+    }
+
     private func phoneIngests(in plan: EncodeLanePlan) -> [ResolvedIngest] {
         let ids = Set(plan.phoneLane?.members.map(\.id) ?? [])
         return routingIngests.filter { ids.contains($0.accountID) }
