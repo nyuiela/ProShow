@@ -3410,6 +3410,13 @@ final class ShowController {
             editProp(id: prop.id)
             if args["canvas"] == "phone" { editors.selectCanvas(EditorEngine.propPhoneBoardID(for: prop.id)) }
             return ["ok": true, "phoneMode": editors.propPhoneMode(of: prop.id).rawValue, "showOn": prop.showOn.rawValue]
+        case "editor_view":
+            // Editor viewport for screenshots: zoom, and pan in canvas px from the primary board center.
+            let zoom = Double(args["zoom"] ?? "") ?? editors.zoom
+            editors.zoom = zoom
+            editors.canvasPanX = -(Double(args["cx"] ?? "0") ?? 0) * zoom
+            editors.canvasPanY = -(Double(args["cy"] ?? "0") ?? 0) * zoom
+            return ["ok": true, "zoom": zoom]
         case "prop_close_editor":
             closeEditor()
             return ["ok": true]

@@ -141,6 +141,25 @@ enum PropCanvasLayout {
     static func autoFit(_ objects: [CanvasObject], from src: CGSize, to dst: CGSize) -> [CanvasObject] {
         let s0 = safeArea(src), s1 = safeArea(dst)
         let scale = min(s1.width, s1.height) / max(1, min(s0.width, s0.height))
+        // A full-board art plate (PNG prop) is drawn aspect-fit. Elements that sit on that art keep their
+        // place on it, so they follow the plate's fitted rect instead of the safe area.
+        let hasPlate = objects.contains { $0.kind == .image && $0.transform.width >= src.width * 0.9 && $0.transform.height >= src.height * 0.9 }
+        if hasPlate {
+            let k = min(dst.width / src.width, dst.height / src.height)
+            let ox = (dst.width - src.width * k) / 2, oy = (dst.height - src.height * k) / 2
+            return objects.map { object in
+                var o = object
+                let t = object.transform
+                if object.transform.width >= src.width * 0.9 && object.transform.height >= src.height * 0.9 {
+                    o.transform.x = 0; o.transform.y = 0; o.transform.width = dst.width; o.transform.height = dst.height
+                } else {
+                    o.transform.x = ox + t.x * k; o.transform.y = oy + t.y * k
+                    o.transform.width = t.width * k; o.transform.height = t.height * k
+                    o.typography.fontSize = object.typography.fontSize * k
+                }
+                return o
+            }
+        }
         return objects.map { object in
             var o = object
             let t = object.transform
