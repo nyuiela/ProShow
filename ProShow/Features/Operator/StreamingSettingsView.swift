@@ -322,7 +322,7 @@ struct PhoneDestinationThumbnail: View {
 
     private var phoneBoard: EditorCanvasFrame? {
         boards.first {
-            !$0.isPrimary && CanvasResolution.screenFamily(width: $0.width, height: $0.height) == .phone
+            $0.isPhoneArtboard
         }
     }
 

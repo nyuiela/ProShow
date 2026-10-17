@@ -280,7 +280,7 @@ final class StreamingEngine {
     func phoneEncodeBoard() -> EditorCanvasFrame? {
         guard ProShowFeatureFlags.multiDestinationRoutingV1, routingPlan?.phoneLane != nil else { return nil }
         return phoneCanvasBoards.first {
-            !$0.isPrimary && CanvasResolution.screenFamily(width: $0.width, height: $0.height) == .phone
+            $0.isPhoneArtboard
         }
     }
 

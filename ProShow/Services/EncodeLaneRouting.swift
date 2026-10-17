@@ -416,7 +416,7 @@ final class PhoneEncodeLane: @unchecked Sendable {
             self.state = state
             self.scaleMode = PhoneSlideRouting.scaleMode(requested: requested, state: state)
             guard state == .present, let board = boards.first(where: {
-                !$0.isPrimary && CanvasResolution.screenFamily(width: $0.width, height: $0.height) == .phone
+                $0.isPhoneArtboard
             }) else {
                 self.presentBuffer = nil
                 PhoneComposedFrame.shared.clear()
