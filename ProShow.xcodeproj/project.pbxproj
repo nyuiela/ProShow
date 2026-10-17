@@ -11,6 +11,7 @@
 		2E9527966B09EE72E0408029 /* XAIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE742513DC6377110BA776A3 /* XAIProvider.swift */; };
 		3B33FED38E2B33812B3D87E5 /* FloatingPanelTransparency.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25ACA0AC1A4A6935B1346764 /* FloatingPanelTransparency.swift */; };
 		55C4BCC80F6B123CCF63895C /* AIAgentSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FA5466F322705B2EF1530B3 /* AIAgentSession.swift */; };
+		5E58E6956CB930B03C374F6B /* DecodedImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7F6D658CCBE6C9FB3CEF43B /* DecodedImageCache.swift */; };
 		70DDF89D710261CCFD3CFF63 /* SlideDeckImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 394D828F02D4E088EA8AF2F8 /* SlideDeckImporter.swift */; };
 		7C3216A31314A00C649B21F8 /* SpecProjectBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E7705E0267DB911C4F1EB98 /* SpecProjectBuilder.swift */; };
 		8DC5C336478DBEEDF37396E5 /* AIDeskWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 175E580C434437AB5ACE6109 /* AIDeskWindow.swift */; };
@@ -804,6 +805,7 @@
 		C8F322000000000000000013 /* RundownFloatWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RundownFloatWindow.swift; sourceTree = "<group>"; };
 		C8F324000000000000000014 /* StudioGlassLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioGlassLayout.swift; sourceTree = "<group>"; };
 		C8F325000000000000000015 /* StudioGlassWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioGlassWindow.swift; sourceTree = "<group>"; };
+		D7F6D658CCBE6C9FB3CEF43B /* DecodedImageCache.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DecodedImageCache.swift; sourceTree = "<group>"; };
 		DB87794D07C049F88D052558 /* AgentHistoryStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentHistoryStore.swift; sourceTree = "<group>"; };
 		LKREF0000000000000000001 /* LiveKitAccessToken.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveKitAccessToken.swift; sourceTree = "<group>"; };
 		LKREF0000000000000000002 /* LiveKitDeskConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveKitDeskConfig.swift; sourceTree = "<group>"; };
@@ -1118,6 +1120,7 @@
 				69E78DF0B0D4828910EF0123 /* BroadcastTemplatePack.swift */,
 				5E7705E0267DB911C4F1EB98 /* SpecProjectBuilder.swift */,
 				AE9118119B763AD0581A9223 /* PropCanvasLayout.swift */,
+				D7F6D658CCBE6C9FB3CEF43B /* DecodedImageCache.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -1803,6 +1806,7 @@
 				9B2308FCF47F11FFD0EAD05C /* BroadcastTemplatePack.swift in Sources */,
 				7C3216A31314A00C649B21F8 /* SpecProjectBuilder.swift in Sources */,
 				E98D4B8F1298835F24E2052E /* PropCanvasLayout.swift in Sources */,
+				5E58E6956CB930B03C374F6B /* DecodedImageCache.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

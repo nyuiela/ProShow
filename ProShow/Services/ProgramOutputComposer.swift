@@ -1475,9 +1475,8 @@ final class ProgramOutputComposer: @unchecked Sendable {
     private func cgImage(at path: String) -> CGImage? {
         #if os(macOS)
         let resolved = MediaPath.resolve(path)?.path ?? path
-        guard let nsImage = NSImage(contentsOfFile: resolved) else { return nil }
-        var rect = CGRect(origin: .zero, size: nsImage.size)
-        return nsImage.cgImage(forProposedRect: &rect, context: nil, hints: nil)
+        // Decoded once and kept; this runs every program frame.
+        return DecodedImageCache.shared.image(atPath: resolved, maxLongSide: nil)
         #else
         return nil
         #endif

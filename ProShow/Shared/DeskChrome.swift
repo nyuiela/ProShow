@@ -1176,8 +1176,10 @@ enum ResolvedCanvasMedia {
         if let cached = AssetCacheManager.shared.object(forKey: path) as? NSImage {
             return Image(nsImage: cached)
         }
-        if let image = NSImage(contentsOfFile: path) {
-            AssetCacheManager.shared.setObject(image, forKey: path, cost: Self.imageCost(image.size))
+        // Previews draw at window size: keep a decoded, display-sized bitmap so SwiftUI never re-decodes the PNG.
+        if let cg = DecodedImageCache.shared.image(atPath: path, maxLongSide: DecodedImageCache.previewLongSide) {
+            let image = NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+            AssetCacheManager.shared.setObject(image, forKey: path, cost: cg.width * cg.height * 4)
             return Image(nsImage: image)
         }
         #else
