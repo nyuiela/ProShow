@@ -115,8 +115,17 @@ enum CaptureSessionLifetime {
         }
     }
 
+    /// Run session configuration on `captureControlQueue`, the same queue as start and stop.
+    /// Configuring on main while `startRunning` enumerated inputs on this queue crashed (SIGABRT).
+    static func configure<T>(_ body: () -> T) -> T {
+        if ProShowQueues.isOnCaptureControlQueue { return body() }
+        return ProShowQueues.captureControlQueue.sync(execute: body)
+    }
+
     /// Stop the graph so the camera light goes off. The session object, its inputs, and its outputs stay.
-    static func pause(_ session: AVCaptureSession?) {
+    /// `after` keeps it running for a grace period; a `start` inside that window cancels the pause,
+    /// so cutting between slides does not restart the camera (that restart froze the picture).
+    static func pause(_ session: AVCaptureSession?, after delay: TimeInterval = 0) {
         guard let session else { return }
         let id = ObjectIdentifier(session)
         lock.lock()
@@ -124,7 +133,7 @@ enum CaptureSessionLifetime {
         generation[id] = token
         held[id] = session
         lock.unlock()
-        ProShowQueues.captureControlQueue.async {
+        ProShowQueues.captureControlQueue.asyncAfter(deadline: .now() + max(0, delay)) {
             lock.lock()
             let current = generation[id] == token
             lock.unlock()

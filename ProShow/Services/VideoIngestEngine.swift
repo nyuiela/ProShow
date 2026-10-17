@@ -714,13 +714,15 @@ final class VideoIngestEngine {
         softMuteAudioCapture(on: lane)
         #if canImport(AVFoundation)
         guard let session = lane.session else { return }
-        session.beginConfiguration()
-        for output in session.outputs {
-            guard let audioOutput = output as? AVCaptureAudioDataOutput else { continue }
-            audioOutput.setSampleBufferDelegate(nil, queue: nil)
-            session.removeOutput(audioOutput)
+        CaptureSessionLifetime.configure {
+            session.beginConfiguration()
+            for output in session.outputs {
+                guard let audioOutput = output as? AVCaptureAudioDataOutput else { continue }
+                audioOutput.setSampleBufferDelegate(nil, queue: nil)
+                session.removeOutput(audioOutput)
+            }
+            session.commitConfiguration()
         }
-        session.commitConfiguration()
         if session.outputs.isEmpty {
             for shared in lanes.values where shared.session === session {
                 shared.session = nil
@@ -753,8 +755,16 @@ final class VideoIngestEngine {
         lane.cameraRelay.onAudioPCM = nil
         lane.cameraRelay.onAudioPeak = nil
         if let session = lane.session {
-            CaptureSessionWatch.stop(session)
-            CaptureSessionLifetime.stop(session)
+            if session === Self.retainedCameraSession || session === Self.retainedMicSession {
+                // Shared app-lifetime session: never restart it on a slide change.
+                let stillUsed = lanes.values.contains { $0 !== lane && $0.isLive && $0.session === session }
+                if !stillUsed {
+                    CaptureSessionLifetime.pause(session, after: 20)
+                }
+            } else {
+                CaptureSessionWatch.stop(session)
+                CaptureSessionLifetime.stop(session)
+            }
             lane.session = nil
         }
         #endif
@@ -1271,68 +1281,70 @@ final class VideoIngestEngine {
             Self.retainedCameraSession = session
             CaptureSessionWatch.watch(session)
         }
-        session.beginConfiguration()
-        var addedCamera = false
-        if let device, let input = try? AVCaptureDeviceInput(device: device) {
-            for preset in Self.capturePresets(
-                outputWidth: outputWidth,
-                outputHeight: outputHeight,
-                allowAboveOutput: captureAboveOutput
-            ) {
-                guard device.supportsSessionPreset(preset), session.canSetSessionPreset(preset) else { continue }
-                session.sessionPreset = preset
-                guard session.canAddInput(input) else { continue }
-                session.addInput(input)
-                addedCamera = true
-                CaptureSessionWatch.note("Camera input added preset=\(preset.rawValue)")
-                break
+        CaptureSessionLifetime.configure {
+            session.beginConfiguration()
+            var addedCamera = false
+            if let device, let input = try? AVCaptureDeviceInput(device: device) {
+                for preset in Self.capturePresets(
+                    outputWidth: outputWidth,
+                    outputHeight: outputHeight,
+                    allowAboveOutput: captureAboveOutput
+                ) {
+                    guard device.supportsSessionPreset(preset), session.canSetSessionPreset(preset) else { continue }
+                    session.sessionPreset = preset
+                    guard session.canAddInput(input) else { continue }
+                    session.addInput(input)
+                    addedCamera = true
+                    CaptureSessionWatch.note("Camera input added preset=\(preset.rawValue)")
+                    break
+                }
             }
-        }
-        if let device, addedCamera == false {
-            CaptureSessionWatch.logFailure("Camera input was not added for \(device.localizedName). No supported preset fit the show size.")
-        }
-        if shouldAddCameraMicrophone(except: lane),
-           let audioDevice = companionAudioDevice(for: device),
-           let audioInput = try? AVCaptureDeviceInput(device: audioDevice),
-           session.canAddInput(audioInput) {
-            session.addInput(audioInput)
-            lane.audioCaptureEnabled = true
-        } else {
-            lane.audioCaptureEnabled = false
-        }
-        let output = AVCaptureVideoDataOutput()
-        LowLatencyIngestPipeline.shared.configure(output)
-        let relay = lane.cameraRelay
-        relay.onFrame = { [weak self, weak lane] width, height, sample, pixel in
-            self?.scheduleLanePublish {
-                guard let lane else { return }
-                self?.publishLaneFrame(
-                    source: source,
-                    lane: lane,
-                    width: width,
-                    height: height,
-                    sample: sample,
-                    pixel: pixel,
-                    backend: "avfoundation",
-                    kind: source.inputSource.kind
-                )
+            if let device, addedCamera == false {
+                CaptureSessionWatch.logFailure("Camera input was not added for \(device.localizedName). No supported preset fit the show size.")
             }
-        }
-        output.setSampleBufferDelegate(relay, queue: relay.queue)
-        if session.canAddOutput(output) {
-            session.addOutput(output)
-        }
-        if lane.audioCaptureEnabled {
-            let audioOutput = AVCaptureAudioDataOutput()
-            audioOutput.setSampleBufferDelegate(relay, queue: relay.queue)
-            if session.canAddOutput(audioOutput) {
-                session.addOutput(audioOutput)
+            if shouldAddCameraMicrophone(except: lane),
+               let audioDevice = companionAudioDevice(for: device),
+               let audioInput = try? AVCaptureDeviceInput(device: audioDevice),
+               session.canAddInput(audioInput) {
+                session.addInput(audioInput)
+                lane.audioCaptureEnabled = true
             } else {
                 lane.audioCaptureEnabled = false
             }
+            let output = AVCaptureVideoDataOutput()
+            LowLatencyIngestPipeline.shared.configure(output)
+            let relay = lane.cameraRelay
+            relay.onFrame = { [weak self, weak lane] width, height, sample, pixel in
+                self?.scheduleLanePublish {
+                    guard let lane else { return }
+                    self?.publishLaneFrame(
+                        source: source,
+                        lane: lane,
+                        width: width,
+                        height: height,
+                        sample: sample,
+                        pixel: pixel,
+                        backend: "avfoundation",
+                        kind: source.inputSource.kind
+                    )
+                }
+            }
+            output.setSampleBufferDelegate(relay, queue: relay.queue)
+            if session.canAddOutput(output) {
+                session.addOutput(output)
+            }
+            if lane.audioCaptureEnabled {
+                let audioOutput = AVCaptureAudioDataOutput()
+                audioOutput.setSampleBufferDelegate(relay, queue: relay.queue)
+                if session.canAddOutput(audioOutput) {
+                    session.addOutput(audioOutput)
+                } else {
+                    lane.audioCaptureEnabled = false
+                }
+            }
+            session.commitConfiguration()
         }
         wireCameraCaptureAudio(lane: lane)
-        session.commitConfiguration()
         lane.session = session
         captureSession = session
         if device != nil {
@@ -1711,20 +1723,22 @@ final class VideoIngestEngine {
         if Self.retainedMicSession == nil {
             Self.retainedMicSession = session
         }
-        session.beginConfiguration()
-        if let input = try? AVCaptureDeviceInput(device: device), session.canAddInput(input) {
-            session.addInput(input)
-        }
-        let relay = lane.cameraRelay
-        let audioOutput = AVCaptureAudioDataOutput()
-        audioOutput.setSampleBufferDelegate(relay, queue: relay.queue)
-        if session.canAddOutput(audioOutput) {
-            session.addOutput(audioOutput)
-        } else {
-            lane.audioCaptureEnabled = false
+        CaptureSessionLifetime.configure {
+            session.beginConfiguration()
+            if let input = try? AVCaptureDeviceInput(device: device), session.canAddInput(input) {
+                session.addInput(input)
+            }
+            let relay = lane.cameraRelay
+            let audioOutput = AVCaptureAudioDataOutput()
+            audioOutput.setSampleBufferDelegate(relay, queue: relay.queue)
+            if session.canAddOutput(audioOutput) {
+                session.addOutput(audioOutput)
+            } else {
+                lane.audioCaptureEnabled = false
+            }
+            session.commitConfiguration()
         }
         wireCameraCaptureAudio(lane: lane)
-        session.commitConfiguration()
         lane.session = session
         captureSession = session
         CaptureSessionLifetime.start(session)
@@ -1796,41 +1810,45 @@ final class VideoIngestEngine {
     ) {
         guard !sessionHasAudioOutput(session) else { return }
         let device = resolveCamera(source)
-        session.beginConfiguration()
-        if let audioDevice = companionAudioDevice(for: device) {
-            let hasAudioInput = session.inputs.contains { input in
-                guard let deviceInput = input as? AVCaptureDeviceInput else { return false }
-                return deviceInput.device.hasMediaType(.audio)
+        CaptureSessionLifetime.configure {
+            session.beginConfiguration()
+            if let audioDevice = companionAudioDevice(for: device) {
+                let hasAudioInput = session.inputs.contains { input in
+                    guard let deviceInput = input as? AVCaptureDeviceInput else { return false }
+                    return deviceInput.device.hasMediaType(.audio)
+                }
+                if !hasAudioInput, let audioInput = try? AVCaptureDeviceInput(device: audioDevice),
+                   session.canAddInput(audioInput) {
+                    session.addInput(audioInput)
+                }
             }
-            if !hasAudioInput, let audioInput = try? AVCaptureDeviceInput(device: audioDevice),
-               session.canAddInput(audioInput) {
-                session.addInput(audioInput)
+            let relay = lane.cameraRelay
+            let audioOutput = AVCaptureAudioDataOutput()
+            audioOutput.setSampleBufferDelegate(relay, queue: relay.queue)
+            if session.canAddOutput(audioOutput) {
+                session.addOutput(audioOutput)
+                lane.audioCaptureEnabled = true
             }
+            session.commitConfiguration()
         }
-        let relay = lane.cameraRelay
-        let audioOutput = AVCaptureAudioDataOutput()
-        audioOutput.setSampleBufferDelegate(relay, queue: relay.queue)
-        if session.canAddOutput(audioOutput) {
-            session.addOutput(audioOutput)
-            lane.audioCaptureEnabled = true
-        }
-        session.commitConfiguration()
     }
 
     private func restoreDedicatedMicOutputs(lane: LiveInputLane, session: AVCaptureSession, endpoint: String) {
         guard let device = resolveAudioCaptureDevice(endpoint: endpoint) else { return }
-        session.beginConfiguration()
-        let hasInput = session.inputs.contains { ($0 as? AVCaptureDeviceInput)?.device.uniqueID == device.uniqueID }
-        if !hasInput, let input = try? AVCaptureDeviceInput(device: device), session.canAddInput(input) {
-            session.addInput(input)
+        CaptureSessionLifetime.configure {
+            session.beginConfiguration()
+            let hasInput = session.inputs.contains { ($0 as? AVCaptureDeviceInput)?.device.uniqueID == device.uniqueID }
+            if !hasInput, let input = try? AVCaptureDeviceInput(device: device), session.canAddInput(input) {
+                session.addInput(input)
+            }
+            let relay = lane.cameraRelay
+            let audioOutput = AVCaptureAudioDataOutput()
+            audioOutput.setSampleBufferDelegate(relay, queue: relay.queue)
+            if session.canAddOutput(audioOutput) {
+                session.addOutput(audioOutput)
+            }
+            session.commitConfiguration()
         }
-        let relay = lane.cameraRelay
-        let audioOutput = AVCaptureAudioDataOutput()
-        audioOutput.setSampleBufferDelegate(relay, queue: relay.queue)
-        if session.canAddOutput(audioOutput) {
-            session.addOutput(audioOutput)
-        }
-        session.commitConfiguration()
         if !session.isRunning {
             CaptureSessionLifetime.start(session)
         }
