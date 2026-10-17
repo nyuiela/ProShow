@@ -3417,6 +3417,20 @@ final class ShowController {
             editors.canvasPanX = -(Double(args["cx"] ?? "0") ?? 0) * zoom
             editors.canvasPanY = -(Double(args["cy"] ?? "0") ?? 0) * zoom
             return ["ok": true, "zoom": zoom]
+        case "prop_create":
+            // Same path as the agent tool. args["json"] is the tool's JSON arguments.
+            guard let data = args["json"]?.data(using: .utf8), let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return ["ok": false, "error": "bad_json"] }
+            return AIAgentSession.runPropCreate(obj, controller: self).0
+        case "prop_delete":
+            guard let prop = inspector.props.first(where: { $0.name == args["name"] }) else { return ["ok": false, "error": "no_prop"] }
+            _ = inspector.deleteProp(id: prop.id)
+            if editors.kind == .props { editors.documents.removeAll { $0.id == prop.id } }
+            syncActivePropsToCompositor(); persistStudio()
+            return ["ok": true]
+        case "prop_info":
+            guard let prop = inspector.props.first(where: { $0.name == args["name"] }) else { return ["ok": false, "error": "no_prop"] }
+            return ["ok": true, "collection": prop.collectionName, "active": prop.isActive, "phoneMode": prop.phoneMode.rawValue, "showOn": prop.showOn.rawValue,
+                    "anchors": prop.elements.map { $0.propAnchor?.rawValue ?? "nil" }.joined(separator: ",")]
         case "prop_close_editor":
             closeEditor()
             return ["ok": true]

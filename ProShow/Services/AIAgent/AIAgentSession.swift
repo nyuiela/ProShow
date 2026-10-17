@@ -506,13 +506,17 @@ final class AIAgentSession {
     }
 
     private func propCreateTool(_ args: [String: Any]) -> AgentToolOutcome {
-        let issues = Self.validatePropCreate(args)
-        guard issues.isEmpty else {
-            return AgentToolOutcome(result: json(["ok": false, "error": "invalid_prop", "issues": issues]), ok: false, summary: "invalid_prop")
-        }
         guard let controller else {
             return AgentToolOutcome(result: json(["ok": false, "error": "no_show"]), ok: false, summary: "no_show")
         }
+        let (result, ok, summary) = Self.runPropCreate(args, controller: controller)
+        return AgentToolOutcome(result: json(result), ok: ok, summary: summary)
+    }
+
+    /// Shared by the agent tool and the control API QA action.
+    static func runPropCreate(_ args: [String: Any], controller: ShowController) -> ([String: Any], Bool, String) {
+        let issues = Self.validatePropCreate(args)
+        guard issues.isEmpty else { return (["ok": false, "error": "invalid_prop", "issues": issues], false, "invalid_prop") }
         let adds = AgentTemplateCatalog.addElementList(["addElements": args["elements"] ?? []])
         let mode = (args["phoneMode"] as? String).flatMap(PropPhoneMode.init(rawValue:)) ?? .linked
         let showOn = (args["showOn"] as? String).flatMap(PropOutputTarget.init(rawValue:)) ?? .both
@@ -528,15 +532,14 @@ final class AIAgentSession {
             let stream = pick(built.canvas)
             let phone = mode == .custom ? pick(built.editorCanvases.first(where: \.isPhoneArtboard)?.objects ?? []) : nil
             guard !stream.isEmpty else {
-                return AgentToolOutcome(result: json(["ok": false, "error": "no_elements_built"]), ok: false, summary: "no_elements_built")
+                return (["ok": false, "error": "no_elements_built"], false, "no_elements_built")
             }
             let prop = controller.addAgentProp(name: (args["name"] as? String ?? "Prop").trimmingCharacters(in: .whitespaces),
                                                elements: stream, phoneElements: phone, phoneMode: mode, showOn: showOn)
-            return AgentToolOutcome(result: json(["ok": true, "id": prop.id.uuidString, "name": prop.name, "elements": stream.count,
-                                                  "phoneMode": mode.rawValue, "showOn": showOn.rawValue, "notes": notes]),
-                                    ok: true, summary: "Prop \(prop.name)")
+            return (["ok": true, "id": prop.id.uuidString, "name": prop.name, "elements": stream.count,
+                     "phoneMode": mode.rawValue, "showOn": showOn.rawValue, "notes": notes], true, "Prop \(prop.name)")
         } catch {
-            return AgentToolOutcome(result: json(["ok": false, "error": "\(error)"]), ok: false, summary: "prop_create failed")
+            return (["ok": false, "error": "\(error)"], false, "prop_create failed")
         }
     }
 
