@@ -428,6 +428,8 @@ final class ProgramOutputComposer: @unchecked Sendable {
         let videoSpaceW = max(stack.slideCanvasWidth, Double(width), CanvasConfig.width, 1)
         let videoSpaceH = max(stack.slideCanvasHeight, Double(height), CanvasConfig.height, 1)
 
+        // Pooled buffers keep old pixels; a transparent screen colour must not show the previous frame.
+        ctx.clear(CGRect(x: 0, y: 0, width: width, height: height))
         fill(ctx, color: stack.screenColorHex, rect: CGRect(x: 0, y: 0, width: width, height: height))
         if stack.isVisible(.screenColor, onStage: false) {
             covered.append(RenderLayer.screenColor.rawValue)
@@ -592,6 +594,8 @@ final class ProgramOutputComposer: @unchecked Sendable {
         let videoSpaceW = max(stack.slideCanvasWidth, Double(width), CanvasConfig.width, 1)
         let videoSpaceH = max(stack.slideCanvasHeight, Double(height), CanvasConfig.height, 1)
 
+        // Pooled buffers keep old pixels; a transparent screen colour must not show the previous frame.
+        ctx.clear(CGRect(x: 0, y: 0, width: width, height: height))
         fill(ctx, color: stack.screenColorHex, rect: CGRect(x: 0, y: 0, width: width, height: height))
         if stack.isVisible(.screenColor, onStage: false) {
             covered.append(RenderLayer.screenColor.rawValue)
