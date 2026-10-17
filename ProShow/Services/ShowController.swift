@@ -3431,6 +3431,46 @@ final class ShowController {
             guard let prop = inspector.props.first(where: { $0.name == args["name"] }) else { return ["ok": false, "error": "no_prop"] }
             return ["ok": true, "collection": prop.collectionName, "active": prop.isActive, "phoneMode": prop.phoneMode.rawValue, "showOn": prop.showOn.rawValue,
                     "anchors": prop.elements.map { $0.propAnchor?.rawValue ?? "nil" }.joined(separator: ",")]
+        case "stream_local_test":
+            // QA only: Stream + Phone lanes to localhost RTMP listeners. Accounts live in memory and are never saved.
+            guard let su = args["stream"], let pu = args["phone"],
+                  [su, pu].allSatisfy({ $0.hasPrefix("rtmp://127.0.0.1:") || $0.hasPrefix("rtmp://localhost:") }),
+                  let sURL = URL(string: su), let pURL = URL(string: pu) else { return ["ok": false, "error": "localhost_rtmp_only"] }
+            guard !streaming.isLive else { return ["ok": false, "error": "already_streaming"] }
+            let sAcc = StreamAccount(accountName: "QA Local Stream", platform: .customRtmp, rtmpUrl: su, targetBitrateKbps: 4000)
+            var pAcc = StreamAccount(accountName: "QA Local Phone", platform: .customRtmp, rtmpUrl: pu, targetBitrateKbps: 4000)
+            pAcc.screenId = DestinationScreenKind.phone.rawValue
+            let ingests = [
+                ResolvedIngest(accountID: sAcc.id, name: sAcc.accountName, platform: .customRtmp, url: sURL, streamKey: ""),
+                ResolvedIngest(accountID: pAcc.id, name: pAcc.accountName, platform: .customRtmp, url: pURL, streamKey: ""),
+            ]
+            streaming.configureOutputs(ingests, accounts: [sAcc, pAcc])
+            if streaming.transport is MockStreamTransport == false {
+                streaming.transport = RTMPClient.fanoutConfigs(from: streaming.config).count > 1 ? MultiRTMPTransport() : RTMPStreamTransport()
+            }
+            let ok = streaming.start(ingestPolicies: [])
+            publishCurrentPhoneCanvas()
+            return ["ok": ok, "state": streaming.state.rawValue, "phoneLane": streaming.routingPlan?.phoneLane != nil]
+        case "stream_local_stop":
+            streaming.stop()
+            streaming.configureOutputs([], accounts: [])
+            return ["ok": true]
+        case "stream_info":
+            return ["ok": true, "state": streaming.state.rawValue, "phoneError": streaming.phoneLaneError ?? "", "lastError": streaming.lastError ?? ""]
+        case "timer":
+            guard let timer = inspector.timers.first(where: { $0.name == args["name"] }) else { return ["ok": false, "error": "no_timer"] }
+            switch args["op"] {
+            case "start": _ = inspector.startTimer(id: timer.id)
+            case "stop": _ = inspector.stopTimer(id: timer.id)
+            case "reset": _ = inspector.resetTimer(id: timer.id)
+            default: return ["ok": false, "error": "op"]
+            }
+            evaluateProgramClockState()
+            return ["ok": true]
+        case "prop_toggle":
+            guard let prop = inspector.props.first(where: { $0.name == args["name"] }) else { return ["ok": false, "error": "no_prop"] }
+            _ = toggleInspectorProp(id: prop.id)
+            return ["ok": true, "active": inspector.props.first(where: { $0.id == prop.id })?.isActive ?? false]
         case "prop_close_editor":
             closeEditor()
             return ["ok": true]
