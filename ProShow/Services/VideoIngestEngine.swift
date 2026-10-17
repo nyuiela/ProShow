@@ -305,7 +305,14 @@ final class VideoIngestEngine {
     #if canImport(AVFoundation)
     private(set) var captureSession: AVCaptureSession?
     /// One camera session and one mic session for the process. New session objects leak a CMIO audio queue. Stopping and starting these same objects does not.
-    private static var retainedCameraSession: AVCaptureSession?
+    /// One app-lifetime session per physical camera (keyed by device uniqueID). A single shared
+    /// session meant every camera slot reused the first camera, so only one camera could be assigned.
+    private static var retainedCameraSessions: [String: AVCaptureSession] = [:]
+
+    private static func isRetainedSession(_ session: AVCaptureSession?) -> Bool {
+        guard let session else { return false }
+        return session === retainedMicSession || retainedCameraSessions.values.contains { $0 === session }
+    }
     private static var retainedMicSession: AVCaptureSession?
     #endif
     private var activeSourceID: UUID?
@@ -755,7 +762,7 @@ final class VideoIngestEngine {
         lane.cameraRelay.onAudioPCM = nil
         lane.cameraRelay.onAudioPeak = nil
         if let session = lane.session {
-            if session === Self.retainedCameraSession || session === Self.retainedMicSession {
+            if Self.isRetainedSession(session) {
                 // Shared app-lifetime session: never restart it on a slide change.
                 let stillUsed = lanes.values.contains { $0 !== lane && $0.isLive && $0.session === session }
                 if !stillUsed {
@@ -1093,7 +1100,7 @@ final class VideoIngestEngine {
             lane.cameraRelay.onFrame = nil
             lane.cameraRelay.onAudioPCM = nil
             lane.cameraRelay.onAudioPeak = nil
-            if lane.session === Self.retainedCameraSession || lane.session === Self.retainedMicSession {
+            if Self.isRetainedSession(lane.session) {
                 CaptureSessionLifetime.pause(lane.session)
                 lane.session = nil
             } else {
@@ -1116,7 +1123,7 @@ final class VideoIngestEngine {
             #endif
         }
         #if canImport(AVFoundation)
-        if captureSession === Self.retainedCameraSession || captureSession === Self.retainedMicSession {
+        if Self.isRetainedSession(captureSession) {
             CaptureSessionLifetime.pause(captureSession)
             captureSession = nil
         } else {
@@ -1266,7 +1273,8 @@ final class VideoIngestEngine {
         default:
             break
         }
-        if let session = Self.retainedCameraSession, !session.inputs.isEmpty {
+        let cameraKey = device?.uniqueID ?? "default"
+        if let session = Self.retainedCameraSessions[cameraKey], !session.inputs.isEmpty {
             lane.session = session
             captureSession = session
             bindCameraRelay(source: source, lane: lane, session: session)
@@ -1276,9 +1284,9 @@ final class VideoIngestEngine {
             }
             return
         }
-        let session = Self.retainedCameraSession ?? AVCaptureSession()
-        if Self.retainedCameraSession == nil {
-            Self.retainedCameraSession = session
+        let session = Self.retainedCameraSessions[cameraKey] ?? AVCaptureSession()
+        if Self.retainedCameraSessions[cameraKey] == nil {
+            Self.retainedCameraSessions[cameraKey] = session
             CaptureSessionWatch.watch(session)
         }
         CaptureSessionLifetime.configure {
@@ -1630,9 +1638,8 @@ final class VideoIngestEngine {
                 guard let session = lane.session else { return false }
                 return session.inputs.contains { input in
                     guard let existing = (input as? AVCaptureDeviceInput)?.device else { return false }
+                    // Match by uniqueID only: name matching made two cameras share one session.
                     return existing.uniqueID == device.uniqueID
-                        || existing.localizedName.caseInsensitiveCompare(device.localizedName) == .orderedSame
-                        || existing == device
                 }
             }) {
                 return owner
