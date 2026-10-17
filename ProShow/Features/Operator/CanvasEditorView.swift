@@ -649,6 +649,8 @@ struct CanvasEditorView: View {
                 let boardH = board.height * scale
                 let selected = document.map { editor.isCanvasActive(board, in: $0) } ?? board.isPrimary
                 let objects = board.isPrimary ? (document?.objects ?? []) : board.objects
+                let propPhone = document.map { $0.kind == .props && EditorEngine.isPropPhoneBoard(board, of: $0) } ?? false
+                let propPhoneDerived = propPhone && document?.propPhoneMode != .custom
                 canvasSurface(
                     canvasWidth: board.width,
                     canvasHeight: board.height,
@@ -662,6 +664,15 @@ struct CanvasEditorView: View {
                     objects: objects
                 )
                 .frame(width: boardW, height: boardH, alignment: .topLeading)
+                .opacity(propPhoneDerived ? 0.45 : 1)
+                .allowsHitTesting(!propPhoneDerived)
+                .overlay(alignment: .bottomLeading) {
+                    if propPhone, let document {
+                        propPhoneControls(document)
+                            .offset(y: 40)
+                            .fixedSize()
+                    }
+                }
                 .overlay {
                     Rectangle()
                         .strokeBorder(selected ? ProShowTheme.accent : Color.white.opacity(0.35), lineWidth: selected ? 2 : 1)
@@ -676,6 +687,34 @@ struct CanvasEditorView: View {
                 .offset(x: CanvasEditorScreenAlign.screenPoint(screenX), y: CanvasEditorScreenAlign.screenPoint(screenY))
             }
         }
+    }
+
+    /// Phone canvas of a prop: Linked follows Stream, Custom is edited here, Hidden skips Phone.
+    private func propPhoneControls(_ document: EditorDocument) -> some View {
+        HStack(spacing: 8) {
+            Picker("Phone", selection: Binding(
+                get: { document.propPhoneMode },
+                set: { editor.setPropPhoneMode($0, documentID: document.id) }
+            )) {
+                ForEach(PropPhoneMode.allCases) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(width: 210)
+            if document.propPhoneMode == .linked {
+                Button("Customise for Phone") {
+                    editor.setPropPhoneMode(.custom, documentID: document.id)
+                    editor.selectCanvas(EditorEngine.propPhoneBoardID(for: document.id))
+                }
+                .controlSize(.small)
+            }
+            Text(document.propPhoneMode == .linked ? "Auto-fit from Stream" : (document.propPhoneMode == .hidden ? "Not on Phone" : "Own Phone layout"))
+                .font(DeskType.micro)
+                .foregroundStyle(.white.opacity(0.75))
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(Capsule(style: .continuous).fill(Color.black.opacity(0.78)))
     }
 
     private func canvasFrameLabel(_ board: EditorCanvasFrame, selected: Bool, scale: Double) -> some View {

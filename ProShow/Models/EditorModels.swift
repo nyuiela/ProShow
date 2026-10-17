@@ -647,6 +647,8 @@ struct CanvasObject: Identifiable, Hashable, Codable, Sendable {
     var themeSlot: ThemeSlotRole? = nil
     /// Order among equal slots when mapping by index.
     var themeSlotOrder: Int? = nil
+    /// Prop layout anchor for other aspect ratios. Nil reads as top left, so older props keep their place.
+    var propAnchor: PropAnchor? = nil
 
     var resolvedCountdownStartOn: CountdownBuildLink { countdownStartOn ?? .none }
     var resolvedCountdownResetOn: CountdownBuildLink { countdownResetOn ?? .none }
@@ -1151,6 +1153,9 @@ struct EditorDocument: Identifiable, Hashable, Codable, Sendable {
     var userGuides: [UserGuideLine]
     /// Extra screens on this slide, plus the primary frame once it has been moved or another frame exists.
     var boards: [EditorCanvasFrame]
+    /// Prop documents only: Phone canvas mode and outputs. Not part of the document's own coding.
+    var propPhoneMode: PropPhoneMode = .linked
+    var propShowOn: PropOutputTarget = .both
 
     init(
         id: UUID = UUID(),

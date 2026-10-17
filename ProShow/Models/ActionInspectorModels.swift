@@ -145,6 +145,10 @@ struct ProShowProp: Identifiable, Hashable, Codable, Sendable, Equatable {
     var liveQuoteRefresh: PropLiveQuoteRefresh = .onEnter
     /// Optional 9:16 Phone layout (2160x3840). Nil means the Phone output skips this prop.
     var phoneElements: [CanvasObject]? = nil
+    /// Linked derives Phone from Stream, Custom uses `phoneElements`, Hidden skips Phone.
+    var phoneMode: PropPhoneMode = .linked
+    /// Outputs that draw this prop when it is on.
+    var showOn: PropOutputTarget = .both
 
     init(
         id: UUID = UUID(),
@@ -155,8 +159,14 @@ struct ProShowProp: Identifiable, Hashable, Codable, Sendable, Equatable {
         isActive: Bool = false,
         collectionName: String = "Default Collection",
         transition: String = "Dissolve",
-        liveQuoteRefresh: PropLiveQuoteRefresh = .onEnter
+        liveQuoteRefresh: PropLiveQuoteRefresh = .onEnter,
+        phoneElements: [CanvasObject]? = nil,
+        phoneMode: PropPhoneMode? = nil,
+        showOn: PropOutputTarget = .both
     ) {
+        self.phoneElements = phoneElements
+        self.phoneMode = phoneMode ?? ((phoneElements?.isEmpty == false) ? .custom : .linked)
+        self.showOn = showOn
         self.id = id
         self.name = name
         self.elements = elements
@@ -180,10 +190,14 @@ struct ProShowProp: Identifiable, Hashable, Codable, Sendable, Equatable {
         transition = try container.decodeIfPresent(String.self, forKey: .transition) ?? "Dissolve"
         liveQuoteRefresh = try container.decodeIfPresent(PropLiveQuoteRefresh.self, forKey: .liveQuoteRefresh) ?? .onEnter
         phoneElements = try container.decodeIfPresent([CanvasObject].self, forKey: .phoneElements)
+        // Older props: a saved Phone layout means Custom; otherwise Linked.
+        phoneMode = try container.decodeIfPresent(PropPhoneMode.self, forKey: .phoneMode)
+            ?? ((phoneElements?.isEmpty == false) ? .custom : .linked)
+        showOn = try container.decodeIfPresent(PropOutputTarget.self, forKey: .showOn) ?? .both
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, elements, transitionDuration, autoClearMode, isActive, collectionName, transition, liveQuoteRefresh, phoneElements
+        case id, name, elements, transitionDuration, autoClearMode, isActive, collectionName, transition, liveQuoteRefresh, phoneElements, phoneMode, showOn
     }
 
     func encode(to encoder: Encoder) throws {
@@ -198,6 +212,8 @@ struct ProShowProp: Identifiable, Hashable, Codable, Sendable, Equatable {
         try container.encode(transition, forKey: .transition)
         try container.encode(liveQuoteRefresh, forKey: .liveQuoteRefresh)
         try container.encodeIfPresent(phoneElements, forKey: .phoneElements)
+        try container.encode(phoneMode, forKey: .phoneMode)
+        try container.encode(showOn, forKey: .showOn)
     }
 
     var autoClearTitle: String { autoClearMode.title }

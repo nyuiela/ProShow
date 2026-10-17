@@ -1592,6 +1592,21 @@ private struct PropActionPane: View {
                                         )
                                     }
                                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                    .overlay(alignment: .topTrailing) {
+                                        Button {
+                                            controller.setPropShowOn(id: prop.id, target: prop.showOn.next)
+                                        } label: {
+                                            Text(prop.showOn.badge)
+                                                .font(.system(size: 9, weight: .bold))
+                                                .padding(.horizontal, 5)
+                                                .padding(.vertical, 2)
+                                                .foregroundStyle(.white)
+                                                .background(prop.showOn == .both ? Color.black.opacity(0.55) : ProShowTheme.accent, in: Capsule())
+                                        }
+                                        .buttonStyle(.plain)
+                                        .help("Show on: \(prop.showOn.title). Click to change.")
+                                        .padding(4)
+                                    }
                                 Text(prop.name)
                                     .font(.system(size: 12))
                                     .foregroundStyle(ShowSidebarPalette.title)
@@ -1686,6 +1701,15 @@ private struct PropActionPane: View {
                 controller.syncActivePropsToCompositor()
                 controller.persistStudio()
                 _ = copy
+            }
+        }
+        Menu("Show on") {
+            ForEach(PropOutputTarget.allCases) { target in
+                Button {
+                    controller.setPropShowOn(id: prop.id, target: target)
+                } label: {
+                    if prop.showOn == target { Label(target.title, systemImage: "checkmark") } else { Text(target.title) }
+                }
             }
         }
         Menu("Auto Clear") {

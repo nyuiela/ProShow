@@ -1587,6 +1587,20 @@ final class ShowController {
         return prop
     }
 
+    /// Agent-made prop. Added off, in the "AI Props" collection.
+    @discardableResult
+    func addAgentProp(name: String, elements: [CanvasObject], phoneElements: [CanvasObject]?, phoneMode: PropPhoneMode, showOn: PropOutputTarget) -> ProShowProp {
+        let collection = "AI Props"
+        if !inspector.collections.contains(collection) { inspector.collections.append(collection) }
+        let prop = ProShowProp(name: name, elements: elements, collectionName: collection,
+                               phoneElements: phoneElements, phoneMode: phoneMode, showOn: showOn)
+        inspector.props.append(prop)
+        if editors.kind == .props { editors.insertDocument(from: prop) }
+        syncActivePropsToCompositor()
+        persistStudio()
+        return prop
+    }
+
     func assignPropCollection(id: UUID, collection: String) {
         inspector.setPropCollection(id: id, collection: collection)
         if editors.kind == .props,
@@ -3188,7 +3202,7 @@ final class ShowController {
                 renderNow: work.renderNow,
                 marketStreamItems: work.marketStreamItems,
                 tickerColorConfig: work.tickerColorConfig,
-                propCanvases: PhonePropCanvasStore.shared.get().filter { canvas in work.propCanvases.contains { $0.id == canvas.id } }
+                propCanvases: PhonePropCanvasStore.shared.get().filter { canvas in work.propCanvases.contains { $0.id == canvas.id } || PhonePropCanvasStore.shared.isPhoneOnly(canvas.id) }
             ) {
                 PhoneComposedFrame.shared.store(phoneFrame)
             }
@@ -3390,6 +3404,22 @@ final class ShowController {
             }
         case "remove_group":
             return ["ok": true, "removed": removeGroups(named: args["group"] ?? "")]
+        case "prop_edit":
+            // Opens the prop editor on one prop; canvas=phone selects its Phone board. Never takes it live.
+            guard let prop = inspector.props.first(where: { $0.name == args["name"] }) else { return ["ok": false, "error": "no_prop"] }
+            editProp(id: prop.id)
+            if args["canvas"] == "phone" { editors.selectCanvas(EditorEngine.propPhoneBoardID(for: prop.id)) }
+            return ["ok": true, "phoneMode": editors.propPhoneMode(of: prop.id).rawValue, "showOn": prop.showOn.rawValue]
+        case "prop_close_editor":
+            closeEditor()
+            return ["ok": true]
+        case "prop_show_on":
+            guard let prop = inspector.props.first(where: { $0.name == args["name"] }),
+                  let target = PropOutputTarget(rawValue: args["target"] ?? "") else { return ["ok": false, "error": "bad_args"] }
+            setPropShowOn(id: prop.id, target: target)
+            return ["ok": true, "showOn": target.rawValue]
+        case "prop_list":
+            return ["ok": true, "props": inspector.props.map { "\($0.name)|\($0.phoneMode.rawValue)|\($0.showOn.rawValue)|\($0.phoneElements?.count ?? 0)" }.joined(separator: ";")]
         case "render":
             // Renders every canvas of one slide to PNGs (QA only; never goes live).
             #if canImport(CoreVideo) && os(macOS)
@@ -3403,7 +3433,7 @@ final class ShowController {
                 let isPhone = !board.isPrimary && board.height > board.width
                 let propLayer: [PropCanvas] = isPhone
                     ? phonePropCanvases(for: overlayProps)
-                    : overlayProps.map { PropCanvas(id: $0.id, name: $0.name, objects: resolvedCanvasObjects($0.elements)) }
+                    : overlayProps.filter { PropCanvasLayout.shows($0, on: .stream) }.map { PropCanvas(id: $0.id, name: $0.name, objects: resolvedCanvasObjects($0.elements)) }
                 let boardObjects = resolvedCanvasObjects(board.isPrimary && board.objects.isEmpty
                     ? prepared.audienceCanvas(variantOverrideID: nil, applicationOverride: prepared.themeApplication)
                     : board.objects)
@@ -7276,7 +7306,7 @@ final class ShowController {
     /// 9:16 Phone versions of props (from `ProShowProp.phoneElements`).
     func phonePropCanvases(for props: [ProShowProp]) -> [PropCanvas] {
         props.compactMap { prop in
-            guard let phone = prop.phoneElements, !phone.isEmpty else { return nil }
+            guard PropCanvasLayout.shows(prop, on: .phone), let phone = PropCanvasLayout.phoneObjects(for: prop) else { return nil }
             return PropCanvas(
                 id: prop.id,
                 name: prop.name,
@@ -7289,12 +7319,26 @@ final class ShowController {
         }
     }
 
+    /// Per-prop output choice. Program and Phone both read it on the next sync.
+    func setPropShowOn(id: UUID, target: PropOutputTarget) {
+        guard let index = inspector.props.firstIndex(where: { $0.id == id }) else { return }
+        inspector.props[index].showOn = target
+        if editors.kind == .props, let d = editors.documents.firstIndex(where: { $0.id == id }) {
+            editors.documents[d].propShowOn = target
+        }
+        syncActivePropsToCompositor()
+        refreshLiveStack()
+        persistStudio()
+    }
+
     func syncActivePropsToCompositor() {
         let live = inspector.props.filter { $0.isActive || propBuildClearStartedAt[$0.id] != nil }
         PhonePropCanvasStore.shared.set(phonePropCanvases(for: live))
+        PhonePropCanvasStore.shared.setPhoneOnly(Set(live.filter { $0.showOn == .phone }.map(\.id)))
+        let stream = live.filter { PropCanvasLayout.shows($0, on: .stream) }
         compositor.setActiveProps(
-            live.map(\.name),
-            canvases: live.map {
+            stream.map(\.name),
+            canvases: stream.map {
                 PropCanvas(
                     id: $0.id,
                     name: $0.name,
@@ -8104,4 +8148,8 @@ final class PhonePropCanvasStore: @unchecked Sendable {
     private var canvases: [PropCanvas] = []
     func set(_ value: [PropCanvas]) { lock.lock(); canvases = value; lock.unlock() }
     func get() -> [PropCanvas] { lock.lock(); defer { lock.unlock() }; return canvases }
+    /// Phone-only props are not on the Stream props layer, so the Phone path keeps them by id.
+    private var phoneOnly: Set<UUID> = []
+    func setPhoneOnly(_ ids: Set<UUID>) { lock.lock(); phoneOnly = ids; lock.unlock() }
+    func isPhoneOnly(_ id: UUID) -> Bool { lock.lock(); defer { lock.unlock() }; return phoneOnly.contains(id) }
 }

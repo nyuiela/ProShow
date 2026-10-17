@@ -462,6 +462,8 @@ final class AIAgentSession {
                 : instantiateTool(args)
             if outcome.ok { roundHadComposeSuccess = true } else { roundHadComposeFailure = true; turnLastComposeError = outcome.summary }
             return outcome
+        case "prop_create":
+            return propCreateTool(args)
         case "slide_snapshot":
             return snapshotTool(args)
         case "slide_add_elements":
@@ -476,6 +478,65 @@ final class AIAgentSession {
             return outcome
         default:
             return AgentToolOutcome(result: json(["ok": false, "error": "not_implemented"]), ok: false, summary: "Not implemented")
+        }
+    }
+
+    /// Problems that stop a prop_create call. Empty means valid.
+    static func validatePropCreate(_ args: [String: Any]) -> [String] {
+        var issues: [String] = []
+        let name = (args["name"] as? String ?? "").trimmingCharacters(in: .whitespaces)
+        if name.isEmpty { issues.append("name is required") }
+        if let v = args["showOn"] as? String, PropOutputTarget(rawValue: v) == nil { issues.append("showOn must be both, stream or phone") }
+        let mode = (args["phoneMode"] as? String).map { PropPhoneMode(rawValue: $0) } ?? .linked
+        if mode == nil { issues.append("phoneMode must be linked, custom or hidden") }
+        let elements = AgentTemplateCatalog.addElementList(["addElements": args["elements"] ?? []])
+        if elements.isEmpty { issues.append("elements must be a non-empty array") }
+        var names = Set<String>()
+        for (i, e) in elements.enumerated() {
+            let label = (e["name"] as? String) ?? "element \(i + 1)"
+            guard let n = e["name"] as? String, !n.isEmpty else { issues.append("\(label): name is required"); continue }
+            if !names.insert(n).inserted { issues.append("\(n): names must be unique") }
+            if let a = e["anchor"] as? String {
+                if PropAnchor(rawValue: a) == nil { issues.append("\(n): anchor must be one of \(AgentToolRegistry.propAnchors.joined(separator: ", "))") }
+            } else { issues.append("\(n): anchor is required") }
+            for k in ["x", "y", "w", "h"] where !(e[k] is NSNumber) { issues.append("\(n): \(k) is required (fraction 0-1)") }
+            if mode == .custom, !(e["phone"] is [String: Any]) { issues.append("\(n): phone frame is required when phoneMode is custom") }
+        }
+        return issues
+    }
+
+    private func propCreateTool(_ args: [String: Any]) -> AgentToolOutcome {
+        let issues = Self.validatePropCreate(args)
+        guard issues.isEmpty else {
+            return AgentToolOutcome(result: json(["ok": false, "error": "invalid_prop", "issues": issues]), ok: false, summary: "invalid_prop")
+        }
+        guard let controller else {
+            return AgentToolOutcome(result: json(["ok": false, "error": "no_show"]), ok: false, summary: "no_show")
+        }
+        let adds = AgentTemplateCatalog.addElementList(["addElements": args["elements"] ?? []])
+        let mode = (args["phoneMode"] as? String).flatMap(PropPhoneMode.init(rawValue:)) ?? .linked
+        let showOn = (args["showOn"] as? String).flatMap(PropOutputTarget.init(rawValue:)) ?? .both
+        do {
+            let (built, notes) = try AgentTemplateCatalog.instantiate("blank", args: ["addElements": adds])
+            let anchors = Dictionary(uniqueKeysWithValues: adds.compactMap { e -> (String, PropAnchor)? in
+                guard let n = e["name"] as? String, let a = (e["anchor"] as? String).flatMap(PropAnchor.init(rawValue:)) else { return nil }
+                return (n, a)
+            })
+            func pick(_ objects: [CanvasObject]) -> [CanvasObject] {
+                adds.compactMap { e in objects.first { $0.name == (e["name"] as? String) } }.map { var o = $0; o.propAnchor = anchors[o.name]; return o }
+            }
+            let stream = pick(built.canvas)
+            let phone = mode == .custom ? pick(built.editorCanvases.first(where: \.isPhoneArtboard)?.objects ?? []) : nil
+            guard !stream.isEmpty else {
+                return AgentToolOutcome(result: json(["ok": false, "error": "no_elements_built"]), ok: false, summary: "no_elements_built")
+            }
+            let prop = controller.addAgentProp(name: (args["name"] as? String ?? "Prop").trimmingCharacters(in: .whitespaces),
+                                               elements: stream, phoneElements: phone, phoneMode: mode, showOn: showOn)
+            return AgentToolOutcome(result: json(["ok": true, "id": prop.id.uuidString, "name": prop.name, "elements": stream.count,
+                                                  "phoneMode": mode.rawValue, "showOn": showOn.rawValue, "notes": notes]),
+                                    ok: true, summary: "Prop \(prop.name)")
+        } catch {
+            return AgentToolOutcome(result: json(["ok": false, "error": "\(error)"]), ok: false, summary: "prop_create failed")
         }
     }
 

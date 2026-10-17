@@ -394,6 +394,7 @@
 		C8F312000000000000000013 /* RundownFloatWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F322000000000000000013 /* RundownFloatWindow.swift */; };
 		C8F314000000000000000014 /* StudioGlassLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F324000000000000000014 /* StudioGlassLayout.swift */; };
 		C8F315000000000000000015 /* StudioGlassWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F325000000000000000015 /* StudioGlassWindow.swift */; };
+		E98D4B8F1298835F24E2052E /* PropCanvasLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE9118119B763AD0581A9223 /* PropCanvasLayout.swift */; };
 		EBEE41AD8B46469F806AFF82 /* AgentHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB87794D07C049F88D052558 /* AgentHistoryStore.swift */; };
 		LKBLD0000000000000000001 /* LiveKitAccessToken.swift in Sources */ = {isa = PBXBuildFile; fileRef = LKREF0000000000000000001 /* LiveKitAccessToken.swift */; };
 		LKBLD0000000000000000002 /* LiveKitDeskConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = LKREF0000000000000000002 /* LiveKitDeskConfig.swift */; };
@@ -639,6 +640,7 @@
 		A2T000000000000000000038 /* BroadcastGoLiveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BroadcastGoLiveTests.swift; sourceTree = "<group>"; };
 		A2T000000000000000000039 /* MultiViewerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultiViewerTests.swift; sourceTree = "<group>"; };
 		A2T00000000000000000003A /* ActionStackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionStackTests.swift; sourceTree = "<group>"; };
+		AE9118119B763AD0581A9223 /* PropCanvasLayout.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PropCanvasLayout.swift; sourceTree = "<group>"; };
 		B200000000000000000000B1 /* ProgramOutputMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramOutputMode.swift; sourceTree = "<group>"; };
 		B200000000000000000000B2 /* ProgramRenderContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramRenderContract.swift; sourceTree = "<group>"; };
 		B200000000000000000000B3 /* ProgramOutputBus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramOutputBus.swift; sourceTree = "<group>"; };
@@ -1115,6 +1117,7 @@
 				0691E04B54D3F397BF2A628D /* AIAgent */,
 				69E78DF0B0D4828910EF0123 /* BroadcastTemplatePack.swift */,
 				5E7705E0267DB911C4F1EB98 /* SpecProjectBuilder.swift */,
+				AE9118119B763AD0581A9223 /* PropCanvasLayout.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -1799,6 +1802,7 @@
 				8DC5C336478DBEEDF37396E5 /* AIDeskWindow.swift in Sources */,
 				9B2308FCF47F11FFD0EAD05C /* BroadcastTemplatePack.swift in Sources */,
 				7C3216A31314A00C649B21F8 /* SpecProjectBuilder.swift in Sources */,
+				E98D4B8F1298835F24E2052E /* PropCanvasLayout.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
