@@ -3187,7 +3187,8 @@ final class ShowController {
                 buildPlayback: work.buildPlayback,
                 renderNow: work.renderNow,
                 marketStreamItems: work.marketStreamItems,
-                tickerColorConfig: work.tickerColorConfig
+                tickerColorConfig: work.tickerColorConfig,
+                propCanvases: PhonePropCanvasStore.shared.get().filter { canvas in work.propCanvases.contains { $0.id == canvas.id } }
             ) {
                 PhoneComposedFrame.shared.store(phoneFrame)
             }
@@ -3396,7 +3397,13 @@ final class ShowController {
             var paths: [String] = []
             let ctx = CIContext()
             let prepared = prepareSlideForProgramCue(slide)
+            let wanted = Set((args["props"] ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) })
+            let overlayProps = inspector.props.filter { wanted.contains($0.name) }
             for (i, board) in prepared.editorCanvases.enumerated() {
+                let isPhone = !board.isPrimary && board.height > board.width
+                let propLayer: [PropCanvas] = isPhone
+                    ? phonePropCanvases(for: overlayProps)
+                    : overlayProps.map { PropCanvas(id: $0.id, name: $0.name, objects: resolvedCanvasObjects($0.elements)) }
                 let boardObjects = resolvedCanvasObjects(board.isPrimary && board.objects.isEmpty
                     ? prepared.audienceCanvas(variantOverrideID: nil, applicationOverride: prepared.themeApplication)
                     : board.objects)
@@ -3408,7 +3415,8 @@ final class ShowController {
                     objects: boardObjects, canvasWidth: board.width, canvasHeight: board.height,
                     backgroundEnabled: board.backgroundEnabled, backgroundHex: board.backgroundHex,
                     width: Int(board.width * scale), height: Int(board.height * scale),
-                    textContext: dynamicTextContext(), objectLivePixels: live, renderNow: Date()) else { continue }
+                    textContext: dynamicTextContext(), objectLivePixels: live, renderNow: Date(),
+                    propCanvases: propLayer) else { continue }
                 let path = "\(out)-\(i).png"
                 let image = CIImage(cvPixelBuffer: px)
                 if let cs = CGColorSpace(name: CGColorSpace.sRGB),
@@ -7265,8 +7273,25 @@ final class ShowController {
         hideAllLayers()
     }
 
+    /// 9:16 Phone versions of props (from `ProShowProp.phoneElements`).
+    func phonePropCanvases(for props: [ProShowProp]) -> [PropCanvas] {
+        props.compactMap { prop in
+            guard let phone = prop.phoneElements, !phone.isEmpty else { return nil }
+            return PropCanvas(
+                id: prop.id,
+                name: prop.name,
+                objects: resolvedCanvasObjects(phone),
+                canvasWidth: 2160,
+                canvasHeight: 3840,
+                buildStartedAt: propBuildStartedAt[prop.id],
+                buildClearStartedAt: propBuildClearStartedAt[prop.id]
+            )
+        }
+    }
+
     func syncActivePropsToCompositor() {
         let live = inspector.props.filter { $0.isActive || propBuildClearStartedAt[$0.id] != nil }
+        PhonePropCanvasStore.shared.set(phonePropCanvases(for: live))
         compositor.setActiveProps(
             live.map(\.name),
             canvases: live.map {
@@ -8069,4 +8094,14 @@ struct DeskStatusAlert: Identifiable, Hashable {
     var id = UUID()
     var title: String
     var detail: String
+}
+
+
+/// Thread-safe snapshot of Phone prop canvases for the encode thread.
+final class PhonePropCanvasStore: @unchecked Sendable {
+    static let shared = PhonePropCanvasStore()
+    private let lock = NSLock()
+    private var canvases: [PropCanvas] = []
+    func set(_ value: [PropCanvas]) { lock.lock(); canvases = value; lock.unlock() }
+    func get() -> [PropCanvas] { lock.lock(); defer { lock.unlock() }; return canvases }
 }

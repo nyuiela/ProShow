@@ -159,7 +159,8 @@ final class ProgramOutputComposer: @unchecked Sendable {
         buildPlayback: BuildPlayback = .rest,
         renderNow: Date,
         marketStreamItems: [MarketTickerItem] = [],
-        tickerColorConfig: TickerColorConfig = TickerColorConfig()
+        tickerColorConfig: TickerColorConfig = TickerColorConfig(),
+        propCanvases: [PropCanvas] = []
     ) -> CVPixelBuffer? {
         var stack = RenderStack.idle
         stack.screenColorHex = backgroundHex
@@ -169,7 +170,10 @@ final class ProgramOutputComposer: @unchecked Sendable {
         stack.slideCanvasHeight = canvasHeight
         stack.slideBackgroundEnabled = backgroundEnabled
         stack.slideBackgroundHex = backgroundHex
-        stack.cleared = Set(RenderLayer.allCases.map(\.rawValue).filter { $0 != RenderLayer.slide.rawValue })
+        stack.cleared = Set(RenderLayer.allCases.map(\.rawValue).filter {
+            $0 != RenderLayer.slide.rawValue && !(propCanvases.isEmpty == false && $0 == RenderLayer.props.rawValue)
+        })
+        stack.activeProps = propCanvases.map(\.name)
         return render(
             stack: stack,
             width: width,
@@ -179,6 +183,7 @@ final class ProgramOutputComposer: @unchecked Sendable {
             media: nil,
             videoFrame: nil,
             textContext: textContext,
+            propCanvases: propCanvases,
             objectLivePixels: objectLivePixels,
             buildPlayback: buildPlayback,
             renderNow: renderNow,

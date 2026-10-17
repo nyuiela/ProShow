@@ -143,6 +143,8 @@ struct ProShowProp: Identifiable, Hashable, Codable, Sendable, Equatable {
     var transition: String
     /// When to force-fetch live quotes for this prop's canvas objects (show / operator, not only the editor).
     var liveQuoteRefresh: PropLiveQuoteRefresh = .onEnter
+    /// Optional 9:16 Phone layout (2160x3840). Nil means the Phone output skips this prop.
+    var phoneElements: [CanvasObject]? = nil
 
     init(
         id: UUID = UUID(),
@@ -177,10 +179,11 @@ struct ProShowProp: Identifiable, Hashable, Codable, Sendable, Equatable {
         collectionName = try container.decodeIfPresent(String.self, forKey: .collectionName) ?? "Default Collection"
         transition = try container.decodeIfPresent(String.self, forKey: .transition) ?? "Dissolve"
         liveQuoteRefresh = try container.decodeIfPresent(PropLiveQuoteRefresh.self, forKey: .liveQuoteRefresh) ?? .onEnter
+        phoneElements = try container.decodeIfPresent([CanvasObject].self, forKey: .phoneElements)
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, elements, transitionDuration, autoClearMode, isActive, collectionName, transition, liveQuoteRefresh
+        case id, name, elements, transitionDuration, autoClearMode, isActive, collectionName, transition, liveQuoteRefresh, phoneElements
     }
 
     func encode(to encoder: Encoder) throws {
@@ -194,6 +197,7 @@ struct ProShowProp: Identifiable, Hashable, Codable, Sendable, Equatable {
         try container.encode(collectionName, forKey: .collectionName)
         try container.encode(transition, forKey: .transition)
         try container.encode(liveQuoteRefresh, forKey: .liveQuoteRefresh)
+        try container.encodeIfPresent(phoneElements, forKey: .phoneElements)
     }
 
     var autoClearTitle: String { autoClearMode.title }
