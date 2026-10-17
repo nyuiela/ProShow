@@ -5937,6 +5937,7 @@ final class ShowController {
         if !libraries.isEmpty {
             contentLibraries = libraries
         }
+        attachOrphanPlaylists()
     }
 
     private func mergeMediaItems(_ existing: [MediaBinItem], _ incoming: [MediaBinItem]) -> [MediaBinItem] {

@@ -23,14 +23,7 @@ extension ShowController {
         if selectedContentLibraryID == nil {
             selectedContentLibraryID = contentLibraries.first?.id
         }
-        // Playlists saved in the project but listed in no library (e.g. built by a spec script)
-        // were invisible in the sidebar. Attach them to the selected library so they show up.
-        let listed = Set(contentLibraries.flatMap(\.playlistIDs))
-        let orphans = allPlaylists.map(\.id).filter { !listed.contains($0) }
-        if !orphans.isEmpty,
-           let index = contentLibraries.firstIndex(where: { $0.id == selectedContentLibraryID }) ?? contentLibraries.indices.first {
-            contentLibraries[index].playlistIDs.append(contentsOf: orphans)
-        }
+        attachOrphanPlaylists()
         let activeID = workspaceLayout.sidebar.selectedPlaylistId
         if !activeID.isEmpty,
            let uuid = UUID(uuidString: activeID),
@@ -43,6 +36,17 @@ extension ShowController {
         }
         syncLibraryItems()
         syncPlaylistItemTitlesFromLibraryShows()
+    }
+
+    /// Playlists saved in the project but listed in no library (e.g. built by a spec script)
+    /// were invisible in the sidebar. Attach them to the selected library so they show up.
+    func attachOrphanPlaylists() {
+        let listed = Set(contentLibraries.flatMap(\.playlistIDs))
+        let orphans = allPlaylists.map(\.id).filter { !listed.contains($0) }
+        guard !orphans.isEmpty,
+              let index = contentLibraries.firstIndex(where: { $0.id == selectedContentLibraryID }) ?? contentLibraries.indices.first
+        else { return }
+        contentLibraries[index].playlistIDs.append(contentsOf: orphans)
     }
 
     func selectContentLibrary(id: UUID) {
