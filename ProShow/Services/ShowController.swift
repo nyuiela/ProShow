@@ -3443,6 +3443,21 @@ final class ShowController {
                 UserDefaults.standard.set(args["expand_master"] == "1", forKey: "proshow.inspector.masterExpanded")
             }
             return ["ok": true, "tab": inspector.selectedTab.rawValue]
+        case "onair_fix":
+            // Same as the row's fix button: add_mic, or use_camera_mic for the live camera on layer N.
+            switch args["fix"] ?? "" {
+            case "add_mic":
+                let shot = addDefaultMicShot(endpoint: args["endpoint"] ?? "")
+                return ["ok": shot != nil, "shot_id": shot?.id.uuidString ?? ""]
+            case "use_camera_mic":
+                guard let layer = args["layer"].flatMap(Int.init), masterLayers.indices.contains(layer),
+                      let live = masterLayers[layer].liveShotID
+                else { return ["ok": false, "error": "missing_layer"] }
+                applyOnAirFix(.useCameraMic(layer: layer, shotID: live))
+                return ["ok": true, "muted": isLiveShotAudioMuted(layerIndex: layer)]
+            default:
+                return ["ok": false, "error": "unknown_fix"]
+            }
         case "mic_mode_ui":
             // Opens the macOS Mic Mode picker so the operator can choose Standard.
             MicrophoneModeStatus.showPicker()
@@ -3473,6 +3488,14 @@ final class ShowController {
         case "media_clear":
             emptyProgramLayer(.media)
             return ["ok": true]
+        case "take_shot":
+            // Test hook: take an existing shot (by id) live on its layer, same as clicking it.
+            guard let raw = args["id"], let id = UUID(uuidString: raw),
+                  let index = masterLayers.firstIndex(where: { $0.shots.contains { $0.id == id } }),
+                  let shot = masterLayers[index].shots.first(where: { $0.id == id })
+            else { return ["ok": false, "error": "missing_id"] }
+            takeShotLive(shot, layerIndex: index)
+            return ["ok": true, "layer": index]
         case "remove_shot":
             // Test hook: remove one shot (by id) that a test added; clears live first.
             guard let raw = args["id"], let id = UUID(uuidString: raw) else { return ["ok": false, "error": "missing_id"] }
@@ -4414,6 +4437,9 @@ final class ShowController {
 
     private func liveShotSourceCarriesAudio(_ source: DiscoveredSourceItem) -> Bool {
         switch source.sourceType {
+        case .systemCamera:
+            // Its own mic (built-in, Continuity) through the single mic lane.
+            return cameraMic(endpoint: source.connectionString) != nil
         case .systemMicrophone, .systemDisplay, .systemWindow, .systemAudioCapture,
              .ndiSource, .srtStream, .mediaFile, .libraryShow:
             return true
@@ -4443,6 +4469,12 @@ final class ShowController {
     private func restoreLiveShotHardwareAudio(for shot: LayerShot) {
         guard liveShotSourceCarriesAudio(shot.source) else { return }
         enableLiveIO()
+        if shot.source.sourceType == .systemCamera {
+            // The camera session stays picture only; its mic opens on the mic lane.
+            AudioMatrixReconciler.enforceProgramAudioGates(controller: self)
+            resumeLiveMicrophoneCapture()
+            return
+        }
         if let input = videoInputSource(from: shot) {
             videoInputs.register(
                 StudioVideoSource(
@@ -4512,13 +4544,51 @@ final class ShowController {
         }
     }
 
+    /// The mic a camera shot brings (built-in camera: built-in mic, Continuity camera: phone mic).
+    func cameraMic(endpoint: String?) -> CameraMicCompanion? {
+        let endpoint = endpoint?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard endpoint.hasPrefix("avf://") else { return nil }
+        return videoInputs.ingest.companionMicrophone(cameraEndpoint: endpoint)
+    }
+
+    /// Live camera shots whose audio is on, as the mic shot each one stands for.
+    /// Only used when no mic shot is live: an explicit mic shot always owns the mic.
+    func liveCameraMicShots() -> [(camera: LayerShot, mic: LayerShot)] {
+        masterLayers.compactMap { layer in
+            guard let liveID = layer.liveShotID,
+                  let shot = layer.shots.first(where: { $0.id == liveID }),
+                  shot.source.sourceType == .systemCamera,
+                  !shot.isAudioMuted,
+                  let mic = cameraMic(endpoint: shot.source.connectionString)
+            else { return nil }
+            let item = DiscoveredSourceItem(
+                name: mic.name, category: .all, groupName: "Audio",
+                sourceType: .systemMicrophone, connectionString: mic.endpoint
+            )
+            return (shot, LayerShot(id: shot.id, name: mic.name, source: item))
+        }
+    }
+
+    /// The one mic program hears: live mic shots, or else the first live camera's own mic.
+    func programMicrophoneShots() -> [LayerShot] {
+        let explicit = liveMicrophoneShots()
+        if !explicit.isEmpty { return explicit }
+        return liveCameraMicShots().first.map { [$0.mic] } ?? []
+    }
+
+    func programAudioGates() -> ProgramAudioGatePolicy {
+        ProgramAudioGatePolicy.derive(from: masterLayers) { [weak self] shot in
+            self?.cameraMic(endpoint: shot.source.connectionString) != nil
+        }
+    }
+
     /// True when a mic is reaching program, room and stream. Drives the tally pill.
     var isProgramMicLive: Bool {
-        ProgramAudioGatePolicy.derive(from: masterLayers).microphone && !audioIO.programMuted
+        programAudioGates().microphone && !audioIO.programMuted
     }
 
     func resumeLiveMicrophoneCapture() {
-        for shot in liveMicrophoneShots() {
+        for shot in programMicrophoneShots() {
             let endpoint = micEndpoint(shot)
             if endpoint.isEmpty {
                 audioIO.startCaptureIfNeeded()
@@ -8234,11 +8304,14 @@ final class ShowController {
                 masterLayers = layers
                 reconcileAudioCaptureGraph()
             } else {
+                // kind=camera: a camera shot (picture; its own mic feeds the mic lane).
+                let isCamera = parsed["kind"] == "camera"
+                let name = parsed["name"] ?? (isCamera ? "Test Camera" : "Microphone")
                 let item = DiscoveredSourceItem(
-                    name: "Microphone", category: .all, groupName: "Audio",
-                    sourceType: .systemMicrophone, connectionString: parsed["endpoint"] ?? ""
+                    name: name, category: .all, groupName: isCamera ? "Cameras" : "Audio",
+                    sourceType: isCamera ? .systemCamera : .systemMicrophone, connectionString: parsed["endpoint"] ?? ""
                 )
-                let shot = LayerShot(name: "Microphone", source: item)
+                let shot = LayerShot(name: name, source: item, audioMuted: parsed["audio_muted"] == "1" ? true : nil)
                 var layers = masterLayers
                 layers[index].shots.append(shot)
                 masterLayers = layers

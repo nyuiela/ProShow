@@ -1716,45 +1716,106 @@ final class VideoIngestEngine {
         lanes[key] = lane
         hardwareStartCount += 1
 
-        if let session = Self.retainedMicSession, !session.inputs.isEmpty {
-            lane.session = session
-            captureSession = session
-            for output in session.outputs {
-                if let audio = output as? AVCaptureAudioDataOutput {
-                    audio.setSampleBufferDelegate(lane.cameraRelay, queue: lane.cameraRelay.queue)
-                }
-            }
-            wireCameraCaptureAudio(lane: lane)
-            if !session.isRunning {
-                CaptureSessionLifetime.start(session)
-            }
-            return
-        }
+        // One mic session for the process. Point it at this device and this lane every time:
+        // reusing it as-is kept the previous device (switching to the phone mic still heard the
+        // Mac mic) and, after a stop removed its output, delivered nothing at all.
         let session = Self.retainedMicSession ?? AVCaptureSession()
         if Self.retainedMicSession == nil {
             Self.retainedMicSession = session
         }
-        CaptureSessionLifetime.configure {
-            session.beginConfiguration()
-            if let input = try? AVCaptureDeviceInput(device: device), session.canAddInput(input) {
-                session.addInput(input)
-            }
-            let relay = lane.cameraRelay
-            let audioOutput = AVCaptureAudioDataOutput()
-            audioOutput.setSampleBufferDelegate(relay, queue: relay.queue)
-            if session.canAddOutput(audioOutput) {
-                session.addOutput(audioOutput)
-            } else {
-                lane.audioCaptureEnabled = false
-            }
-            session.commitConfiguration()
-        }
+        detachMicLanes(sharing: session, keeping: key)
+        configureMicSession(session, device: device, lane: lane)
         wireCameraCaptureAudio(lane: lane)
         lane.session = session
         captureSession = session
-        CaptureSessionLifetime.start(session)
+        if !session.isRunning {
+            CaptureSessionLifetime.start(session)
+        }
         #endif
     }
+
+    #if canImport(AVFoundation)
+    /// Mic handover: the lane that owned the shared mic session stops feeding the mic role.
+    private func detachMicLanes(sharing session: AVCaptureSession, keeping key: String) {
+        for (otherKey, other) in lanes where otherKey != key && other.session === session {
+            CaptureAudioSources.release(role: .microphone)
+            other.cameraRelay.onAudioPCM = nil
+            other.cameraRelay.onAudioPeak = nil
+            other.audioCaptureEnabled = false
+            other.session = nil
+            other.isLive = false
+            lanes.removeValue(forKey: otherKey)
+        }
+    }
+
+    /// Exactly one input (this device) and one audio output (this lane's relay).
+    private func configureMicSession(_ session: AVCaptureSession, device: AVCaptureDevice, lane: LiveInputLane) {
+        let relay = lane.cameraRelay
+        var outputOK = true
+        CaptureSessionLifetime.configure {
+            session.beginConfiguration()
+            for input in session.inputs {
+                guard let deviceInput = input as? AVCaptureDeviceInput else { continue }
+                if deviceInput.device.uniqueID != device.uniqueID {
+                    session.removeInput(deviceInput)
+                }
+            }
+            let hasInput = session.inputs.contains { ($0 as? AVCaptureDeviceInput)?.device.uniqueID == device.uniqueID }
+            if !hasInput, let input = try? AVCaptureDeviceInput(device: device), session.canAddInput(input) {
+                session.addInput(input)
+            }
+            let outputs = session.outputs.compactMap { $0 as? AVCaptureAudioDataOutput }
+            for extra in outputs.dropFirst() {
+                extra.setSampleBufferDelegate(nil, queue: nil)
+                session.removeOutput(extra)
+            }
+            if let audio = outputs.first {
+                audio.setSampleBufferDelegate(relay, queue: relay.queue)
+            } else {
+                let audioOutput = AVCaptureAudioDataOutput()
+                audioOutput.setSampleBufferDelegate(relay, queue: relay.queue)
+                if session.canAddOutput(audioOutput) {
+                    session.addOutput(audioOutput)
+                } else {
+                    outputOK = false
+                }
+            }
+            session.commitConfiguration()
+        }
+        if !outputOK { lane.audioCaptureEnabled = false }
+    }
+
+    /// Mic that belongs to a camera: the built-in camera uses the built-in mic, a Continuity
+    /// camera uses the phone's mic. Falls back to the system default input. Cached for 5 s
+    /// because the program tick asks on every frame.
+    func companionMicrophone(cameraEndpoint: String) -> CameraMicCompanion? {
+        let now = Date()
+        if let hit = Self.companionCache[cameraEndpoint], now.timeIntervalSince(hit.at) < 5 {
+            return hit.value
+        }
+        var value: CameraMicCompanion?
+        if AVCaptureDevice.authorizationStatus(for: .audio) != .denied,
+           AVCaptureDevice.authorizationStatus(for: .audio) != .restricted {
+            let uniqueID = cameraEndpoint.hasPrefix("avf://") ? String(cameraEndpoint.dropFirst("avf://".count)) : ""
+            let camera = uniqueID.isEmpty ? nil : AVCaptureDevice(uniqueID: uniqueID)
+            var types: [AVCaptureDevice.DeviceType] = [.builtInMicrophone]
+            if #available(macOS 14.0, iOS 17.0, *) {
+                types.append(.microphone)
+            }
+            let audioDevices = PersistentCaptureDiscovery.devices(types: types, mediaType: .audio)
+            let paired = camera.flatMap { cam in
+                audioDevices.first { CaptureDevicePairing.pairsCamera(videoName: cam.localizedName, audioName: $0.localizedName) }
+            }
+            if let mic = paired ?? AVCaptureDevice.default(for: .audio) ?? audioDevices.first {
+                value = CameraMicCompanion(endpoint: "avf://\(mic.uniqueID)", name: mic.localizedName, paired: paired != nil)
+            }
+        }
+        Self.companionCache[cameraEndpoint] = (now, value)
+        return value
+    }
+
+    private static var companionCache: [String: (at: Date, value: CameraMicCompanion?)] = [:]
+    #endif
 
     private func resolveAudioCaptureDevice(endpoint: String) -> AVCaptureDevice? {
         var types: [AVCaptureDevice.DeviceType] = [.builtInMicrophone]
@@ -2028,6 +2089,14 @@ final class ScreenSampleRelay: NSObject, SCStreamOutput, SCStreamDelegate, @unch
 #endif
 
 #if canImport(AVFoundation)
+/// The mic a camera shot uses for its audio (see `companionMicrophone(cameraEndpoint:)`).
+struct CameraMicCompanion: Hashable, Sendable {
+    var endpoint: String
+    var name: String
+    /// False when no mic matched the camera and the system default input is used.
+    var paired: Bool
+}
+
 enum CaptureDevicePairing {
     static func pairsCamera(videoName: String, audioName: String) -> Bool {
         let video = normalized(videoName)

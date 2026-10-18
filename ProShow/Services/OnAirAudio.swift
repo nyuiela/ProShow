@@ -62,6 +62,28 @@ enum OnAirAudioJump: Hashable, Sendable {
     case audioTab
 }
 
+/// One-click fix offered on a row that is not heard.
+enum OnAirAudioFix: Hashable, Sendable {
+    /// Turn on the live camera's own mic (the shot's audio was off).
+    case useCameraMic(layer: Int, shotID: UUID)
+    /// No mic found for this camera: add a mic shot on a free layer and take it live.
+    case addMic
+
+    var title: String {
+        switch self {
+        case .useCameraMic: "Use Camera Mic"
+        case .addMic: "Add Mic"
+        }
+    }
+
+    var key: String {
+        switch self {
+        case .useCameraMic: "use_camera_mic"
+        case .addMic: "add_mic"
+        }
+    }
+}
+
 struct OnAirAudioSource: Identifiable, Hashable, Sendable {
     var id: String
     var name: String
@@ -74,6 +96,9 @@ struct OnAirAudioSource: Identifiable, Hashable, Sendable {
     var peakDb: Double
     var jump: OnAirAudioJump
     var simulated = false
+    /// Where the sound actually comes from when it is not the row's own device (camera mic).
+    var via: String?
+    var fix: OnAirAudioFix?
 
     var isOnAir: Bool { state == .live }
 
@@ -88,6 +113,8 @@ struct OnAirAudioSource: Identifiable, Hashable, Sendable {
             "reason": reason ?? NSNull(),
             "peak_db": (peakDb * 10).rounded() / 10,
             "simulated": simulated,
+            "via": via ?? NSNull(),
+            "fix": fix?.key ?? NSNull(),
         ]
     }
 }
@@ -130,6 +157,10 @@ struct OnAirAudioInputs: Sendable {
     var slide: SlideAudio?
     var guests: [Guest] = []
     var soundboardPlaying = false
+    /// Live camera shot id to the mic it brings (camera audio on, a mic found).
+    var cameraMics: [UUID: String] = [:]
+    /// Camera shot ids that are live but have no mic at all.
+    var camerasWithoutMic: Set<UUID> = []
     /// Seconds a source has been under the signal floor while its path is open (keyed by source id).
     var silentSeconds: [String: TimeInterval] = [:]
 }
@@ -291,11 +322,12 @@ enum OnAirAudioResolver {
         }
         switch type {
         case .camera:
-            row.state = .notRouted
-            row.reason = shot.source.sourceType == .rendezvousGuest
-                ? "Picture only. Room audio is on the guest row"
-                : "Picture only. Cameras carry no audio"
-            return row
+            if shot.source.sourceType == .rendezvousGuest {
+                row.state = .notRouted
+                row.reason = "Picture only. Room audio is on the guest row"
+                return row
+            }
+            return cameraRow(row, shot: shot, layerIndex: layerIndex, input: input, liveMicKeys: liveMicKeys)
         case .network:
             row.state = .notRouted
             row.reason = "No audio path for NDI/SRT yet"
@@ -337,6 +369,64 @@ enum OnAirAudioResolver {
         return row
     }
 
+    /// A camera's picture never carries sound. Its own mic (built-in, Continuity) feeds the
+    /// single mic lane when the shot's audio is on and no mic shot is live.
+    private static func cameraRow(
+        _ base: OnAirAudioSource,
+        shot: LayerShot,
+        layerIndex: Int,
+        input: OnAirAudioInputs,
+        liveMicKeys: [String]
+    ) -> OnAirAudioSource {
+        var row = base
+        if !liveMicKeys.isEmpty {
+            row.state = .armed
+            let owner = ownerName(input.micOwner ?? liveMicKeys[0], input)
+            row.reason = owner == "Another mic" ? "Picture only. A mic shot owns the mic" : "Picture only. The \(owner) shot owns the mic"
+            return row
+        }
+        guard let micName = input.cameraMics[shot.id] else {
+            row.state = .notRouted
+            if shot.isAudioMuted, !input.camerasWithoutMic.contains(shot.id) {
+                row.state = .muted
+                row.reason = "Camera mic is off on this layer"
+                row.fix = .useCameraMic(layer: layerIndex, shotID: shot.id)
+            } else {
+                row.reason = "Picture only. No mic found for this camera"
+                row.fix = .addMic
+            }
+            return row
+        }
+        row.via = micName
+        let owner = cameraMicOwner(input)
+        if let owner, owner != shot.id {
+            row.state = .armed
+            row.reason = "Picture only. Another camera's mic is on air"
+            return row
+        }
+        row.peakDb = channel(.microphone, input)?.peak ?? -120
+        if let block = channelBlock(role: .microphone, guestID: nil, input: input) {
+            row.state = block.state
+            row.reason = block.reason
+            return row
+        }
+        if (input.silentSeconds[row.id] ?? 0) >= noSignalAfter {
+            row.state = .noSignal
+            row.reason = "No signal for \(Int(noSignalAfter)) s from \(micName)"
+        }
+        return row
+    }
+
+    /// First live camera (layer order) whose mic is on: the one camera that owns the mic lane.
+    static func cameraMicOwner(_ input: OnAirAudioInputs) -> UUID? {
+        for layer in input.layers {
+            if let shot = liveShot(layer), shot.source.sourceType == .systemCamera, input.cameraMics[shot.id] != nil {
+                return shot.id
+            }
+        }
+        return nil
+    }
+
     private static func liveShot(_ layer: MasterLayer) -> LayerShot? {
         guard let id = layer.liveShotID else { return nil }
         return layer.shots.first { $0.id == id }
@@ -347,7 +437,9 @@ enum OnAirAudioResolver {
         return endpoint.isEmpty ? "system-input" : endpoint
     }
 
-    private static func ownerName(_ key: String, _ input: OnAirAudioInputs) -> String {
+    private static func ownerName(_ rawKey: String, _ input: OnAirAudioInputs) -> String {
+        // Capture keys for a device mic are "audio:<endpoint>"; shots are keyed by endpoint.
+        let key = rawKey.hasPrefix("audio:") ? String(rawKey.dropFirst("audio:".count)) : rawKey
         for layer in input.layers {
             if let shot = liveShot(layer), shot.source.sourceType == .systemMicrophone, micKey(shot) == key {
                 return shot.name

@@ -350,4 +350,58 @@ struct OnAirAudioTests {
         meter.ingest(interleavedStereo: [1, 1, 0, 0])
         #expect(meter.clippedRecently())
     }
+
+    // MARK: Camera audio through the single mic lane
+
+    @Test
+    func cameraWithMic_opensMicGate_andRowIsLiveViaItsMic() throws {
+        let camera = Self.shot("MacBook Pro Camera", .systemCamera, endpoint: "avf://cam1")
+        let layers = [Self.layer(1, [camera], live: camera)]
+        #expect(!ProgramAudioGatePolicy.derive(from: layers).microphone)
+        #expect(ProgramAudioGatePolicy.derive(from: layers, cameraHasMic: { _ in true }).microphone)
+        var input = OnAirAudioInputs()
+        input.layers = layers
+        input.channels = Self.channels()
+        input.cameraMics[camera.id] = "MacBook Pro Microphone"
+        let row = try Self.row(OnAirAudioResolver.resolve(input), "MacBook Pro Camera")
+        #expect(row.state == .live)
+        #expect(row.via == "MacBook Pro Microphone")
+    }
+
+    @Test
+    func cameraNotRouted_hasActionableFix() throws {
+        let camera = Self.shot("Cam", .systemCamera, endpoint: "avf://cam1")
+        var input = OnAirAudioInputs()
+        input.layers = [Self.layer(1, [camera], live: camera)]
+        input.channels = Self.channels()
+        input.camerasWithoutMic = [camera.id]
+        let none = try Self.row(OnAirAudioResolver.resolve(input), "Cam")
+        #expect(none.state == .notRouted)
+        #expect(none.fix == .addMic)
+        let muted = Self.shot("Muted", .systemCamera, endpoint: "avf://cam1", muted: true)
+        input.camerasWithoutMic = []
+        input.layers = [Self.layer(1, [muted], live: muted)]
+        let off = try Self.row(OnAirAudioResolver.resolve(input), "Muted")
+        #expect(off.state == .muted)
+        #expect(off.fix == .useCameraMic(layer: 0, shotID: muted.id))
+    }
+
+    @Test
+    func micShotOwnsTheMic_cameraIsArmed_notDoubled() throws {
+        let camera = Self.shot("Cam", .systemCamera, endpoint: "avf://cam1")
+        let mic = Self.shot("Desk mic", .systemMicrophone)
+        var input = OnAirAudioInputs()
+        input.layers = [Self.layer(1, [camera], live: camera), Self.layer(2, [mic], live: mic)]
+        input.channels = Self.channels()
+        input.cameraMics[camera.id] = "MacBook Pro Microphone"
+        let rows = OnAirAudioResolver.resolve(input)
+        #expect(try Self.row(rows, "Cam").state == .armed)
+        #expect(try Self.row(rows, "Desk mic").state == .live)
+        let alerts = OnAirAudioResolver.alerts(
+            sources: rows, channels: input.channels, capture: [:],
+            programSilentSeconds: 0, isLive: false, clippedRecently: false
+        )
+        #expect(!alerts.contains { $0.kind == .doubled })
+    }
+
 }

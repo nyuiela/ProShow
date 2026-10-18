@@ -53,7 +53,7 @@ final class OnAirAudioMonitor {
         let rows = OnAirAudioResolver.resolve(input)
         var nextSilent: [String: Date] = [:]
         for row in rows where row.state == .live || row.state == .noSignal {
-            guard row.type == .mic || row.type == .desktop || row.type == .slide else { continue }
+            guard row.type == .mic || row.type == .desktop || row.type == .slide || row.via != nil else { continue }
             if row.peakDb < OnAirAudioResolver.signalFloorDb {
                 nextSilent[row.id] = silentSince[row.id] ?? now
             }
@@ -78,7 +78,7 @@ final class OnAirAudioMonitor {
             clippedRecently: reading.clipping
         )
         var withMicMode = nextAlerts
-        if rows.contains(where: { $0.type == .mic && $0.isOnAir }), MicrophoneModeStatus.isVoiceIsolation {
+        if rows.contains(where: { ($0.type == .mic || $0.via != nil) && $0.isOnAir }), MicrophoneModeStatus.isVoiceIsolation {
             withMicMode.append(OnAirAudioAlert(kind: .micMode, message: MicrophoneModeStatus.voiceIsolationWarning))
         }
         if rows != sources { sources = rows }
@@ -123,6 +123,17 @@ extension ShowController {
         input.desktopHeldByMic = ProgramStreamAudioGates.isDesktopHeldForMicrophone()
         input.slide = onAirSlideAudio()
         input.soundboardPlaying = !soundboard.playing.isEmpty
+        for layer in masterLayers {
+            guard let liveID = layer.liveShotID,
+                  let shot = layer.shots.first(where: { $0.id == liveID }),
+                  shot.source.sourceType == .systemCamera
+            else { continue }
+            if let mic = cameraMic(endpoint: shot.source.connectionString) {
+                if !shot.isAudioMuted { input.cameraMics[shot.id] = mic.name }
+            } else {
+                input.camerasWithoutMic.insert(shot.id)
+            }
+        }
         let peaks = GuestAudioLevels.snapshot()
         input.guests = liveKitDesk.guests.map { feed in
             let id = LiveKitGuestEndpoint.stableID(feed.identity)
@@ -190,6 +201,35 @@ extension ShowController {
             audioMatrix.setSolo(id: channel.id, solo: false)
         }
         ProgramStreamAudioGates.sync(from: audioMatrix)
+    }
+
+    /// The row's one-click fix. Adds or turns on a mic; never removes a shot.
+    func applyOnAirFix(_ fix: OnAirAudioFix) {
+        switch fix {
+        case .useCameraMic(let layer, let shotID):
+            guard masterLayers.indices.contains(layer), masterLayers[layer].liveShotID == shotID else { return }
+            if isLiveShotAudioMuted(layerIndex: layer) { toggleLiveShotAudio(layerIndex: layer) }
+        case .addMic:
+            addDefaultMicShot()
+        }
+    }
+
+    /// A mic shot on the first free layer (system default input), taken live.
+    @discardableResult
+    func addDefaultMicShot(endpoint: String = "") -> LayerShot? {
+        guard let index = masterLayers.firstIndex(where: { $0.liveShotID == nil && $0.shots.isEmpty })
+            ?? masterLayers.firstIndex(where: { $0.liveShotID == nil })
+        else { return nil }
+        let item = DiscoveredSourceItem(
+            name: "Microphone", category: .all, groupName: "Audio",
+            sourceType: .systemMicrophone, connectionString: endpoint
+        )
+        let shot = LayerShot(name: "Microphone", source: item)
+        var layers = masterLayers
+        layers[index].shots.append(shot)
+        masterLayers = layers
+        takeShotLive(shot, layerIndex: index)
+        return shot
     }
 
     func jumpToOnAirSource(_ source: OnAirAudioSource) {

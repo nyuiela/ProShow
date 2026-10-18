@@ -242,3 +242,21 @@ Join page (foundry/showroom `GuestJoinApp.tsx`): today it attaches every remote 
 - Symptom: the built-in mic shot was LIVE and delivering 48 kHz frames, but the meter sat at -120 and the stream carried almost nothing.
 - Cause: macOS Mic Mode for ProShow is Voice Isolation (`AVCaptureDevice.activeMicrophoneMode` and `preferredMicrophoneMode` both `.voiceIsolation`). It removes steady sound: room tone, a 1 kHz test tone from the speakers (heard by ffmpeg on the same device, absent in ProShow), and would remove music or singing. Speech passes (a `say` test reached -21 dB on the stream). Not TCC (tccd authValue=2, designated requirement unchanged) and not the ducking change.
 - Apps cannot set Mic Mode; the operator chooses it in Control Center while the app uses the mic. ProShow now reports it (`GET /v1/audio/pipeline` `mic_mode`), raises an On-Air Audio alert when a mic is on air in Voice Isolation, and the group menu has "Mic Mode..." which opens the system picker.
+
+## 12. Camera audio through the single mic lane (Oct 18, 2026)
+
+Report: "I added MacBook Pro camera audio, it still says Not routed. Changing sources to my phone, still no audio."
+
+Causes:
+1. Since the doubled-voice fix, a camera shot was picture only and nothing gave it a mic: the gate policy ignored cameras and the shot's speaker toggle was disabled, so the row said "Picture only. Cameras carry no audio".
+2. The app-lifetime mic `AVCaptureSession` was reused as-is for a new mic. It kept the first device's input (picking the phone mic still captured the Mac mic) and, once a stop had removed its audio output, it set delegates on no outputs, so the lane delivered nothing.
+
+Behaviour now:
+- A live camera shot with its audio on brings its own mic: built-in camera to MacBook Pro Microphone, Continuity camera to the phone's microphone (name pairing), otherwise the system default input. The camera's capture session stays video only. The mic opens on the same dedicated mic lane a mic shot uses, so `CaptureAudioSources` still has one mic owner.
+- Ownership: a live mic shot always owns the mic (cameras show ARMED "Picture only. The <mic> shot owns the mic"). With no mic shot, the first live camera in layer order owns it; other cameras show ARMED.
+- Handover: when the program mic endpoint changes, the new lane opens, the shared mic session is retargeted (exactly one input, one audio output), the old lane is detached and the mic owner is released at once (measured gap about 50 ms for the Mac mic, about 0.5 s when the Continuity mic starts).
+- On-Air row: LIVE with "Audio from <mic>" and a meter. Camera audio off: MUTED "Camera mic is off on this layer" with a "Use Camera Mic" button. No mic at all: NOT ROUTED "Picture only. No mic found for this camera" with an "Add Mic" button (adds a mic shot on a free layer and takes it live).
+- Mic Mode warning also covers a camera mic on air.
+- Test hooks: `POST /v1/layers/mic {"kind":"camera","endpoint":"avf://<camera>"}`, QA `onair_fix` (`add_mic`, `use_camera_mic`), QA `take_shot {id}`.
+
+Verified on the Mac (localhost RTMP only): 1 kHz tone reached the stream through the MacBook camera mic and through the iPhone (Continuity) camera mic; 60 rapid toggles ended with one mic source and no rejected frames; a room guest heard the camera mic tone in its return.

@@ -2142,6 +2142,14 @@ enum CaptureAudioSources {
         return allowed
     }
 
+    /// Mic handover: the old owner was detached, so the next source owns at once
+    /// instead of waiting out the stale window.
+    static func release(role: AudioChannelRole) {
+        lock.lock()
+        owner[role] = nil
+        lock.unlock()
+    }
+
     /// Read-only: current owner and every source that delivered in the last 0.5 s, per role.
     static func delivering() -> [AudioChannelRole: (owner: String?, keys: [String])] {
         let now = CFAbsoluteTimeGetCurrent()

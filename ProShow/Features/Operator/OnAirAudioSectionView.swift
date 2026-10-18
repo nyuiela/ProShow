@@ -91,11 +91,11 @@ struct OnAirAudioSectionView: View {
                     .foregroundStyle(ShowSidebarPalette.subtitle)
                     .padding(.leading, 4)
             } else {
-                ForEach(onAir) { OnAirAudioRow(source: $0) { controller.jumpToOnAirSource($0) } }
+                ForEach(onAir) { OnAirAudioRow(source: $0, onFix: { controller.applyOnAirFix($0) }) { controller.jumpToOnAirSource($0) } }
             }
             if !notHeard.isEmpty {
                 sectionTitle("NOT HEARD", count: notHeard.count)
-                ForEach(notHeard) { OnAirAudioRow(source: $0) { controller.jumpToOnAirSource($0) } }
+                ForEach(notHeard) { OnAirAudioRow(source: $0, onFix: { controller.applyOnAirFix($0) }) { controller.jumpToOnAirSource($0) } }
             }
             InspectorRowRule()
             HStack(spacing: 6) {
@@ -159,9 +159,24 @@ struct OnAirAudioSectionView: View {
 
 private struct OnAirAudioRow: View {
     let source: OnAirAudioSource
+    var onFix: (OnAirAudioFix) -> Void = { _ in }
     let onJump: (OnAirAudioSource) -> Void
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            jumpButton
+            if let fix = source.fix {
+                Button(fix.title) { onFix(fix) }
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                    .padding(.leading, 20)
+                    .help(fix == .addMic ? "Add a mic shot on a free layer and take it live" : "Send this camera's mic to program")
+                    .accessibilityLabel("\(fix.title) for \(source.name)")
+            }
+        }
+    }
+
+    private var jumpButton: some View {
         Button { onJump(source) } label: {
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 6) {
@@ -177,11 +192,19 @@ private struct OnAirAudioRow: View {
                         .font(DeskType.mono)
                         .foregroundStyle(ShowSidebarPalette.subtitle)
                     Spacer(minLength: 4)
-                    if source.type != .camera && source.type != .network {
+                    if (source.type != .camera && source.type != .network) || source.via != nil {
                         OnAirLevelBar(db: source.peakDb, dimmed: !source.isOnAir)
                             .frame(width: 44, height: 5)
                     }
                     stateChip
+                }
+                if let via = source.via, source.reason == nil {
+                    Text("Audio from \(via)")
+                        .font(DeskType.micro)
+                        .foregroundStyle(ShowSidebarPalette.subtitle)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .padding(.leading, 20)
                 }
                 if let reason = source.reason {
                     Text(reason)
