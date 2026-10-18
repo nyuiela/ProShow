@@ -219,6 +219,16 @@ final class StreamingEngine {
         lastError = "Ingest dropped the connection. Stop and start broadcasting again."
         startedAt = nil
         state = .failed
+        #if canImport(AVFoundation)
+        // The transport's audio pump stops with the socket. Keep the local recording's audio going,
+        // and stop the stream ticker so only one path feeds the encoder (two paths doubled frames).
+        if let recorder = ProgramRecordingAudioBridge.activeProgramRecorder {
+            #if canImport(CoreVideo)
+            streamEngineV2.stop()
+            #endif
+            ProgramRecordingAudioPump.start(recorder: recorder)
+        }
+        #endif
     }
 
     func waitUntilLiveOrFailed(timeoutNanoseconds: UInt64 = 15_000_000_000) async -> Bool {
