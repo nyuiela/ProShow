@@ -166,9 +166,14 @@ final class AudioMatrixEngine {
     }
 
     func processFrame() {
-        let micPeak = channels.filter { $0.role == .microphone }.map(\.peak).max() ?? -120
-        duckingActive = duckingEnabled && !programMuted && micPeak > duckThresholdDb
         let anySolo = channels.contains(where: \.solo)
+        // Only a mic that actually reaches program may duck the others. A muted, closed or
+        // soloed-out mic still meters room sound, and used to duck slides and guests on air.
+        let micGateOpen = ProgramStreamAudioGates.isHardwareCaptureOpen(.microphone)
+        let micPeak = channels
+            .filter { $0.role == .microphone && !$0.muted && micGateOpen && (!anySolo || $0.solo) }
+            .map(\.peak).max() ?? -120
+        duckingActive = duckingEnabled && !programMuted && micPeak > duckThresholdDb
         let audible = channels.compactMap { channel -> Double? in
             if programMuted || master.muted || channel.muted { return nil }
             if anySolo && !channel.solo { return nil }
@@ -178,7 +183,9 @@ final class AudioMatrixEngine {
             return channel.peak
         }
         let slideChannel = channels.first { $0.role == .slide }
-        let slideBlocked = programMuted || master.muted || (slideChannel?.muted ?? false)
+        // Same rule as `outputLevel`: a solo elsewhere silences slide audio, so the meter must drop too.
+        let slideSoloedOut = anySolo && !(slideChannel?.solo ?? false)
+        let slideBlocked = programMuted || master.muted || (slideChannel?.muted ?? false) || slideSoloedOut
         let slideDb = slideBlocked ? -120.0 : ProgramSlideAudioMeter.peakDb()
         let mixDb = max(audible.max() ?? -120, slideDb)
         master.peakLeft = mixDb

@@ -1273,6 +1273,14 @@ enum ProgramStreamAudioGates {
         ProgramPCMBridge.enqueueMono(scaled, sampleRate: sampleRate, role: role)
     }
 
+    /// Read-only: screen audio is being held out because the mic delivered recently (gate G7).
+    static func isDesktopHeldForMicrophone() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return desktopHeldForMicrophone
+            && Date().timeIntervalSince(lastMicrophonePCM) < microphoneOwnsMixWindow * 2
+    }
+
     /// One mixed access unit for operator headphones (no AAC).
     static func pullPreviewAudioFrame(sampleRate: Double = 48_000, channelCount: Int = 2) {
         guard channelCount >= 2, abs(sampleRate - 48_000) < 1 else { return }
@@ -1649,6 +1657,8 @@ enum ProgramAACEncoder {
         ProgramPCMBridge.publishStreamMix(frame?.room ?? stream)
         Task { @MainActor in
             AudioMonitoringEngine.shared.noteProgramMixFrame(monitor)
+            // Same hop, same frame: the On-Air Audio loudness meter reads the stream mix on the main actor.
+            OnAirAudioMonitor.shared.noteProgramMix(stream)
         }
         let passthrough = recording?.isPassthrough == true
         if let recording, !passthrough {
@@ -2130,6 +2140,21 @@ enum CaptureAudioSources {
         map[source] = entry
         entries[role] = map
         return allowed
+    }
+
+    /// Read-only: current owner and every source that delivered in the last 0.5 s, per role.
+    static func delivering() -> [AudioChannelRole: (owner: String?, keys: [String])] {
+        let now = CFAbsoluteTimeGetCurrent()
+        lock.lock()
+        defer { lock.unlock() }
+        var out: [AudioChannelRole: (owner: String?, keys: [String])] = [:]
+        for (role, map) in entries {
+            let keys = map.filter { now - $0.value.last < 0.5 }.map(\.key).sorted()
+            var current: String?
+            if let held = owner[role], let entry = map[held], now - entry.last < 0.5 { current = held }
+            out[role] = (current, keys)
+        }
+        return out
     }
 
     static func snapshot() -> [String: Any] {

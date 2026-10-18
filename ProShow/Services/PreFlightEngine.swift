@@ -11,6 +11,7 @@ enum PreFlightCheckKind: String, Codable, Sendable, CaseIterable {
     case streamHandshake
     case audioClock
     case displayOutput
+    case audioRouting
 }
 
 enum PreFlightSeverity: String, Codable, Sendable {
@@ -60,6 +61,10 @@ struct PreFlightReport: Hashable, Codable, Sendable {
     var failCount: Int { findings.filter { $0.severity == .fail }.count }
     var warnCount: Int { findings.filter { $0.severity == .warn }.count }
     var canProceed: Bool { failCount == 0 }
+    /// A solo (or similar) silences program audio: show the sheet so the operator confirms.
+    var needsAudioConfirm: Bool {
+        findings.contains { $0.kind == .audioRouting && $0.severity != .pass }
+    }
 
     var jsonObject: [String: Any] {
         [
@@ -586,7 +591,7 @@ extension PreFlightEngine {
             stageOn: controller.isStageOutputOn,
             ndiStage: settings.ndiOutputName.isEmpty == false && controller.stageDisplayLayout.ndiOutputEnabled
         )
-        return scan(
+        var report = scan(
             slides: slides,
             projectRoot: controller.mediaProjectRoot,
             targets: targets,
@@ -599,6 +604,26 @@ extension PreFlightEngine {
             physicalDisplayCount: physicalDisplayCount ?? connectedDisplayCount(),
             intent: intent,
             handshake: handshake
+        )
+        if let solo = auditAudioSolo(soloed: controller.audioMatrix.channels.filter(\.solo).map(\.name)) {
+            // Replace the lone "all good" pass row so the warning is the first thing read.
+            if report.findings.count == 1, report.findings[0].severity == .pass {
+                report.findings.removeAll()
+            }
+            report.findings.insert(solo, at: 0)
+        }
+        return report
+    }
+
+    /// Channel solo silences every other channel on the stream, not just in headphones.
+    static func auditAudioSolo(soloed: [String]) -> PreFlightFinding? {
+        guard !soloed.isEmpty else { return nil }
+        let names = soloed.joined(separator: ", ")
+        return PreFlightFinding(
+            kind: .audioRouting,
+            severity: .warn,
+            title: "Audio solo is on",
+            detail: "Solo on \(names). Slides, guests and other sources will be silent on the stream. Clear solo in On-Air Audio or the Audio tab."
         )
     }
 

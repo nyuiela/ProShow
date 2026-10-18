@@ -1,6 +1,6 @@
 # ProShow On-Air Audio: plan
 
-Status: plan only (Oct 18, 2026). No code changes yet. Branch `feat/float-clear-ppt-import-news-templates`, on top of ac18e21.
+Status (Oct 18, 2026): Phase 0 done, Phase 1 (visibility only) built and tested on localhost. See section 11. Branch `feat/float-clear-ppt-import-news-templates`, on top of ac18e21.
 
 Kaleel's ask, short: the operator can't tell which audio is actually on air. Layers 1-6 show that an audio device was *added*, not whether it is *heard*. The Audio tab is a mixer, not a "what is on air" view. Build an **On-Air Audio** group between **Active on-air** and **Live sources** that shows:
 
@@ -211,3 +211,29 @@ Join page (foundry/showroom `GuestJoinApp.tsx`): today it attaches every remote 
 - **Regression:** 5x stream restart cycles, record-first and record-during-stream, plus a 60 min soak (camera + mic + slide changes + props + timer). Pass criteria are the Oct 18 numbers: 0 video gaps, a single 0.1 s audio blip at start only, A/V within 0.05 s, CPU within +5% of 59%, RSS flat after warm-up.
 - **Room (Phase 3):** local showroom (`just dev showroom`, `http://127.0.0.1:3461/j/demo`) with a test guest. Verify mix-minus (guest doesn't hear self), intercom never in the FLV capture, and the on-air banner follows the tally.
 - Never arm or stream to real X/YouTube/other destinations during any of this.
+
+---
+
+## 11. Phase 0 and Phase 1 results (Oct 18, 2026)
+
+### Phase 0 findings
+- G8 confirmed from code: NDI video capture passes `nil` for audio (`NDISessions`), so an NDI source never reaches program audio. SRT has no media path at all (`MultiDeviceIngestManager.startSRT` `onPacket` is a no-op). The On-Air Audio row says "No audio path for NDI/SRT yet".
+- Return feeds: Mix, Full and Intercom are UI-only. The room always receives `roomScratch`, the stream mix before guests (so mix-minus for every guest). Verified by subscribing a headless test guest: identical audio in all three modes, guest never hears itself.
+- Solo silences everything not soloed, including slide/media audio, but the master meter ignored solo for slides. Fixed (meter only).
+- Bug found by the tone test and fixed: ducking was driven by the raw mic meter, so a muted (channel), closed (no live mic shot) or soloed-out mic still ducked slides and guests by 12 dB whenever the room was loud. Only a mic that reaches program now ducks (`AudioMatrixEngine.processFrame`).
+- Triggering a slide clears playing media (by design); the On-Air Audio row disappears at the same time, so UI and stream agree.
+
+### Phase 1 shipped
+- `OnAirAudio.swift` (resolver, states, reasons, alerts, BS.1770 loudness meter), `ShowController+OnAirAudio.swift` (5 Hz main-thread monitor, jump-to-source, returns line), `OnAirAudioSectionView.swift` (sidebar group between Active on-air and Live sources).
+- `GET /v1/audio/onair`, pre-flight "Audio solo is on" warning with Clear solo in the Go Live dock, alerts for solo, clipping, silence (10 s) and doubled sources.
+- No change to what is mixed (except the ducking bug fix above); the realtime threads are untouched: loudness is computed on the existing MainActor hop that already received the mixed program block.
+
+### Tests
+- `Tests/ProShowCoreTests/OnAirAudioTests.swift` (gates G1-G10, solo, meter, alerts, preflight, ducking).
+- Localhost tone test: slide 440 Hz plus LiveKit test guest 660 Hz, 25 control scenarios checked by FFT on the RTMP capture and on what the guest receives; 200-step rapid switching run (1.5 s per step); 10 minute two-lane regression.
+- Results: 25/25 control scenarios pass on the stream and on the guest return; rapid switching 200/200 steps match, no crash, CPU median 57% max 69%; 10 minute regression: 0 video gaps both lanes, one 106 ms audio gap on the main lane (same as last night's soak), A/V start/end within 0.042 s, slide tone 600/600 s and guest tone 602/602 s present at steady level (no doubling), CPU avg 59.9% (soak 59.2%).
+
+### Still open
+- Mic content was only energy tested (no loopback device). After the 11:07 relaunch the built-in mic shot delivered frames that were silent (-120 dB) although the device had signal from ffmpeg; the row correctly showed "No signal for 10 s". Recheck with the operator at the Mac.
+- Soundboard and desktop audio rows untested (project has no pads; no desktop audio source used).
+- Return modes Full and Intercom need Phase 3 to do anything.

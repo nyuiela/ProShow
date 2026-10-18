@@ -726,6 +726,10 @@ private struct LayersActionPane: View {
                     .background(ShowSidebarPalette.selection(scheme), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .overlay(alignment: .bottom) { InspectorSectionBottomRule() }
                     .frame(minHeight: 200, alignment: .top)
+                OnAirAudioSectionView(controller: controller)
+                    .padding(10)
+                    .background(ShowSidebarPalette.selection(scheme), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay(alignment: .bottom) { InspectorSectionBottomRule() }
                 masterSection
                     .padding(10)
                     .background(ShowSidebarPalette.selection(scheme), in: RoundedRectangle(cornerRadius: 10, style: .continuous))

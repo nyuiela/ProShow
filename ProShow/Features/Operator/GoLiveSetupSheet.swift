@@ -494,10 +494,30 @@ struct GoLiveSetupSheet: View {
                     .font(.system(size: 12))
                     .foregroundStyle(ShowSidebarPalette.subtitle)
                     .lineLimit(1)
+                if !controller.streaming.isLive, !controller.soloedAudioChannelNames.isEmpty {
+                    Label(
+                        "Solo on \(controller.soloedAudioChannelNames.joined(separator: ", ")). Other audio is silent.",
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color.orange)
+                    .lineLimit(1)
+                }
             }
             .accessibilityElement(children: .combine)
 
             Spacer(minLength: 8)
+
+            if !controller.streaming.isLive, !controller.soloedAudioChannelNames.isEmpty {
+                Button("Clear solo") { controller.clearAllAudioSolos() }
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(ShowSidebarPalette.title)
+                    .padding(.horizontal, 14)
+                    .frame(height: 34)
+                    .background(ShowSidebarPalette.field(scheme), in: Capsule(style: .continuous))
+                    .buttonStyle(DeskPressButtonStyle())
+                    .help("Turn off every channel solo so all sources reach the stream")
+            }
 
             Button("Cancel") { closeSheet() }
                 .font(.system(size: 13, weight: .medium))

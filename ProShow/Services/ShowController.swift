@@ -627,7 +627,7 @@ final class ShowController {
     func requestGoLive(slideID: SlideID? = nil) {
         pendingGoLiveSlideID = slideID
         let report = runPreFlight(intent: .goLive, handshake: nil)
-        if report.canProceed {
+        if report.canProceed, !report.needsAudioConfirm {
             goLive(slideID: slideID)
             return
         }
@@ -636,7 +636,7 @@ final class ShowController {
 
     func requestStartStream() {
         let report = runPreFlight(intent: .startStream, handshake: TCPStreamHandshakeProbe())
-        if report.canProceed {
+        if report.canProceed, !report.needsAudioConfirm {
             Task { _ = await startBroadcastForArmedAccounts() }
             return
         }
@@ -3389,6 +3389,105 @@ final class ShowController {
             return group.slides.indices.contains(index) ? group.slides[index] : nil
         }
         switch args["action"] ?? "state" {
+        case "audio_channels":
+            return ["ok": true, "channels": audioMatrix.channels.map {
+                ["name": $0.name, "role": $0.role.rawValue, "muted": $0.muted, "solo": $0.solo] as [String: Any]
+            }]
+        case "audio_solo":
+            // Test hook: set or clear one channel's solo by name (or every solo with name "*").
+            let want = ["1", "true"].contains(args["solo"] ?? "")
+            let name = args["name"] ?? ""
+            for channel in audioMatrix.channels where name == "*" || channel.name == name {
+                audioMatrix.setSolo(id: channel.id, solo: want)
+            }
+            ProgramStreamAudioGates.sync(from: audioMatrix)
+            return ["ok": true, "solo": soloedAudioChannelNames]
+        case "audio_set":
+            // Test hook: one channel by name. Any of muted, solo, gain (dB). Same calls the Audio tab makes.
+            guard let channel = audioMatrix.channels.first(where: { $0.name == args["name"] }) else {
+                return ["ok": false, "error": "no_channel"]
+            }
+            if let raw = args["muted"] { audioMatrix.setMute(id: channel.id, muted: ["1", "true"].contains(raw)) }
+            if let raw = args["solo"] { audioMatrix.setSolo(id: channel.id, solo: ["1", "true"].contains(raw)) }
+            if let raw = args["gain"], let db = Double(raw) { audioMatrix.setGain(id: channel.id, db: db) }
+            ProgramStreamAudioGates.sync(from: audioMatrix)
+            let now = audioMatrix.channel(id: channel.id)
+            return ["ok": true, "name": channel.name, "muted": now?.muted ?? false, "solo": now?.solo ?? false, "gain": now?.gainDb ?? 0]
+        case "master_set":
+            if let raw = args["gain"], let db = Double(raw) { audioMatrix.setMasterGain(db: db) }
+            if let raw = args["program_muted"] { audioMatrix.muteProgram(["1", "true"].contains(raw)) }
+            ProgramStreamAudioGates.sync(from: audioMatrix)
+            return ["ok": true, "gain": audioMatrix.master.gainDb, "program_muted": audioMatrix.programMuted]
+        case "backstage_room":
+            // Test hook: move the desk to a named room (use a test room, never a live show).
+            guard let slug = args["slug"], setBackstageRoomName(slug) else { return ["ok": false, "error": "bad_slug"] }
+            return ["ok": true, "room": backstage.room.roomSlug]
+        case "return_mode":
+            switch args["mode"] ?? "" {
+            case "mix": backstage.returnFeedMode = .programMixMinus; backstage.intercomActive = false
+            case "full": backstage.returnFeedMode = .programFull; backstage.intercomActive = false
+            case "intercom": backstage.returnFeedMode = .intercomOnly; backstage.intercomActive = true
+            default: break
+            }
+            return ["ok": true, "mode": backstage.returnFeedMode.rawValue, "intercom": backstage.intercomActive]
+        case "guest_mute":
+            guard let identity = args["identity"] else { return ["ok": false] }
+            muteLiveKitGuest(identity: identity, muted: ["1", "true"].contains(args["muted"] ?? "1"))
+            return ["ok": true]
+        case "guests":
+            return ["ok": true, "guests": liveKitDesk.guests.map { ["identity": $0.identity, "name": $0.name, "mic": $0.hasMic] as [String: Any] },
+                    "room": backstage.room.roomSlug, "status": liveKitDesk.status]
+        case "inspector_tab":
+            if let tab = ActionInspectorTab(rawValue: args["tab"] ?? "") { inspector.selectedTab = tab }
+            if args["expand_master"] != nil {
+                UserDefaults.standard.set(args["expand_master"] == "1", forKey: "proshow.inspector.masterExpanded")
+            }
+            return ["ok": true, "tab": inspector.selectedTab.rawValue]
+        case "onair_sim_guest":
+            // Visual stand-in for a room guest. Adds a row to On-Air Audio only; nothing is mixed.
+            if args["clear"] == "1" {
+                OnAirAudioMonitor.shared.simulatedGuests.removeAll()
+            } else {
+                let name = args["name"] ?? "Test guest"
+                OnAirAudioMonitor.shared.simulatedGuests.append(OnAirAudioInputs.Guest(
+                    identity: "sim-\(name)", name: name,
+                    guestID: HardwareSourceIdentity.uuid(for: "sim-guest:\(name)"),
+                    hasMic: args["mic"] != "0", peakDb: Double(args["peak"] ?? "-18") ?? -18, simulated: true
+                ))
+            }
+            OnAirAudioMonitor.shared.attach(self)
+            return ["ok": true, "simulated": OnAirAudioMonitor.shared.simulatedGuests.map(\.name)]
+        case "media_play":
+            // Test hook: put a local file on the program media layer (slide/media audio path).
+            guard let path = args["path"], FileManager.default.fileExists(atPath: path) else {
+                return ["ok": false, "error": "missing_file"]
+            }
+            let item = MediaBinItem(title: args["title"] ?? URL(fileURLWithPath: path).lastPathComponent,
+                                    kind: .video(duration: "0:10"), tintHex: "#336699", source: .resources, filePath: path)
+            triggerMedia(item, takeProgram: true)
+            return ["ok": true, "media": compositor.stack.media?.title ?? ""]
+        case "media_clear":
+            emptyProgramLayer(.media)
+            return ["ok": true]
+        case "remove_shot":
+            // Test hook: remove one shot (by id) that a test added; clears live first.
+            guard let raw = args["id"], let id = UUID(uuidString: raw) else { return ["ok": false, "error": "missing_id"] }
+            var layers = masterLayers
+            var removed = 0
+            for index in layers.indices {
+                if layers[index].liveShotID == id { layers[index].liveShotID = nil }
+                let before = layers[index].shots.count
+                layers[index].shots.removeAll { $0.id == id }
+                removed += before - layers[index].shots.count
+            }
+            masterLayers = layers
+            reconcileAudioCaptureGraph()
+            return ["ok": removed > 0, "removed": removed]
+        case "shots":
+            return ["ok": true, "layers": masterLayers.enumerated().map { index, layer in
+                ["index": index, "live": layer.liveShotID?.uuidString ?? "",
+                 "shots": layer.shots.map { ["id": $0.id.uuidString, "name": $0.name, "type": $0.source.sourceType.rawValue] }] as [String: Any]
+            }]
         case "add_pack":
             addBroadcastTemplatePack()
             return ["ok": true, "group": show.groups.last?.name ?? ""]
@@ -4490,6 +4589,35 @@ final class ShowController {
             if liveMutedShotFeeds(media) { return true }
         }
         return false
+    }
+
+    /// First condition in `isProgramMediaMuted` that silences slide/media audio, in plain words.
+    /// Nil exactly when `isProgramMediaMuted` is false. Read-only, for the On-Air Audio group.
+    var programMediaAudioBlockReason: String? {
+        if audioIO.programMuted || compositor.stack.audioMuted { return "program audio is muted" }
+        if compositor.isLayerAudioMuted(.media) { return "Media layer audio is muted" }
+        if compositor.isLayerAudioMuted(.slide), compositor.stack.media == nil || compositor.stack.isCleared(.media) {
+            return "Slide layer audio is muted"
+        }
+        if compositor.stack.isCleared(.media) {
+            if let media = compositor.stack.media, !media.clearsLayer, !media.isAudioMuted,
+               !compositor.isLayerAudioMuted(.media) {
+                return nil
+            }
+            if !isAudienceOutputOn { return "audience output is off" }
+            if isAudienceCleared { return "audience output is cleared" }
+            if liveSlide == nil { return "no slide is live" }
+            if !playback.hasProgramClock { return "slide media is not playing" }
+            if compositor.stack.isCleared(.slide) { return "Slide layer is hidden" }
+        }
+        if let media = compositor.stack.media {
+            if media.isAudioMuted { return "this media is muted" }
+            if isPlaceholderAudioMuted(media.placeholderLetter) {
+                return "placeholder \(media.placeholderLetter ?? "") is muted"
+            }
+            if liveMutedShotFeeds(media) { return "a muted live shot feeds this file" }
+        }
+        return nil
     }
 
     private func liveMutedShotFeeds(_ media: MediaAction) -> Bool {
@@ -8111,6 +8239,7 @@ final class ShowController {
                 layers[index].shots.append(shot)
                 masterLayers = layers
                 takeShotLive(shot, layerIndex: index)
+                return (200, ControlJSON.encode(["ok": true, "mic_live": isProgramMicLive, "shot_id": shot.id.uuidString]))
             }
             return (200, ControlJSON.encode(["ok": true, "mic_live": isProgramMicLive]))
         }
@@ -8133,6 +8262,10 @@ final class ShowController {
                 "sources": CaptureAudioSources.snapshot(),
                 "laneDepths": ProgramAACEncoder.laneDepthSummary(),
             ]))
+        }
+        if method == "GET", parts == ["v1", "audio", "onair"] {
+            // Read-only: what is on air, what is not heard and why, program loudness, alerts.
+            return (200, ControlJSON.encode(OnAirAudioMonitor.shared.jsonObject(controller: self)))
         }
         if method == "GET", parts == ["v1", "audio", "meters"] {
             return (200, audioMatrix.metersJSON())

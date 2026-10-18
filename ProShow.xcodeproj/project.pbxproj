@@ -55,6 +55,8 @@
 		A10000000000000000000026 /* AudioMatrixEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000026 /* AudioMatrixEngine.swift */; };
 		A10000000000000000000027 /* SoundboardStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000027 /* SoundboardStore.swift */; };
 		A10000000000000000000028 /* IsoRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000028 /* IsoRecorder.swift */; };
+		8AE64D35F445B5E6513D7F1C /* ShowController+OnAirAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = 210CDB089B347FEEA793099C /* ShowController+OnAirAudio.swift */; };
+		918289B4CE06BC726E40E021 /* OnAirAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85C6ABA275E835BF795C055F /* OnAirAudio.swift */; };
 		A10000000000000000000029 /* LiveChatEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000029 /* LiveChatEngine.swift */; };
 		A1000000000000000000002A /* ProShowVirtualCam.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002A /* ProShowVirtualCam.swift */; };
 		A1000000000000000000002B /* ProjectSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002B /* ProjectSettingsView.swift */; };
@@ -152,6 +154,7 @@
 		A100000000000000000000A2 /* StreamAccountManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A2 /* StreamAccountManager.swift */; };
 		A100000000000000000000A3 /* PlatformLiveApiService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A3 /* PlatformLiveApiService.swift */; };
 		A100000000000000000000A4 /* GoLiveSetupSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A4 /* GoLiveSetupSheet.swift */; };
+		AA469E10A68C1B02BBAF5052 /* OnAirAudioSectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28408C03F2E0D54ABB91D279 /* OnAirAudioSectionView.swift */; };
 		A100000000000000000000A5 /* ShowController+GoLive.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A5 /* ShowController+GoLive.swift */; };
 		A100000000000000000000A6 /* RemoteControlRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A6 /* RemoteControlRuntime.swift */; };
 		A100000000000000000000A7 /* ControlWebSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A7 /* ControlWebSocket.swift */; };
@@ -198,6 +201,7 @@
 		A1T000000000000000000011 /* SceneManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000011 /* SceneManagerTests.swift */; };
 		A1T000000000000000000012 /* ChromaKeyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000012 /* ChromaKeyTests.swift */; };
 		A1T000000000000000000013 /* AudioMatrixTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000013 /* AudioMatrixTests.swift */; };
+		F3C66B3FF9D6D785C942B6BB /* OnAirAudioTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AE5BC21D3E2D7B29074455E /* OnAirAudioTests.swift */; };
 		A1T000000000000000000014 /* IsoRecorderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000014 /* IsoRecorderTests.swift */; };
 		A1T000000000000000000015 /* LiveChatOverlayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000015 /* LiveChatOverlayTests.swift */; };
 		A1T000000000000000000016 /* ProjectSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000016 /* ProjectSettingsTests.swift */; };
@@ -464,6 +468,8 @@
 		A20000000000000000000026 /* AudioMatrixEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMatrixEngine.swift; sourceTree = "<group>"; };
 		A20000000000000000000027 /* SoundboardStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundboardStore.swift; sourceTree = "<group>"; };
 		A20000000000000000000028 /* IsoRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IsoRecorder.swift; sourceTree = "<group>"; };
+		210CDB089B347FEEA793099C /* ShowController+OnAirAudio.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "ShowController+OnAirAudio.swift"; sourceTree = "<group>"; };
+		85C6ABA275E835BF795C055F /* OnAirAudio.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OnAirAudio.swift; sourceTree = "<group>"; };
 		A20000000000000000000029 /* LiveChatEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveChatEngine.swift; sourceTree = "<group>"; };
 		A2000000000000000000002A /* ProShowVirtualCam.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProShowVirtualCam.swift; sourceTree = "<group>"; };
 		A2000000000000000000002B /* ProjectSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSettingsView.swift; sourceTree = "<group>"; };
@@ -562,6 +568,7 @@
 		A200000000000000000000A2 /* StreamAccountManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamAccountManager.swift; sourceTree = "<group>"; };
 		A200000000000000000000A3 /* PlatformLiveApiService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformLiveApiService.swift; sourceTree = "<group>"; };
 		A200000000000000000000A4 /* GoLiveSetupSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoLiveSetupSheet.swift; sourceTree = "<group>"; };
+		28408C03F2E0D54ABB91D279 /* OnAirAudioSectionView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OnAirAudioSectionView.swift; sourceTree = "<group>"; };
 		A200000000000000000000A5 /* ShowController+GoLive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ShowController+GoLive.swift"; sourceTree = "<group>"; };
 		A200000000000000000000A6 /* RemoteControlRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteControlRuntime.swift; sourceTree = "<group>"; };
 		A200000000000000000000A7 /* ControlWebSocket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlWebSocket.swift; sourceTree = "<group>"; };
@@ -609,6 +616,7 @@
 		A2T000000000000000000011 /* SceneManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneManagerTests.swift; sourceTree = "<group>"; };
 		A2T000000000000000000012 /* ChromaKeyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromaKeyTests.swift; sourceTree = "<group>"; };
 		A2T000000000000000000013 /* AudioMatrixTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMatrixTests.swift; sourceTree = "<group>"; };
+		7AE5BC21D3E2D7B29074455E /* OnAirAudioTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OnAirAudioTests.swift; sourceTree = "<group>"; };
 		A2T000000000000000000014 /* IsoRecorderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IsoRecorderTests.swift; sourceTree = "<group>"; };
 		A2T000000000000000000015 /* LiveChatOverlayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveChatOverlayTests.swift; sourceTree = "<group>"; };
 		A2T000000000000000000016 /* ProjectSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSettingsTests.swift; sourceTree = "<group>"; };
@@ -951,6 +959,8 @@
 				A20000000000000000000026 /* AudioMatrixEngine.swift */,
 				A20000000000000000000027 /* SoundboardStore.swift */,
 				A20000000000000000000028 /* IsoRecorder.swift */,
+				210CDB089B347FEEA793099C /* ShowController+OnAirAudio.swift */,
+				85C6ABA275E835BF795C055F /* OnAirAudio.swift */,
 				B200000000000000000000B1 /* ProgramOutputMode.swift */,
 				B200000000000000000000B2 /* ProgramRenderContract.swift */,
 				B200000000000000000000B3 /* ProgramOutputBus.swift */,
@@ -1220,6 +1230,7 @@
 				A20000000000000000000097 /* PreFlightHealthView.swift */,
 				C7E410000000000000000012 /* PhoneCanvasMonitorView.swift */,
 				A200000000000000000000A4 /* GoLiveSetupSheet.swift */,
+				28408C03F2E0D54ABB91D279 /* OnAirAudioSectionView.swift */,
 				C7E300000000000000000002 /* EncoderPresetPickerView.swift */,
 				A200000000000000000000A9 /* ConnectDestinationSheet.swift */,
 				A20000000000000000000041 /* MapWorkspaceView.swift */,
@@ -1301,6 +1312,7 @@
 				A2T000000000000000000011 /* SceneManagerTests.swift */,
 				A2T000000000000000000012 /* ChromaKeyTests.swift */,
 				A2T000000000000000000013 /* AudioMatrixTests.swift */,
+				7AE5BC21D3E2D7B29074455E /* OnAirAudioTests.swift */,
 				A2T000000000000000000014 /* IsoRecorderTests.swift */,
 				A2T000000000000000000015 /* LiveChatOverlayTests.swift */,
 				C7F20000000000000000000A /* BackstageEngineTests.swift */,
@@ -1756,6 +1768,7 @@
 				A100000000000000000000A3 /* PlatformLiveApiService.swift in Sources */,
 				C7E410000000000000000011 /* PhoneCanvasMonitorView.swift in Sources */,
 				A100000000000000000000A4 /* GoLiveSetupSheet.swift in Sources */,
+				AA469E10A68C1B02BBAF5052 /* OnAirAudioSectionView.swift in Sources */,
 				C7E300000000000000000001 /* EncoderPresetPickerView.swift in Sources */,
 				A100000000000000000000A5 /* ShowController+GoLive.swift in Sources */,
 				C6D100000000000000000040 /* ShowController+WorkspaceToolbar.swift in Sources */,
@@ -1789,6 +1802,8 @@
 				A10000000000000000000026 /* AudioMatrixEngine.swift in Sources */,
 				A10000000000000000000027 /* SoundboardStore.swift in Sources */,
 				A10000000000000000000028 /* IsoRecorder.swift in Sources */,
+				8AE64D35F445B5E6513D7F1C /* ShowController+OnAirAudio.swift in Sources */,
+				918289B4CE06BC726E40E021 /* OnAirAudio.swift in Sources */,
 				B100000000000000000000B1 /* ProgramOutputMode.swift in Sources */,
 				B100000000000000000000B2 /* ProgramRenderContract.swift in Sources */,
 				B100000000000000000000B3 /* ProgramOutputBus.swift in Sources */,
@@ -1837,6 +1852,7 @@
 				A1T000000000000000000011 /* SceneManagerTests.swift in Sources */,
 				A1T000000000000000000012 /* ChromaKeyTests.swift in Sources */,
 				A1T000000000000000000013 /* AudioMatrixTests.swift in Sources */,
+				F3C66B3FF9D6D785C942B6BB /* OnAirAudioTests.swift in Sources */,
 				A1T000000000000000000014 /* IsoRecorderTests.swift in Sources */,
 				A1T000000000000000000015 /* LiveChatOverlayTests.swift in Sources */,
 				C7F10000000000000000000A /* BackstageEngineTests.swift in Sources */,
