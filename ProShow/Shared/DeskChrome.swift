@@ -2343,3 +2343,14 @@ enum MenuRenderProbe {
         return ["secs": (secs * 10).rounded() / 10, "per_sec": rates]
     }
 }
+
+/// Wraps a Menu (or menu content) so it only re-renders when `key` changes. Parents that redraw
+/// often (closures, clocks, meters) otherwise rebuild the menu, and a rebuilt menu drops its open submenu.
+struct StableMenuContent<Key: Equatable, Content: View>: View, Equatable {
+    let key: Key
+    @ViewBuilder let content: () -> Content
+
+    static func == (lhs: Self, rhs: Self) -> Bool { lhs.key == rhs.key }
+
+    var body: some View { content() }
+}

@@ -46,22 +46,33 @@ struct PulsedBuildEnvironment<Content: View>: View {
     @ViewBuilder var content: () -> Content
 
     @State private var onScreen = false
+    /// Last clock seen by the poll, ignoring the per-frame counter nothing reads. The content (and any
+    /// menus inside it) re-evaluates only when a build actually changes, not 30 times a second.
+    @State private var current: BuildClock?
 
     var body: some View {
-        Group {
-            if isActive && onScreen {
-                TimelineView(.periodic(from: TimelineAnchor.start, by: 1.0 / 30.0)) { context in
-                    let _ = context.date
-                    content()
-                        .environment(\.buildClock, clock())
+        let pulsing = isActive && onScreen
+        content()
+            .environment(\.buildClock, pulsing ? (current ?? clock()) : clock())
+            .background {
+                if pulsing {
+                    TimelineView(.periodic(from: TimelineAnchor.start, by: 1.0 / 30.0)) { context in
+                        Color.clear
+                            .onChange(of: context.date) { _, _ in poll() }
+                            .onAppear { poll() }
+                    }
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
                 }
-            } else {
-                content()
-                    .environment(\.buildClock, clock())
             }
-        }
-        .onAppear { onScreen = true }
-        .onDisappear { onScreen = false }
+            .onAppear { onScreen = true }
+            .onDisappear { onScreen = false; current = nil }
+    }
+
+    private func poll() {
+        var next = clock()
+        next.frame = 0
+        if next != current { current = next }
     }
 }
 

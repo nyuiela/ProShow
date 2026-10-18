@@ -73,12 +73,15 @@ final class LiveKitDeskBridge {
         session = next
         next.onGuests = { [weak self] feeds in
             guard let self else { return }
-            self.guests = feeds
-            self.revision += 1
+            // Assign only on change: every set redraws observers (and rebuilds their menus).
+            if self.guests != feeds {
+                self.guests = feeds
+                self.revision += 1
+            }
             self.onGuests?(feeds)
         }
         next.onStatus = { [weak self] text in
-            self?.status = text
+            if self?.status != text { self?.status = text }
             let active = text.localizedCaseInsensitiveContains("in room")
             self?.onRoomActive?(active)
         }

@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import ScreenCaptureKit
 import Observation
 #if canImport(CoreVideo)
 import CoreVideo
@@ -3523,6 +3524,30 @@ final class ShowController {
             masterLayers = layers
             reconcileAudioCaptureGraph()
             return ["ok": removed > 0, "removed": removed]
+        case "set_mode":
+            // Test hook: switch workspace (show, edit, rundown, map, ...), same as the Workspace menu.
+            guard let mode = OperatorMode(rawValue: args["mode"] ?? "") else { return ["ok": false, "error": "unknown_mode"] }
+            setMode(mode)
+            return ["ok": true, "mode": mode.rawValue]
+        case "screen_snapshot":
+            // Test hook: the screen region around the main window, menus included (needs Screen Recording).
+            // Async: poll for the file. Never prompts for permission.
+            guard CGPreflightScreenCaptureAccess() else { return ["ok": false, "error": "no_screen_permission"] }
+            guard let window = NSApp.windows.first(where: { $0.isVisible && !$0.isSheet && $0.frame.width > 600 }),
+                  let screen = window.screen ?? NSScreen.main
+            else { return ["ok": false, "error": "no_window"] }
+            let margin = CGFloat(Double(args["margin"] ?? "") ?? 160)
+            let f = window.frame.insetBy(dx: -margin, dy: -margin).intersection(screen.frame)
+            let rect = CGRect(x: f.minX, y: screen.frame.maxY - f.maxY, width: f.width, height: f.height)
+            let path = args["path"] ?? NSTemporaryDirectory() + "proshow-screen.png"
+            try? FileManager.default.removeItem(atPath: path)
+            guard #available(macOS 15.2, *) else { return ["ok": false, "error": "needs_macos_15_2"] }
+            Task {
+                guard let image = try? await SCScreenshotManager.captureImage(in: rect) else { return }
+                let rep = NSBitmapImageRep(cgImage: image)
+                try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+            }
+            return ["ok": true, "path": path]
         case "menu_probe":
             // Test hook: menu content rebuilds per second since the last reset.
             return MenuRenderProbe.snapshot(reset: args["reset"] == "1")
