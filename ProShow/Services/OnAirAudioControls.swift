@@ -134,6 +134,13 @@ extension ShowController {
         return liveSlideID == bound
     }
 
+    var hasFollowSlideAudio: Bool {
+        masterLayers.contains { layer in
+            guard let id = layer.liveShotID, let shot = layer.shots.first(where: { $0.id == id }) else { return false }
+            return shot.audioFollow == .followSlide && shot.audioFollowSlideID != nil
+        }
+    }
+
     var followHeldShotIDs: Set<UUID> {
         var held: Set<UUID> = []
         for layer in masterLayers {

@@ -165,7 +165,13 @@ final class ShowController {
     var operatorClearedLiveInput = false
     /// Camera was put on air by a slide's video pane (not by the operator).
     var liveInputAutoBoundBySlide = false
-    var liveSlideID: SlideID?
+    var liveSlideID: SlideID? {
+        didSet {
+            guard liveSlideID != oldValue, hasFollowSlideAudio else { return }
+            // A follow-slide source opens or holds with the slide: rebuild the mic lane on the next turn.
+            DispatchQueue.main.async { [weak self] in self?.reconcileAudioCaptureGraph() }
+        }
+    }
     var activeSlideBuildStepIndex: Int = 0
     var liveBuildStartedAt: Date?
     var liveBuildClickTimes: [Int: Double] = [:]
