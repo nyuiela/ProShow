@@ -719,10 +719,13 @@ final class RTMPStreamTransport: StreamTransport, @unchecked Sendable {
         timer.setEventHandler { [weak self] in
             guard let self, self.isReady else { return }
             ProgramEncoderAudioPump.noteTick()
-            guard MediaClockAnchor.shared.isAudioBlockDue() else { return }
-            let unit = ProgramAACEncoder.nextTimedAccessUnit(recording: ProgramRecordingAudioBridge.activeProgramRecorder)
-            self.sendAudioFrame(unit)
-            ProgramAudioAccessTap.publish(unit)
+            let due = MediaClockAnchor.shared.dueAudioBlockCount()
+            guard due > 0 else { return }
+            for _ in 0..<due {
+                let unit = ProgramAACEncoder.nextTimedAccessUnit(recording: ProgramRecordingAudioBridge.activeProgramRecorder)
+                self.sendAudioFrame(unit)
+                ProgramAudioAccessTap.publish(unit)
+            }
         }
         timer.resume()
         audioTimer = timer
@@ -927,11 +930,14 @@ final class MultiRTMPTransport: StreamTransport, @unchecked Sendable {
         timer.setEventHandler { [weak self] in
             guard let self, self.isReady else { return }
             ProgramEncoderAudioPump.noteTick()
-            guard MediaClockAnchor.shared.isAudioBlockDue() else { return }
-            let unit = ProgramAACEncoder.nextTimedAccessUnit(recording: ProgramRecordingAudioBridge.activeProgramRecorder)
-            ProgramAudioAccessTap.publish(unit)
-            for client in self.clients where client.isReady {
-                client.sendAudioFrame(unit)
+            let due = MediaClockAnchor.shared.dueAudioBlockCount()
+            guard due > 0 else { return }
+            for _ in 0..<due {
+                let unit = ProgramAACEncoder.nextTimedAccessUnit(recording: ProgramRecordingAudioBridge.activeProgramRecorder)
+                ProgramAudioAccessTap.publish(unit)
+                for client in self.clients where client.isReady {
+                    client.sendAudioFrame(unit)
+                }
             }
         }
         timer.resume()

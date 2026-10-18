@@ -437,6 +437,14 @@ final class StreamingEngine {
         MediaClockAnchor.shared.clear()
         ProgramAACEncoder.reset()
         restoreUserEncoderConfig()
+        #if canImport(AVFoundation)
+        // A recording that began before the stream lost its audio feed when the stream stopped
+        // (the stream pump fed it, the local pump stayed suspended). Give it the local pump back.
+        if let recorder = ProgramRecordingAudioBridge.activeProgramRecorder, !recorder.isPassthrough {
+            ProgramAACEncoder.prepare(audioBitrateBps: streamEncoderConfig.audioBitrateBps)
+            ProgramRecordingAudioPump.start(recorder: recorder)
+        }
+        #endif
         state = .idle
     }
 

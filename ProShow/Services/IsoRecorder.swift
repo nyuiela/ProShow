@@ -127,7 +127,11 @@ enum ProgramRecordingAudioPump {
         source.setEventHandler {
             guard let recorder = retainedRecorder else { return }
             ProgramEncoderAudioPump.noteTick()
-            _ = ProgramAACEncoder.nextAccessUnit(recording: recorder)
+            // With a host anchor (passthrough file after the stream stops) stay on host time.
+            let due = MediaClockAnchor.shared.isActive ? MediaClockAnchor.shared.dueAudioBlockCount() : 1
+            for _ in 0..<due {
+                _ = ProgramAACEncoder.nextAccessUnit(recording: recorder)
+            }
         }
         source.resume()
         timer = source
@@ -170,6 +174,17 @@ final class ProgramVideoFileRecorder {
     private var sessionStarted = false
     private var pendingAudio: [(data: Data, pts: CMTime)] = []
     private var audioFormat: CMFormatDescription?
+    // Passthrough timeline. A stream stop/start resets the source clock to zero; the file keeps going.
+    private var videoOffset: CMTime = .zero
+    private var lastVideoOut: CMTime = .invalid
+    private var audioOffset: CMTime = .zero
+    private var lastAudioOut: CMTime = .invalid
+    private(set) var timelineRebases = 0
+    private(set) var skippedLeadingFrames = 0
+    private var sessionStartPTS: CMTime = .invalid
+    private var sessionStartHost: Double = 0
+    private(set) var rejectedAppends = 0
+    private(set) var failureMessage: String?
     private static let audioSampleRate = 48_000
     private static let stereoPCMFormat: CMFormatDescription? = {
         var asbd = AudioStreamBasicDescription(
@@ -243,8 +258,9 @@ final class ProgramVideoFileRecorder {
         }
         let fileType: AVFileType = .mov
         guard let assetWriter = try? AVAssetWriter(outputURL: url, fileType: fileType) else { return nil }
+        // Fragmented .mov: finishing is instant and a crash still leaves a playable file.
+        // No shouldOptimizeForNetworkUse: that rewrites the whole movie on finish.
         assetWriter.movieFragmentInterval = CMTime(seconds: 1, preferredTimescale: 600)
-        assetWriter.shouldOptimizeForNetworkUse = true
         let settings: [String: Any]
         switch codec {
         case .h264:
@@ -336,8 +352,9 @@ final class ProgramVideoFileRecorder {
         queue.async { [self] in
             if passthroughReady {
                 appendEncodedAudioOnQueue(aac, presentationTime: presentationTime)
-            } else if pendingAudio.count < 64 {
+            } else {
                 pendingAudio.append((aac, presentationTime))
+                if pendingAudio.count > 150 { pendingAudio.removeFirst(pendingAudio.count - 150) }
             }
         }
     }
@@ -388,35 +405,143 @@ final class ProgramVideoFileRecorder {
 
     private func appendEncodedVideoOnQueue(_ sampleBuffer: CMSampleBuffer) {
         guard CMSampleBufferDataIsReady(sampleBuffer) else { return }
+        // A passthrough file must open on a sync sample. Starting mid-GOP made the writer
+        // fail (-11800 / -12735) on its first fragment, leaving a few KB with no moov.
+        if !sessionStarted, !Self.isSyncSample(sampleBuffer) {
+            skippedLeadingFrames += 1
+            return
+        }
         if !passthroughReady {
             guard let format = CMSampleBufferGetFormatDescription(sampleBuffer) else { return }
             guard openPassthroughWriter(videoFormat: format) else { return }
         }
+        if let writer, writer.status == .failed {
+            noteWriterFailure(writer)
+            return
+        }
         guard let input = writerInput, input.isReadyForMoreMediaData else { return }
-        let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+        let sourcePTS = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+        guard sourcePTS.isValid else { return }
+        let pts = Self.rebased(
+            sourcePTS,
+            offset: &videoOffset,
+            lastOut: lastVideoOut,
+            step: CMTime(value: 1, timescale: CMTimeScale(fps)),
+            wall: wallTimelinePosition(),
+            rebases: &timelineRebases
+        )
+        let sample = Self.retimed(sampleBuffer, shift: CMTimeSubtract(pts, sourcePTS)) ?? sampleBuffer
         if !sessionStarted {
-            let start = pendingAudio.map(\.pts).reduce(pts) { partial, audioPTS in
-                CMTimeCompare(audioPTS, partial) < 0 ? audioPTS : partial
-            }
-            writer?.startSession(atSourceTime: start)
+            // Start on the keyframe; queued audio from before it is dropped so both tracks begin together.
+            writer?.startSession(atSourceTime: pts)
             sessionStarted = true
-            let queued = pendingAudio
+            sessionStartPTS = pts
+            sessionStartHost = CMTimeGetSeconds(CMClockGetTime(CMClockGetHostTimeClock()))
+            let queued = pendingAudio.filter { CMTimeCompare($0.pts, pts) >= 0 }
             pendingAudio.removeAll(keepingCapacity: false)
             for item in queued {
                 appendEncodedAudioOnQueue(item.data, presentationTime: item.pts)
             }
         }
-        if input.append(sampleBuffer) {
+        if input.append(sample) {
             framesWritten += 1
+            lastVideoOut = pts
+        } else {
+            rejectedAppends += 1
+            if let writer { noteWriterFailure(writer) }
         }
     }
 
     private func appendEncodedAudioOnQueue(_ aac: Data, presentationTime: CMTime) {
         guard sessionStarted, let audioInput = audioWriterInput, audioInput.isReadyForMoreMediaData else { return }
-        guard let sample = Self.makeAACSampleBuffer(aac: aac, presentationTime: presentationTime, format: audioFormat) else { return }
+        guard presentationTime.isValid else { return }
+        let pts = Self.rebased(
+            presentationTime,
+            offset: &audioOffset,
+            lastOut: lastAudioOut,
+            step: CMTime(value: 1024, timescale: CMTimeScale(Self.audioSampleRate)),
+            wall: wallTimelinePosition(),
+            rebases: &timelineRebases
+        )
+        guard let sample = Self.makeAACSampleBuffer(aac: aac, presentationTime: pts, format: audioFormat) else { return }
         if audioInput.append(sample) {
             audioFramesWritten += 1
+            lastAudioOut = pts
+        } else {
+            rejectedAppends += 1
         }
+    }
+
+    private static func isSyncSample(_ sampleBuffer: CMSampleBuffer) -> Bool {
+        guard let attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false) as? [[CFString: Any]],
+              let first = attachments.first else { return true }
+        return (first[kCMSampleAttachmentKey_NotSync] as? Bool) != true
+    }
+
+    private func noteWriterFailure(_ writer: AVAssetWriter) {
+        guard writer.status == .failed, failureMessage == nil else { return }
+        failureMessage = writer.error?.localizedDescription ?? "Recording writer failed."
+        NSLog("ProShow recording writer failed: %@", failureMessage ?? "")
+    }
+
+    /// File time that matches the wall clock since the session started.
+    private func wallTimelinePosition() -> CMTime {
+        guard sessionStartPTS.isValid else { return .invalid }
+        let elapsed = CMTimeGetSeconds(CMClockGetTime(CMClockGetHostTimeClock())) - sessionStartHost
+        return CMTimeAdd(sessionStartPTS, CMTime(seconds: max(0, elapsed), preferredTimescale: 48_000))
+    }
+
+    /// Keeps each track monotonic. When the source clock jumps (a stream stop/start resets it to
+    /// zero), the track re-anchors to wall time since the file started, so audio and video stay
+    /// in sync with each other and a real pause stays a pause.
+    private static func rebased(
+        _ pts: CMTime,
+        offset: inout CMTime,
+        lastOut: CMTime,
+        step: CMTime,
+        wall: CMTime,
+        rebases: inout Int
+    ) -> CMTime {
+        let out = CMTimeAdd(pts, offset)
+        guard lastOut.isValid else { return out }
+        let delta = CMTimeGetSeconds(CMTimeSubtract(out, lastOut))
+        let drift = wall.isValid ? CMTimeGetSeconds(CMTimeSubtract(out, wall)) : 0
+        guard delta <= 0 || delta > 2.0 || abs(drift) > 2.0 else { return out }
+        var target = wall.isValid ? wall : CMTimeAdd(lastOut, step)
+        if CMTimeCompare(target, lastOut) <= 0 {
+            target = CMTimeAdd(lastOut, step)
+        }
+        offset = CMTimeSubtract(target, pts)
+        rebases += 1
+        return target
+    }
+
+    private static func retimed(_ sampleBuffer: CMSampleBuffer, shift: CMTime) -> CMSampleBuffer? {
+        guard shift.isValid, CMTimeCompare(shift, .zero) != 0 else { return sampleBuffer }
+        var count: CMItemCount = 0
+        guard CMSampleBufferGetSampleTimingInfoArray(sampleBuffer, entryCount: 0, arrayToFill: nil, entriesNeededOut: &count) == noErr,
+              count > 0 else { return nil }
+        var timings = [CMSampleTimingInfo](repeating: CMSampleTimingInfo(), count: count)
+        guard CMSampleBufferGetSampleTimingInfoArray(sampleBuffer, entryCount: count, arrayToFill: &timings, entriesNeededOut: &count) == noErr else {
+            return nil
+        }
+        for index in timings.indices {
+            if timings[index].presentationTimeStamp.isValid {
+                timings[index].presentationTimeStamp = CMTimeAdd(timings[index].presentationTimeStamp, shift)
+            }
+            if timings[index].decodeTimeStamp.isValid {
+                timings[index].decodeTimeStamp = CMTimeAdd(timings[index].decodeTimeStamp, shift)
+            }
+        }
+        var out: CMSampleBuffer?
+        guard CMSampleBufferCreateCopyWithNewTiming(
+            allocator: kCFAllocatorDefault,
+            sampleBuffer: sampleBuffer,
+            sampleTimingEntryCount: count,
+            sampleTimingArray: &timings,
+            sampleBufferOut: &out
+        ) == noErr else { return nil }
+        return out
     }
 
     private func openPassthroughWriter(videoFormat: CMFormatDescription) -> Bool {
@@ -512,7 +637,9 @@ final class ProgramVideoFileRecorder {
             makeDataReadyCallback: nil,
             refcon: nil,
             formatDescription: format,
-            sampleCount: 1024,
+            // One compressed packet (1024 PCM frames). 1024 here made every create fail,
+            // so passthrough files never got audio.
+            sampleCount: 1,
             presentationTimeStamp: presentationTime,
             packetDescriptions: &packet,
             sampleBufferOut: &sampleBuffer
@@ -739,7 +866,9 @@ final class IsoRecorder {
                 }
                 waiter.signal()
             }
-            waiter.wait()
+            if waiter.wait(timeout: .now() + 20) == .timedOut {
+                NSLog("ProShow recording finish is taking longer than 20 s; continuing.")
+            }
         }
         #endif
         isoEngine.stopIsoRecording()

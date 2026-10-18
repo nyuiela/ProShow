@@ -346,6 +346,14 @@ final class OutputTicker: @unchecked Sendable {
 
     func start(clock: MasterClock, fps: Int, slot: LatestFrameSlot) {
         stop()
+        // Each broadcast starts a fresh host anchor at zero. A frame index left over from the
+        // previous session sat ahead of the new host index and gated every Stream-lane frame.
+        queue.sync {
+            frameIndex = 0
+            tickCount = 0
+            repeatCount = 0
+            forceNextKeyframe = true
+        }
         let rate = max(1, fps)
         let interval = 1.0 / Double(rate)
         let source = DispatchSource.makeTimerSource(queue: queue)

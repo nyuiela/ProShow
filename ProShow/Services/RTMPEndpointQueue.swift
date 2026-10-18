@@ -92,12 +92,37 @@ final class RTMPEndpointQueue: @unchecked Sendable {
         drain()
     }
 
+    /// Audio backlog that triggers shedding P-frames (about 0.5 s of AAC).
+    static let audioBacklogShedVideo = 24
+    /// Hard cap for a dead socket (about 5 s of AAC). The old cap of 30 (0.64 s) cut a 0.6 s
+    /// hole in the audio after every keyframe on a slow uplink.
+    static let audioBacklogCap = 240
+    private(set) var shedVideoForAudioCount = 0
+
+    /// Congestion sheds non-keyframe video first so audio stays continuous.
     /// A stuck socket must not keep an unbounded run of AAC tags.
     private func trimAudio() {
-        let cap = 30
+        let cap = Self.audioBacklogCap
         var audioIndexes = pending.indices.filter { index in
             if case .audio = pending[index].kind { return true }
             return false
+        }
+        if audioIndexes.count > Self.audioBacklogShedVideo {
+            let before = pending.count
+            pending.removeAll { tag in
+                if case .video(false) = tag.kind { return true }
+                return false
+            }
+            let removed = before - pending.count
+            if removed > 0 {
+                droppedTagCount += removed
+                shedVideoForAudioCount += removed
+                droppingUntilKeyframe = true
+                audioIndexes = pending.indices.filter { index in
+                    if case .audio = pending[index].kind { return true }
+                    return false
+                }
+            }
         }
         while audioIndexes.count > cap {
             let index = audioIndexes.removeFirst()

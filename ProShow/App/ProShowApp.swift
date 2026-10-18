@@ -752,7 +752,18 @@ final class ProShowAppDelegate: NSObject, NSApplicationDelegate {
         // ProShowLogo swapped the look (inverted colors, larger mark) right after launch.
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // Quitting while recording left a 0-byte .mov plus an unfinished temp file. Finish it first.
+        if let controller = sessionProvider?()?.controller, controller.isoRecorder.isRecording {
+            controller.stopProgramRecording()
+        }
+        return .terminateNow
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
+        if let controller = sessionProvider?()?.controller, controller.isoRecorder.isRecording {
+            controller.stopProgramRecording()
+        }
         sessionProvider?()?.flushToDiskOnQuit()
     }
 }
