@@ -383,7 +383,7 @@ struct OnAirAudioTests {
         input.layers = [Self.layer(1, [muted], live: muted)]
         let off = try Self.row(OnAirAudioResolver.resolve(input), "Muted")
         #expect(off.state == .muted)
-        #expect(off.fix == .useCameraMic(layer: 0, shotID: muted.id))
+        #expect(off.fix == nil)  // the row M button unmutes; no duplicate fix
     }
 
     @Test

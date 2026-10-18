@@ -458,7 +458,6 @@ enum OnAirAudioResolver {
                 row.state = .muted
                 row.reason = "Muted"
                 row.help = "Camera mic is off on this layer"
-                row.fix = .useCameraMic(layer: layerIndex, shotID: shot.id)
             } else {
                 row.reason = "No mic"
                 row.help = "No mic found for this camera"
