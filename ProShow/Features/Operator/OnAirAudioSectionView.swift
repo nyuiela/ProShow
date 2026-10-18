@@ -150,7 +150,7 @@ private struct OnAirAudioRow: View, Equatable {
             }
         }
         .padding(.vertical, 1)
-        .contextMenu { let _ = MenuRenderProbe.hit("OnAirAudioSectionView:245:OnAirAudioRow.body"); menuItems }
+        .contextMenu { let _ = MenuRenderProbe.hit("OnAir.rowContext"); menuItems }
     }
 
     /// Terse reason only when it adds something the chip does not already say.
@@ -339,7 +339,7 @@ private struct OnAirAudioActionsMenu: View {
     @Bindable private var controls = OnAirAudioControls.shared
 
     var body: some View {
-        Menu { let _ = MenuRenderProbe.hit("OnAirAudioSectionView:69:OnAirAudioSectionView.header");
+        Menu { let _ = MenuRenderProbe.hit("OnAir.actions");
             if !controller.soloedAudioChannelNames.isEmpty {
                 Button("Clear Isolate", systemImage: "circle.slash") {
                     controller.clearAllAudioSolos()
@@ -357,7 +357,7 @@ private struct OnAirAudioActionsMenu: View {
                 Text("PFL").tag(AudioListenMode.pfl)
                 Text("AFL").tag(AudioListenMode.afl)
             }
-            Menu("Listen Output") { let _ = MenuRenderProbe.hit("OnAirAudioSectionView:87:OnAirAudioSectionView.header");
+            Menu("Listen Output") { let _ = MenuRenderProbe.hit("OnAir.listenOutput");
                 Button {
                     AudioMonitoringEngine.shared.listenDeviceUID = nil
                 } label: {

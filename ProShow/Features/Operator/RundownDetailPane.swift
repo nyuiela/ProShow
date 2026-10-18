@@ -298,7 +298,7 @@ struct RundownDetailPane: View {
         }
         .buttonStyle(DeskPressButtonStyle())
         .accessibilityLabel("Fire lower third for \(talent.fullName)")
-        .contextMenu { let _ = MenuRenderProbe.hit("RundownDetailPane:301:RundownDetailPane.talentChip");
+        .contextMenu {
             Button("Edit speaker…") { onEditTalent?(talent) }
             Button("Remove from show", role: .destructive) {
                 controller.deleteTalentProfile(id: talent.id)

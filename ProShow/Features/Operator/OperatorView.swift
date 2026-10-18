@@ -191,7 +191,7 @@ struct LayerShotStrip: View {
                             .onTapGesture {
                                 controller.takeShotLive(shot, layerIndex: layerIndex)
                             }
-                            .contextMenu { let _ = MenuRenderProbe.hit("OperatorView:194:LayerShotStrip.body");
+                            .contextMenu {
                                     LayerShotContextMenu(
                                         controller: controller,
                                         shot: shot,

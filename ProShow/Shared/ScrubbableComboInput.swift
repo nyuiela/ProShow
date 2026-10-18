@@ -83,7 +83,7 @@ public struct ScrubbableComboInput: View {
             .onSubmit { commitText() }
 
             if let presets, !presets.isEmpty {
-                Menu { let _ = MenuRenderProbe.hit("ScrubbableComboInput:86:ScrubbableComboInput.?");
+                Menu {
                     ForEach(presets, id: \.self) { preset in
                         Button(formatDisplay(preset)) {
                             value = clamped(preset)

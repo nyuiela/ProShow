@@ -270,7 +270,7 @@ fileprivate struct PhonePreviewFeedButton: View {
     @Bindable var controller: ShowController
 
     var body: some View {
-        Menu { let _ = MenuRenderProbe.hit("PhoneCanvasMonitorView:273:PhonePreviewFeedButton.body");
+        Menu {
             ForEach(PreviewFeed.operatorFeeds) { feed in
                 Button {
                     controller.selectPhonePreviewFeed(feed)

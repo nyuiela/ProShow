@@ -85,7 +85,7 @@ struct LibrarySidebarView: View {
                                 controller.selectContentLibrary(id: library.id)
                                 expandedGroup = nil
                             }
-                            .contextMenu { let _ = MenuRenderProbe.hit("LibrarySidebarView:88:LibrarySidebarView.body");
+                            .contextMenu {
                                 libraryContextMenu(library)
                             }
                         }
@@ -101,7 +101,7 @@ struct LibrarySidebarView: View {
                             ) {
                                 controller.selectPlaylist(id: playlist.id)
                             }
-                            .contextMenu { let _ = MenuRenderProbe.hit("LibrarySidebarView:104:LibrarySidebarView.body");
+                            .contextMenu {
                                 playlistContextMenu(playlist)
                             }
                         }
@@ -138,7 +138,7 @@ struct LibrarySidebarView: View {
                                     controller.selectedPlaylistItemTitle = item.title
                                 }
                             }
-                            .contextMenu { let _ = MenuRenderProbe.hit("LibrarySidebarView:141:LibrarySidebarView.body");
+                            .contextMenu {
                                 presentationContextMenu(item)
                             }
                         }
@@ -238,7 +238,7 @@ struct LibrarySidebarView: View {
                 controller.takePresentationLive(showID: showID)
             }
             if !otherPlaylistsInLibrary.isEmpty {
-                Menu("Move to Playlist") { let _ = MenuRenderProbe.hit("LibrarySidebarView:241:LibrarySidebarView.presentationContextMenu");
+                Menu("Move to Playlist") {
                     ForEach(otherPlaylistsInLibrary) { playlist in
                         Button(playlist.name) {
                             controller.movePlaylistItem(id: item.id, to: playlist.id)
@@ -891,7 +891,7 @@ private struct SidebarAddMenu: View {
     }
 
     var body: some View {
-        Menu { let _ = MenuRenderProbe.hit("LibrarySidebarView:894:SidebarAddMenu.body");
+        Menu {
             Button("New Library", systemImage: "folder.badge.plus") {
                 onCreate(.library)
             }
@@ -907,7 +907,7 @@ private struct SidebarAddMenu: View {
             Button("Add Shot", systemImage: "plus.rectangle.on.folder") {
                 controller.openAddShot(layerIndex: controller.addShotLayerIndex)
             }
-            Menu("Theme", systemImage: "paintpalette") { let _ = MenuRenderProbe.hit("LibrarySidebarView:910:SidebarAddMenu.body");
+            Menu("Theme", systemImage: "paintpalette") {
                 ForEach(DeskSampleData.themes, id: \.self) { name in
                     Button {
                         controller.applyTheme(name)
