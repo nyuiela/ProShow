@@ -12,7 +12,28 @@ enum AudioListenMode: String, Codable, Sendable, CaseIterable {
 @MainActor
 @Observable
 final class AudioMatrixEngine {
-    var channels: [AudioMatrixChannel] = []
+    var channels: [AudioMatrixChannel] = [] {
+        didSet {
+            let next = channels.map(Self.withoutMeters)
+            if next != controls { controls = next }
+        }
+    }
+    /// The channels without meter values. Views that show mute, solo or gain (and own menus) read this,
+    /// so meter ticks (about 30 per second) do not redraw them or rebuild their open menus.
+    private(set) var controls: [AudioMatrixChannel] = []
+
+    static func withoutMeters(_ channel: AudioMatrixChannel) -> AudioMatrixChannel {
+        var channel = channel
+        channel.peak = -120
+        channel.peakLeft = nil
+        channel.peakRight = nil
+        channel.peakHoldDb = nil
+        return channel
+    }
+
+    func controlChannel(role: AudioChannelRole) -> AudioMatrixChannel? {
+        controls.first(where: { $0.role == role })
+    }
     var master = MixerMasterState()
     var duckThresholdDb: Double = -24
     var duckAmountDb: Double = -12

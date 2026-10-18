@@ -3523,6 +3523,9 @@ final class ShowController {
             masterLayers = layers
             reconcileAudioCaptureGraph()
             return ["ok": removed > 0, "removed": removed]
+        case "menu_probe":
+            // Test hook: menu content rebuilds per second since the last reset.
+            return MenuRenderProbe.snapshot(reset: args["reset"] == "1")
         case "shots":
             return ["ok": true, "layers": masterLayers.enumerated().map { index, layer in
                 ["index": index, "live": layer.liveShotID?.uuidString ?? "",

@@ -507,7 +507,7 @@ struct CanvasEditorView: View {
                     .contentShape(Rectangle())
                     .onTapGesture { editor.clearObjectSelection() }
                     .gesture(workspacePan)
-                    .contextMenu { CanvasBlankContextMenu(editor: editor, controller: controller) }
+                    .contextMenu { let _ = MenuRenderProbe.hit("CanvasEditorView:510:CanvasEditorView.pasteboardGrid"); CanvasBlankContextMenu(editor: editor, controller: controller) }
                 canvasBoards(
                     document: document,
                     canvasWidth: canvasWidth,
@@ -782,7 +782,7 @@ struct CanvasEditorView: View {
         let showsTransparency = board.showsCheckerboard || !board.backgroundEnabled
         return canvasBackdrop(scale: scale, showsTransparency: showsTransparency, backgroundEnabled: board.backgroundEnabled, backgroundHex: board.backgroundHex, hostsProgramMedia: board.isPrimary)
             .frame(width: canvasW, height: canvasH)
-            .contextMenu { CanvasBlankContextMenu(editor: editor, controller: controller) }
+            .contextMenu { let _ = MenuRenderProbe.hit("CanvasEditorView:785:CanvasEditorView.canvasSurface"); CanvasBlankContextMenu(editor: editor, controller: controller) }
             .overlay(alignment: .topLeading) {
                 PulsedBuildEnvironment(
                     isActive: controller.editorFollowsLiveBuilds,
@@ -801,7 +801,7 @@ struct CanvasEditorView: View {
                                 canvasID: board.id
                             )
                         )
-                        .contextMenu { CanvasBlankContextMenu(editor: editor, controller: controller) }
+                        .contextMenu { let _ = MenuRenderProbe.hit("CanvasEditorView:804:CanvasEditorView.canvasSurface"); CanvasBlankContextMenu(editor: editor, controller: controller) }
                     if board.showsGrid {
                         CanvasArtboardGridView(
                             gridConfig: editor.gridConfig,
@@ -830,7 +830,7 @@ struct CanvasEditorView: View {
                             session: liveDrag,
                             applies: editor.selectedObjectIDs.contains(object.id)
                         ))
-                        .contextMenu { CanvasObjectContextMenu(editor: editor, controller: controller, objectID: object.id) }
+                        .contextMenu { let _ = MenuRenderProbe.hit("CanvasEditorView:833:CanvasEditorView.canvasSurface"); CanvasObjectContextMenu(editor: editor, controller: controller, objectID: object.id) }
                         .gesture(objectDrag(object.id, scale: scale))
                         .onTapGesture(count: 2) {
                             if object.groupID != nil, editor.isolatedObjectID != object.id {
@@ -1205,7 +1205,7 @@ struct CanvasEditorView: View {
                 .accessibilityLabel(kind.title)
             }
             if EditorCatalog.showsShapeMenu(editor.kind) {
-                Menu {
+                Menu { let _ = MenuRenderProbe.hit("CanvasEditorView:1208:CanvasEditorView.floatingToolbar");
                     ForEach(EditorCatalog.shapes, id: \.self) { shape in
                         Button(shape.title) { _ = editor.addObject(shape) }
                     }
@@ -1233,7 +1233,7 @@ struct CanvasEditorView: View {
                 }
             }
             if EditorCatalog.showsLiveMenu(editor.kind) {
-                Menu {
+                Menu { let _ = MenuRenderProbe.hit("CanvasEditorView:1236:CanvasEditorView.floatingToolbar");
                     ForEach(EditorCatalog.liveObjects, id: \.self) { kind in
                         Button(kind.title) { addLiveObject(kind) }
                     }
@@ -1376,7 +1376,7 @@ struct CanvasEditorView: View {
     }
 
     private var canvasOverlayMenu: some View {
-        Menu {
+        Menu { let _ = MenuRenderProbe.hit("CanvasEditorView:1379:CanvasEditorView.canvasOverlayMenu");
             Toggle("Action & title safe", isOn: canvasFlag(\.showsSafeAreas))
             Toggle("Header & footer zones", isOn: canvasFlag(\.showsHeaderFooter))
             Toggle("12-column grid", isOn: canvasFlag(\.showsColumnGrid))
@@ -1776,7 +1776,7 @@ private struct EditorObjectTreeRow: View {
         .listRowBackground(rowBackground)
         .listRowSeparator(.hidden)
         .listRowInsets(EdgeInsets(top: 1, leading: 6, bottom: 1, trailing: 6))
-        .contextMenu { rowContextMenu }
+        .contextMenu { let _ = MenuRenderProbe.hit("CanvasEditorView:1779:EditorObjectTreeRow.body"); rowContextMenu }
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
@@ -2033,7 +2033,7 @@ struct CanvasObjectContextMenu: View {
         Button("Copy Style") { editor.selectObject(objectID); editor.copySelectedTextStyle() }
         Button("Paste Style") { editor.pasteSelectedTextStyle() }
             .disabled(!editor.canPasteTextStyle)
-        Menu("Align") {
+        Menu("Align") { let _ = MenuRenderProbe.hit("CanvasEditorView:2036:CanvasObjectContextMenu.body");
             Button("Left") { editor.selectObject(objectID); editor.alignSelected(.left) }
             Button("Center") { editor.selectObject(objectID); editor.alignSelected(.centerX) }
             Button("Right") { editor.selectObject(objectID); editor.alignSelected(.right) }
@@ -2079,7 +2079,7 @@ struct CanvasBlankContextMenu: View {
         Button("Select All") { editor.selectAllObjects() }
         Divider()
         Button("Add Text") { _ = editor.addObject(.text) }
-        Menu("Add Shape") {
+        Menu("Add Shape") { let _ = MenuRenderProbe.hit("CanvasEditorView:2082:CanvasBlankContextMenu.body");
             ForEach(EditorCatalog.shapes, id: \.self) { shape in
                 Button(shape.title) { _ = editor.addObject(shape) }
             }
@@ -2093,7 +2093,7 @@ struct CanvasBlankContextMenu: View {
         Button("Add Image") {
             _ = editor.addObject(.image)
         }
-        Menu("Add Live Element") {
+        Menu("Add Live Element") { let _ = MenuRenderProbe.hit("CanvasEditorView:2096:CanvasBlankContextMenu.body");
             ForEach(EditorCatalog.liveObjects, id: \.self) { kind in
                 Button(kind.title) {
                     controller.finishAddingLiveObject(editor.addObject(kind))
@@ -2932,7 +2932,7 @@ private struct CanvasAddMenu: View {
     @State private var heightText = "1080"
 
     var body: some View {
-        Menu {
+        Menu { let _ = MenuRenderProbe.hit("CanvasEditorView:2935:CanvasAddMenu.body");
             presetSection("Phone", presets: CanvasResolution.phonePresets)
             presetSection("Tablet", presets: CanvasResolution.tabletPresets)
             presetSection("Desktop", presets: CanvasResolution.desktopPresets)

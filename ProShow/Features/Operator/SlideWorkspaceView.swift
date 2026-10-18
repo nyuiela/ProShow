@@ -166,7 +166,7 @@ struct SlideWorkspaceView: View {
                         .equatable()
                         .frame(width: width, alignment: .topLeading)
                         .contentShape(Rectangle())
-                        .contextMenu { SlideContextMenu(controller: controller, slideID: cue.slide.id) }
+                        .contextMenu { let _ = MenuRenderProbe.hit("SlideWorkspaceView:169:SlideWorkspaceView.slideGrid"); SlideContextMenu(controller: controller, slideID: cue.slide.id) }
                         .onTapGesture(count: 2) { controller.goLive(slideID: cue.slide.id) }
                         .onTapGesture(count: 1) { controller.select(cue.slide.id) }
                         .cueDragAndDrop(controller: controller, slideID: cue.slide.id, enabled: allowsSlideReorder)
@@ -181,7 +181,7 @@ struct SlideWorkspaceView: View {
     }
 
     private var presentationTypeMenu: some View {
-        Menu {
+        Menu { let _ = MenuRenderProbe.hit("SlideWorkspaceView:184:SlideWorkspaceView.presentationTypeMenu");
             ForEach(EditorCatalog.themeVariants, id: \.self) { name in
                 Button {
                     controller.setPresentationContentType(name)
@@ -230,7 +230,7 @@ struct SlideWorkspaceView: View {
                 .listRowBackground(cue.slide.id == controller.selectedSlideID ? ProShowTheme.well : Color.clear)
                 .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
                 .listRowSeparator(.hidden)
-                .contextMenu { SlideContextMenu(controller: controller, slideID: cue.slide.id) }
+                .contextMenu { let _ = MenuRenderProbe.hit("SlideWorkspaceView:233:SlideWorkspaceView.slideList"); SlideContextMenu(controller: controller, slideID: cue.slide.id) }
                 .onTapGesture { controller.select(cue.slide.id) }
                 .onTapGesture(count: 2) { controller.goLive(slideID: cue.slide.id) }
                 .cueDragAndDrop(controller: controller, slideID: cue.slide.id, enabled: allowsSlideReorder)
@@ -257,7 +257,7 @@ struct SlideWorkspaceView: View {
                             .foregroundStyle(slide.id == controller.selectedSlideID ? .white : .primary)
                             .opacity(slide.isDisabled ? 0.4 : 1)
                             .listRowBackground(slide.id == controller.selectedSlideID ? ProShowTheme.accent : Color.clear)
-                            .contextMenu { SlideContextMenu(controller: controller, slideID: slide.id) }
+                            .contextMenu { let _ = MenuRenderProbe.hit("SlideWorkspaceView:260:SlideWorkspaceView.slideOutline"); SlideContextMenu(controller: controller, slideID: slide.id) }
                             .onTapGesture { controller.select(slide.id) }
                         .cueDragAndDrop(controller: controller, slideID: slide.id, enabled: allowsSlideReorder)
                         .moveDisabled(!allowsSlideReorder)
@@ -680,7 +680,7 @@ struct SlideContextMenu: View {
         #if os(macOS)
         if controller.browserPageURL(for: slideID) != nil {
             Divider()
-            Menu("Web Page") {
+            Menu("Web Page") { let _ = MenuRenderProbe.hit("SlideWorkspaceView:683:SlideContextMenu.body");
                 Button("Refresh Page") {
                     controller.refreshSlideBrowserPage(slideID: slideID)
                 }
@@ -690,19 +690,19 @@ struct SlideContextMenu: View {
 
         Divider()
 
-        Menu("Themes") {
+        Menu("Themes") { let _ = MenuRenderProbe.hit("SlideWorkspaceView:693:SlideContextMenu.body");
             ForEach(controller.themeMenuVariants, id: \.id) { variant in
                 Button(variant.name) { controller.applyThemeVariant(variant, to: slideID) }
             }
             Divider()
-            Menu("Apply to All Slides in Show") {
+            Menu("Apply to All Slides in Show") { let _ = MenuRenderProbe.hit("SlideWorkspaceView:698:SlideContextMenu.body");
                 ForEach(controller.themeMenuVariants, id: \.id) { variant in
                     Button(variant.name) {
                         controller.applyThemeVariantToAllSlidesInShow(variant)
                     }
                 }
             }
-            Menu("Apply to Group") {
+            Menu("Apply to Group") { let _ = MenuRenderProbe.hit("SlideWorkspaceView:705:SlideContextMenu.body");
                 ForEach(controller.themeMenuVariants, id: \.id) { variant in
                     Button(variant.name) {
                         controller.applyThemeVariantToGroup(containing: slideID, variant: variant)
@@ -710,18 +710,18 @@ struct SlideContextMenu: View {
                 }
             }
         }
-        Menu("Transitions...") {
+        Menu("Transitions...") { let _ = MenuRenderProbe.hit("SlideWorkspaceView:713:SlideContextMenu.body");
             ForEach(DeskSampleData.slideTransitions, id: \.self) { name in
                 Button(name) { controller.setSlideTransition(name, id: slideID) }
             }
         }
-        Menu("Hot Key...") {
+        Menu("Hot Key...") { let _ = MenuRenderProbe.hit("SlideWorkspaceView:718:SlideContextMenu.body");
             Button("None") { controller.setSlideHotKey("", id: slideID) }
             ForEach(Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ").map(String.init), id: \.self) { key in
                 Button(key) { controller.setSlideHotKey(key, id: slideID) }
             }
         }
-        Menu("Go to Next Timer...") {
+        Menu("Go to Next Timer...") { let _ = MenuRenderProbe.hit("SlideWorkspaceView:724:SlideContextMenu.body");
             Button("None") { controller.setSlideNextTimer("", id: slideID) }
             if controller.compositor.stack.timers.isEmpty {
                 Button("Timer 1") { controller.setSlideNextTimer("Timer 1", id: slideID) }
@@ -734,21 +734,21 @@ struct SlideContextMenu: View {
 
         Divider()
 
-        Menu("Add Action") {
+        Menu("Add Action") { let _ = MenuRenderProbe.hit("SlideWorkspaceView:737:SlideContextMenu.body");
             ForEach(DeskSampleData.slideActions, id: \.self) { action in
                 Button(action) { controller.addSlideAction(action, id: slideID) }
             }
         }
         Button("Add Media Action...") { controller.addMediaAction(to: slideID) }
 
-        Menu("Group") {
+        Menu("Group") { let _ = MenuRenderProbe.hit("SlideWorkspaceView:744:SlideContextMenu.body");
             ForEach(controller.show.groups, id: \.id) { group in
                 Button(group.name) { controller.moveSlide(slideID, toGroupNamed: group.name) }
             }
             Divider()
             Button("New Group") { controller.moveSlide(slideID, toGroupNamed: "Group \(controller.show.groups.count + 1)") }
         }
-        Menu("Label") {
+        Menu("Label") { let _ = MenuRenderProbe.hit("SlideWorkspaceView:751:SlideContextMenu.body");
             Button("None") { controller.setSlideLabel("", id: slideID) }
             ForEach(DeskSampleData.slideLabels, id: \.self) { label in
                 Button(label) { controller.setSlideLabel(label, id: slideID) }

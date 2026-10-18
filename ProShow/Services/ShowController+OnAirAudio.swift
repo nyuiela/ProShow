@@ -18,7 +18,12 @@ struct ProgramMeterReading: Hashable, Sendable {
 final class OnAirAudioMonitor {
     static let shared = OnAirAudioMonitor()
 
-    private(set) var sources: [OnAirAudioSource] = []
+    /// Full rows with meter values, for the API. Not observed: views read `rows` and `peaks`.
+    @ObservationIgnored private(set) var sources: [OnAirAudioSource] = []
+    /// Rows without meter values: changes only when a row's state, reason or controls change.
+    private(set) var rows: [OnAirAudioSource] = []
+    /// Row peak dBFS by id (5 Hz). Read only by the small meter views.
+    private(set) var peaks: [String: Double] = [:]
     private(set) var alerts: [OnAirAudioAlert] = []
     private(set) var program = ProgramMeterReading()
     /// QA only: rows that stand in for a room guest when no real guest is in the room.
@@ -83,7 +88,15 @@ final class OnAirAudioMonitor {
         if rows.contains(where: { ($0.type == .mic || $0.via != nil) && $0.isOnAir }), MicrophoneModeStatus.isVoiceIsolation {
             withMicMode.append(OnAirAudioAlert(kind: .micMode, message: "Voice Isolation"))
         }
-        if rows != sources { sources = rows }
+        sources = rows
+        let layout = rows.map { row -> OnAirAudioSource in
+            var row = row
+            row.peakDb = 0
+            return row
+        }
+        if layout != self.rows { self.rows = layout }
+        let nextPeaks = Dictionary(rows.map { ($0.id, $0.peakDb) }, uniquingKeysWith: { first, _ in first })
+        if nextPeaks != peaks { peaks = nextPeaks }
         if withMicMode != alerts { alerts = withMicMode }
         if reading != program { program = reading }
     }
@@ -205,7 +218,7 @@ extension ShowController {
     }
 
     var soloedAudioChannelNames: [String] {
-        audioMatrix.channels.filter(\.solo).map(\.name)
+        audioMatrix.controls.filter(\.solo).map(\.name)
     }
 
     func clearAllAudioSolos() {

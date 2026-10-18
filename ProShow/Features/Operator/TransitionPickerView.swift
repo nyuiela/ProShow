@@ -40,11 +40,11 @@ struct TransitionPickerView: View {
 
     private var compactMenuPicker: some View {
         let current = TransitionCatalog.preset(id: selection)
-        return Menu {
+        return Menu { let _ = MenuRenderProbe.hit("TransitionPickerView:43:TransitionPickerView.compactMenuPicker");
             ForEach(TransitionEngineKind.allCases, id: \.self) { kind in
                 let presets = TransitionCatalog.all.filter { $0.category == kind }
                 if !presets.isEmpty {
-                    Menu(kind.title) {
+                    Menu(kind.title) { let _ = MenuRenderProbe.hit("TransitionPickerView:47:TransitionPickerView.compactMenuPicker");
                         ForEach(presets) { preset in
                             Button {
                                 selection = preset.id

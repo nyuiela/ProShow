@@ -288,7 +288,7 @@ private extension MediaBinView {
                             playback: controller.playback
                         )
                             .contentShape(Rectangle())
-                            .contextMenu {
+                            .contextMenu { let _ = MenuRenderProbe.hit("MediaBinView:291:MediaSourceSidebar.assetArea");
                                 MediaContextMenu(controller: controller, itemID: item.id) {
                                     renameMediaID = item.id
                                     renameMediaTitle = item.title
@@ -368,7 +368,7 @@ private extension MediaBinView {
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
                     .accessibilityAddTraits(selected ? .isSelected : [])
-                    .contextMenu {
+                    .contextMenu { let _ = MenuRenderProbe.hit("MediaBinView:371:MediaSourceSidebar.assetArea");
                         MediaContextMenu(controller: controller, itemID: item.id) {
                             renameMediaID = item.id
                             renameMediaTitle = item.title
@@ -390,7 +390,7 @@ private extension MediaBinView {
 
     private var footer: some View {
         HStack(spacing: DeskSpace.xs) {
-            Menu {
+            Menu { let _ = MenuRenderProbe.hit("MediaBinView:393:MediaSourceSidebar.footer");
                 Button("Import Media…") {
                     importerAllowsDocuments = false
                     isImporterPresented = true
@@ -460,7 +460,7 @@ struct MediaContextMenu: View {
 
     var body: some View {
         Button("Inspector...") { controller.inspectMedia(id: itemID) }
-        Menu("Transitions...") {
+        Menu("Transitions...") { let _ = MenuRenderProbe.hit("MediaBinView:463:MediaContextMenu.body");
             ForEach(DeskSampleData.slideTransitions, id: \.self) { name in
                 Button(name) { controller.setMediaTransition(name, id: itemID) }
             }
@@ -468,17 +468,17 @@ struct MediaContextMenu: View {
 
         Divider()
 
-        Menu("Behavior") {
+        Menu("Behavior") { let _ = MenuRenderProbe.hit("MediaBinView:471:MediaContextMenu.body");
             ForEach(DeskSampleData.mediaBehaviors, id: \.self) { name in
                 Button(name) { controller.setMediaBehavior(name, id: itemID) }
             }
         }
-        Menu("Scaling") {
+        Menu("Scaling") { let _ = MenuRenderProbe.hit("MediaBinView:476:MediaContextMenu.body");
             ForEach(DeskSampleData.mediaScaling, id: \.self) { name in
                 Button(name) { controller.setMediaScaling(name, id: itemID) }
             }
         }
-        Menu("Alpha Type") {
+        Menu("Alpha Type") { let _ = MenuRenderProbe.hit("MediaBinView:481:MediaContextMenu.body");
             ForEach(DeskSampleData.mediaAlphaTypes, id: \.self) { name in
                 Button(name) { controller.setMediaAlphaType(name, id: itemID) }
             }
@@ -486,17 +486,17 @@ struct MediaContextMenu: View {
 
         Divider()
 
-        Menu("Playback Behavior") {
+        Menu("Playback Behavior") { let _ = MenuRenderProbe.hit("MediaBinView:489:MediaContextMenu.body");
             ForEach(DeskSampleData.mediaPlayback, id: \.self) { name in
                 Button(name) { controller.setMediaPlayback(name, id: itemID) }
             }
         }
-        Menu("Loop Behavior") {
+        Menu("Loop Behavior") { let _ = MenuRenderProbe.hit("MediaBinView:494:MediaContextMenu.body");
             ForEach(DeskSampleData.mediaLoop, id: \.self) { name in
                 Button(name) { controller.setMediaLoop(name, id: itemID) }
             }
         }
-        Menu("End Behavior") {
+        Menu("End Behavior") { let _ = MenuRenderProbe.hit("MediaBinView:499:MediaContextMenu.body");
             ForEach(DeskSampleData.mediaEnd, id: \.self) { name in
                 Button(name) { controller.setMediaEndBehavior(name, id: itemID) }
             }
@@ -504,7 +504,7 @@ struct MediaContextMenu: View {
 
         Divider()
 
-        Menu("Next Cue") {
+        Menu("Next Cue") { let _ = MenuRenderProbe.hit("MediaBinView:507:MediaContextMenu.body");
             Button("None") { controller.setMediaNextCue("None", id: itemID) }
             ForEach(controller.indexedCues.prefix(12)) { cue in
                 Button("\(cue.number). \(cue.slide.previewSummary)") {
@@ -527,7 +527,7 @@ struct MediaContextMenu: View {
 
         Button("Show in Finder") { revealInFinder() }
             .disabled(controller.mediaFileURL(id: itemID) == nil)
-        Menu("Clean Up By") {
+        Menu("Clean Up By") { let _ = MenuRenderProbe.hit("MediaBinView:530:MediaContextMenu.body");
             ForEach(DeskSampleData.mediaCleanup, id: \.self) { name in
                 Button(name) { controller.cleanUpMedia(by: name) }
             }

@@ -134,7 +134,7 @@ private struct ContextBarTextControls: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            Menu {
+            Menu { let _ = MenuRenderProbe.hit("CanvasContextBarView:137:ContextBarTextControls.body");
                 ForEach(SystemFontCatalog.menu(including: editor.commonValue(\.typography.fontFamily)), id: \.self) { name in
                     Button(name) {
                         editor.mutateSelectedObjects { $0.typography.fontFamily = name }
@@ -296,7 +296,7 @@ private struct ContextBarMediaControls: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            Menu {
+            Menu { let _ = MenuRenderProbe.hit("CanvasContextBarView:299:ContextBarMediaControls.body");
                 ForEach(ImageScaleMode.allCases) { mode in
                     Button(mode.title) {
                         editor.mutateSelectedObjects { $0.fill.imageScaleMode = mode }

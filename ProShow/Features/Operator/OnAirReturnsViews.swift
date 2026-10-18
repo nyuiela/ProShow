@@ -70,14 +70,14 @@ struct OnAirReturnsRow: View {
     }
 
     private var feedMenu: some View {
-        Menu {
+        Menu { let _ = MenuRenderProbe.hit("OnAirReturnsViews:73:OnAirReturnsRow.feedMenu");
             Section("Talk to") {
                 Button { controls.talkTarget = nil } label: { check("All guests", controls.talkTarget == nil) }
                 ForEach(controller.liveKitDesk.guests) { guest in
                     Button { controls.talkTarget = guest.identity } label: { check(guest.name, controls.talkTarget == guest.identity) }
                 }
             }
-            Menu("Talk Mic") {
+            Menu("Talk Mic") { let _ = MenuRenderProbe.hit("OnAirReturnsViews:80:OnAirReturnsRow.feedMenu");
                 Button { controls.talkDeviceID = nil } label: { check("System Default", controls.talkDeviceID == nil) }
                 ForEach(TalkbackEngine.microphones(), id: \.id) { mic in
                     Button { controls.talkDeviceID = mic.id } label: { check(mic.name, controls.talkDeviceID == mic.id) }

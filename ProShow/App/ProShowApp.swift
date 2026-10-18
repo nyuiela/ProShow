@@ -150,7 +150,7 @@ struct ProShowApp: App {
                     .keyboardShortcut("z", modifiers: [.command, .shift])
                     .disabled(!session.controller.editors.canRedo)
             }
-            CommandMenu("Audio") {
+            CommandMenu("Audio") { let _ = MenuRenderProbe.hit("ProShowApp:153:ProShowApp.body");
                 let audioKeysOff = session.phase != .desk || session.controller.editors.isEditingText
                 ForEach(0..<5, id: \.self) { index in
                     Button("Mute Layer \(index + 1) Audio") { session.controller.toggleLayerAudioShortcut(index) }
@@ -185,14 +185,14 @@ struct ProShowApp: App {
                 Button("Select All Objects") { session.controller.editors.selectAllObjects() }
                     .disabled(!session.controller.isCanvasEditorPresented || session.controller.editors.isEditingText)
                 Divider()
-                Menu("Nudge") {
+                Menu("Nudge") { let _ = MenuRenderProbe.hit("ProShowApp:188:ProShowApp.body");
                     Button("Left") { session.controller.editors.nudgeSelected(dx: -1, dy: 0) }
                     Button("Right") { session.controller.editors.nudgeSelected(dx: 1, dy: 0) }
                     Button("Up") { session.controller.editors.nudgeSelected(dx: 0, dy: -1) }
                     Button("Down") { session.controller.editors.nudgeSelected(dx: 0, dy: 1) }
                 }
                 .disabled(editSelectionLocked)
-                Menu("Align") {
+                Menu("Align") { let _ = MenuRenderProbe.hit("ProShowApp:195:ProShowApp.body");
                     Button("Left") { session.controller.editors.alignSelected(.left) }
                         .keyboardShortcut("l", modifiers: [.command, .option])
                     Button("Center") { session.controller.editors.alignSelected(.centerX) }
@@ -201,7 +201,7 @@ struct ProShowApp: App {
                         .keyboardShortcut("r", modifiers: [.command, .option])
                 }
                 .disabled(editSelectionLocked)
-                Menu("Arrange") {
+                Menu("Arrange") { let _ = MenuRenderProbe.hit("ProShowApp:204:ProShowApp.body");
                     Button("Bring Forward") { session.controller.editors.bringForward() }
                         .keyboardShortcut("]", modifiers: [.command])
                     Button("Send Backward") { session.controller.editors.sendBackward() }
@@ -214,7 +214,7 @@ struct ProShowApp: App {
                 }
                 .disabled(editSelectionLocked)
                 Divider()
-                Menu("Group") {
+                Menu("Group") { let _ = MenuRenderProbe.hit("ProShowApp:217:ProShowApp.body");
                     Button("Group") { session.controller.editors.groupSelected() }
                         .keyboardShortcut("g", modifiers: [.command])
                         .disabled(!session.controller.editors.canGroup)
@@ -223,7 +223,7 @@ struct ProShowApp: App {
                         .disabled(!session.controller.editors.canUngroup)
                 }
                 .disabled(!session.controller.isCanvasEditorPresented)
-                Menu("Combine") {
+                Menu("Combine") { let _ = MenuRenderProbe.hit("ProShowApp:226:ProShowApp.body");
                     Button("Auto Layout") { session.controller.editors.applyAutoLayout() }
                         .keyboardShortcut("a", modifiers: [.shift])
                         .disabled(session.controller.editors.selectedObjectIDs.count < 2)
@@ -248,7 +248,7 @@ struct ProShowApp: App {
                     Button("Convert Text to Outlines") { session.controller.editors.convertSelectedTextToOutlines() }
                 }
                 .disabled(!session.controller.isCanvasEditorPresented)
-                Menu("Tools") {
+                Menu("Tools") { let _ = MenuRenderProbe.hit("ProShowApp:251:ProShowApp.body");
                     Button("Move (V)") { session.controller.editors.setTool(.pointer) }
                     Button("Direct Select (A)") { session.controller.editors.setTool(.direct) }
                     Button("Text (T)") { session.controller.editors.setTool(.text) }
@@ -267,7 +267,7 @@ struct ProShowApp: App {
                 }
                 .disabled(!session.controller.isCanvasEditorPresented || session.controller.editors.isEditingText)
                 Divider()
-                Menu("Zoom") {
+                Menu("Zoom") { let _ = MenuRenderProbe.hit("ProShowApp:270:ProShowApp.body");
                     Button("Zoom In") { session.controller.editors.zoom = session.controller.editors.clampZoom(session.controller.editors.zoom * 1.15) }
                         .keyboardShortcut("=", modifiers: [.command])
                     Button("Zoom Out") { session.controller.editors.zoom = session.controller.editors.clampZoom(session.controller.editors.zoom / 1.15) }
@@ -282,7 +282,7 @@ struct ProShowApp: App {
                 }
                 .disabled(!session.controller.isCanvasEditorPresented)
             }
-            CommandMenu("Workspace") {
+            CommandMenu("Workspace") { let _ = MenuRenderProbe.hit("ProShowApp:285:ProShowApp.body");
                 Button("Show Workspace") { session.controller.setMode(.show) }
                     .keyboardShortcut("1", modifiers: [.command])
                 Button("Edit Workspace") { session.controller.setMode(.edit) }
@@ -297,14 +297,14 @@ struct ProShowApp: App {
                 Button("Reflow Workspace") { session.controller.setMode(.reflow) }
                 Button("Widgets Workspace") { session.controller.setMode(.widgets) }
             }
-            CommandMenu("Rundown") {
+            CommandMenu("Rundown") { let _ = MenuRenderProbe.hit("ProShowApp:300:ProShowApp.body");
                 Button("Stop Show") { session.controller.rundownClock.stopShow() }
                     .disabled(!session.controller.rundownClock.isShowRunning)
                 Button("Next Block") { session.controller.advanceRundownBlock() }
                     .keyboardShortcut(.space, modifiers: [])
                     .disabled(!session.controller.rundownClock.isShowRunning || session.controller.operatorMode != .rundown)
             }
-            CommandMenu("Show") {
+            CommandMenu("Show") { let _ = MenuRenderProbe.hit("ProShowApp:307:ProShowApp.body");
                 Button("Go Live") { session.controller.requestGoLive() }
                     .keyboardShortcut(.return, modifiers: [])
                 Button("Next Slide") { session.controller.advance() }

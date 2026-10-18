@@ -165,10 +165,10 @@ extension ShowController {
     func onAirChannel(for row: OnAirAudioSource) -> AudioMatrixChannel? {
         if let identity = row.guestIdentity {
             let guestID = LiveKitGuestEndpoint.stableID(identity)
-            return audioMatrix.channels.first { $0.linkedGuestID == guestID }
+            return audioMatrix.controls.first { $0.linkedGuestID == guestID }
         }
         guard let role = row.role else { return nil }
-        return audioMatrix.channel(role: role)
+        return audioMatrix.controlChannel(role: role)
     }
 
     func onAirChannelExists(for row: OnAirAudioSource) -> Bool {

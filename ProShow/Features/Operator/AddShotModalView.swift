@@ -517,7 +517,7 @@ struct AddShotModalView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(DeskPressButtonStyle())
-        .contextMenu {
+        .contextMenu { let _ = MenuRenderProbe.hit("AddShotModalView:520:AddShotModalView.sourceRow");
             Button(item.isFavorite ? "Remove Favorite" : "Add to Favorites") {
                 discovery.toggleFavorite(id: item.id)
             }

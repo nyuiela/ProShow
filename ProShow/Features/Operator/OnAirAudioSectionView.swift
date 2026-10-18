@@ -33,7 +33,7 @@ struct OnAirAudioSectionView: View {
         .accessibilityLabel("On-Air Audio")
     }
 
-    private var onAir: [OnAirAudioSource] { monitor.sources.filter(\.isOnAir) }
+    private var onAir: [OnAirAudioSource] { monitor.rows.filter(\.isOnAir) }
 
     private func requestIsolate(_ row: OnAirAudioSource) {
         if controller.onAirIsIsolated(row) {
@@ -42,7 +42,7 @@ struct OnAirAudioSectionView: View {
             pendingIsolate = row
         }
     }
-    private var notHeard: [OnAirAudioSource] { monitor.sources.filter { !$0.isOnAir } }
+    private var notHeard: [OnAirAudioSource] { monitor.rows.filter { !$0.isOnAir } }
 
     private var header: some View {
         HStack(spacing: 6) {
@@ -66,69 +66,14 @@ struct OnAirAudioSectionView: View {
                     .help(monitor.alerts.map(\.message).joined(separator: "\n"))
                     .accessibilityLabel("\(monitor.alerts.count) audio warnings")
             }
-            Menu {
-                if !controller.soloedAudioChannelNames.isEmpty {
-                    Button("Clear Isolate", systemImage: "circle.slash") {
-                        controller.clearAllAudioSolos()
-                    }
-                }
-                if controller.audioMatrix.isListening {
-                    Button("Clear Listen", systemImage: "headphones") {
-                        controller.clearOnAirListen()
-                    }
-                }
-                Picker("Listen", selection: Binding(
-                    get: { controller.audioMatrix.listenMode },
-                    set: { controller.setListenMode($0) }
-                )) {
-                    Text("PFL").tag(AudioListenMode.pfl)
-                    Text("AFL").tag(AudioListenMode.afl)
-                }
-                Menu("Listen Output") {
-                    Button {
-                        AudioMonitoringEngine.shared.listenDeviceUID = nil
-                    } label: {
-                        checkRow("Same as Monitor", AudioMonitoringEngine.shared.listenDeviceUID == nil)
-                    }
-                    ForEach(MacAudioOutputRouting.outputDevices()) { device in
-                        Button {
-                            AudioMonitoringEngine.shared.listenDeviceUID = device.id
-                            if controller.audioMatrix.isListening { ProgramAudioMonitorBridge.shared.refreshOutputRouting() }
-                        } label: {
-                            checkRow(device.name, AudioMonitoringEngine.shared.listenDeviceUID == device.id)
-                        }
-                    }
-                }
-                Button("Routing", systemImage: "square.grid.3x3") { controls.routingSheetOpen = true }
-                Divider()
-                Button("Mic Mode...", systemImage: "mic.badge.xmark") {
-                    MicrophoneModeStatus.showPicker()
-                }
-                Button("Open Audio Tab", systemImage: "slider.vertical.3") {
-                    controller.inspector.selectedTab = .audio
-                }
-                Button("Copy Diagnostics", systemImage: "doc.on.doc") {
-                    copyDiagnostics()
-                }
-            } label: {
-                Image(systemName: "ellipsis.circle")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(ShowSidebarPalette.symbol)
-                    .frame(width: DeskLayout.hit, height: DeskLayout.hit)
-                    .contentShape(Rectangle())
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .help("On-Air Audio actions")
-            .accessibilityLabel("On-Air Audio actions")
+            OnAirAudioActionsMenu(controller: controller)
         }
     }
 
     @ViewBuilder
     private var content: some View {
         VStack(alignment: .leading, spacing: 6) {
-            programMeter
+            OnAirProgramMeter()
             ForEach(monitor.alerts) { alert in
                 Label(alert.message, systemImage: alert.kind == .clipping ? "waveform.badge.exclamationmark" : "exclamationmark.triangle.fill")
                     .font(DeskType.micro.weight(.semibold))
@@ -142,45 +87,15 @@ struct OnAirAudioSectionView: View {
                     .foregroundStyle(ShowSidebarPalette.subtitle)
                     .padding(.leading, 4)
             } else {
-                ForEach(onAir) { OnAirAudioRow(source: $0, controller: controller, onIsolate: requestIsolate) }
+                ForEach(onAir) { OnAirAudioRow(source: $0, controller: controller, onIsolate: requestIsolate).equatable() }
             }
             if !notHeard.isEmpty {
                 sectionTitle("NOT HEARD", count: notHeard.count)
-                ForEach(notHeard) { OnAirAudioRow(source: $0, controller: controller, onIsolate: requestIsolate) }
+                ForEach(notHeard) { OnAirAudioRow(source: $0, controller: controller, onIsolate: requestIsolate).equatable() }
             }
             InspectorRowRule()
             OnAirReturnsRow(controller: controller, showRouting: $controls.routingSheetOpen)
         }
-    }
-
-    private var programMeter: some View {
-        let reading = monitor.program
-        return HStack(spacing: 6) {
-            Text("PGM")
-                .font(DeskType.mono.weight(.bold))
-                .foregroundStyle(ShowSidebarPalette.subtitle)
-            OnAirLevelBar(db: reading.peakDb, dimmed: false)
-                .frame(height: 6)
-            Text(reading.measured ? String(format: "%.0f LUFS", reading.shortTermLUFS) : "-- LUFS")
-                .font(DeskType.micro.monospacedDigit())
-                .foregroundStyle(ShowSidebarPalette.title)
-                .help("Short-term \(reading.measured ? String(format: "%.1f", reading.shortTermLUFS) : "--") LUFS, momentary \(reading.measured ? String(format: "%.1f", reading.momentaryLUFS) : "--") LUFS")
-            Text(String(format: "pk %.0f", reading.peakDb))
-                .font(DeskType.micro.monospacedDigit())
-                .foregroundStyle(ShowSidebarPalette.subtitle)
-            Circle()
-                .fill(reading.clipping ? ProShowTheme.liveRed : ShowSidebarPalette.subtitle.opacity(0.3))
-                .frame(width: 7, height: 7)
-                .help(reading.clipping ? "Clipping" : "No clipping")
-                .accessibilityLabel(reading.clipping ? "Clipping" : "No clipping")
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Program meter")
-    }
-
-    @ViewBuilder
-    private func checkRow(_ title: String, _ selected: Bool) -> some View {
-        if selected { Label(title, systemImage: "checkmark") } else { Text(title) }
     }
 
     private func sectionTitle(_ title: String, count: Int) -> some View {
@@ -189,20 +104,13 @@ struct OnAirAudioSectionView: View {
             .foregroundStyle(ShowSidebarPalette.subtitle)
             .padding(.top, 2)
     }
-
-    private func copyDiagnostics() {
-        #if os(macOS)
-        let object = monitor.jsonObject(controller: controller)
-        if let data = try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys]),
-           let text = String(data: data, encoding: .utf8) {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(text, forType: .string)
-        }
-        #endif
-    }
 }
 
-private struct OnAirAudioRow: View {
+/// Equatable on the row data only (the isolate closure is new on every parent pass), so a parent
+/// redraw does not rebuild the row's context menu.
+private struct OnAirAudioRow: View, Equatable {
+    static func == (lhs: OnAirAudioRow, rhs: OnAirAudioRow) -> Bool { lhs.source == rhs.source }
+
     let source: OnAirAudioSource
     let controller: ShowController
     var onIsolate: (OnAirAudioSource) -> Void
@@ -218,7 +126,7 @@ private struct OnAirAudioRow: View {
                 jumpButton
                 Spacer(minLength: 2)
                 if (source.type != .camera && source.type != .network) || source.via != nil {
-                    OnAirLevelBar(db: source.peakDb, dimmed: !source.isOnAir)
+                    OnAirRowMeter(id: source.id, dimmed: !source.isOnAir)
                         .frame(width: 36, height: 5)
                 }
                 controls
@@ -242,7 +150,7 @@ private struct OnAirAudioRow: View {
             }
         }
         .padding(.vertical, 1)
-        .contextMenu { menuItems }
+        .contextMenu { let _ = MenuRenderProbe.hit("OnAirAudioSectionView:245:OnAirAudioRow.body"); menuItems }
     }
 
     /// Terse reason only when it adds something the chip does not already say.
@@ -421,5 +329,128 @@ private struct OnAirLevelBar: View {
         if db > -3 { return ProShowTheme.liveRed }
         if db > -12 { return ProShowTheme.statusOn }
         return Color.green
+    }
+}
+
+/// The ••• menu. Its own view so the section's 5 Hz rows and meters never rebuild it:
+/// a menu rebuilt while open drops its open submenu.
+private struct OnAirAudioActionsMenu: View {
+    @Bindable var controller: ShowController
+    @Bindable private var controls = OnAirAudioControls.shared
+
+    var body: some View {
+        Menu { let _ = MenuRenderProbe.hit("OnAirAudioSectionView:69:OnAirAudioSectionView.header");
+            if !controller.soloedAudioChannelNames.isEmpty {
+                Button("Clear Isolate", systemImage: "circle.slash") {
+                    controller.clearAllAudioSolos()
+                }
+            }
+            if controller.audioMatrix.isListening {
+                Button("Clear Listen", systemImage: "headphones") {
+                    controller.clearOnAirListen()
+                }
+            }
+            Picker("Listen", selection: Binding(
+                get: { controller.audioMatrix.listenMode },
+                set: { controller.setListenMode($0) }
+            )) {
+                Text("PFL").tag(AudioListenMode.pfl)
+                Text("AFL").tag(AudioListenMode.afl)
+            }
+            Menu("Listen Output") { let _ = MenuRenderProbe.hit("OnAirAudioSectionView:87:OnAirAudioSectionView.header");
+                Button {
+                    AudioMonitoringEngine.shared.listenDeviceUID = nil
+                } label: {
+                    checkRow("Same as Monitor", AudioMonitoringEngine.shared.listenDeviceUID == nil)
+                }
+                ForEach(MacAudioOutputRouting.outputDevices()) { device in
+                    Button {
+                        AudioMonitoringEngine.shared.listenDeviceUID = device.id
+                        if controller.audioMatrix.isListening { ProgramAudioMonitorBridge.shared.refreshOutputRouting() }
+                    } label: {
+                        checkRow(device.name, AudioMonitoringEngine.shared.listenDeviceUID == device.id)
+                    }
+                }
+            }
+            Button("Routing", systemImage: "square.grid.3x3") { controls.routingSheetOpen = true }
+            Divider()
+            Button("Mic Mode...", systemImage: "mic.badge.xmark") {
+                MicrophoneModeStatus.showPicker()
+            }
+            Button("Open Audio Tab", systemImage: "slider.vertical.3") {
+                controller.inspector.selectedTab = .audio
+            }
+            Button("Copy Diagnostics", systemImage: "doc.on.doc") {
+                copyDiagnostics()
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(ShowSidebarPalette.symbol)
+                .frame(width: DeskLayout.hit, height: DeskLayout.hit)
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("On-Air Audio actions")
+        .accessibilityLabel("On-Air Audio actions")
+    }
+
+    @ViewBuilder
+    private func checkRow(_ title: String, _ selected: Bool) -> some View {
+        if selected { Label(title, systemImage: "checkmark") } else { Text(title) }
+    }
+
+    private func copyDiagnostics() {
+        #if os(macOS)
+        let object = OnAirAudioMonitor.shared.jsonObject(controller: controller)
+        if let data = try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys]),
+           let text = String(data: data, encoding: .utf8) {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+        }
+        #endif
+    }
+}
+
+/// PGM line. Reads the 5 Hz program reading itself so nothing above it redraws.
+private struct OnAirProgramMeter: View {
+    @Bindable private var monitor = OnAirAudioMonitor.shared
+
+    var body: some View {
+        let reading = monitor.program
+        return HStack(spacing: 6) {
+            Text("PGM")
+                .font(DeskType.mono.weight(.bold))
+                .foregroundStyle(ShowSidebarPalette.subtitle)
+            OnAirLevelBar(db: reading.peakDb, dimmed: false)
+                .frame(height: 6)
+            Text(reading.measured ? String(format: "%.0f LUFS", reading.shortTermLUFS) : "-- LUFS")
+                .font(DeskType.micro.monospacedDigit())
+                .foregroundStyle(ShowSidebarPalette.title)
+                .help("Short-term \(reading.measured ? String(format: "%.1f", reading.shortTermLUFS) : "--") LUFS, momentary \(reading.measured ? String(format: "%.1f", reading.momentaryLUFS) : "--") LUFS")
+            Text(String(format: "pk %.0f", reading.peakDb))
+                .font(DeskType.micro.monospacedDigit())
+                .foregroundStyle(ShowSidebarPalette.subtitle)
+            Circle()
+                .fill(reading.clipping ? ProShowTheme.liveRed : ShowSidebarPalette.subtitle.opacity(0.3))
+                .frame(width: 7, height: 7)
+                .help(reading.clipping ? "Clipping" : "No clipping")
+                .accessibilityLabel(reading.clipping ? "Clipping" : "No clipping")
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Program meter")
+    }
+}
+
+/// Row level bar. Reads the row peak itself so the row (and its context menu) does not redraw at 5 Hz.
+private struct OnAirRowMeter: View {
+    let id: String
+    let dimmed: Bool
+    @Bindable private var monitor = OnAirAudioMonitor.shared
+
+    var body: some View {
+        OnAirLevelBar(db: monitor.peaks[id] ?? -120, dimmed: dimmed)
     }
 }

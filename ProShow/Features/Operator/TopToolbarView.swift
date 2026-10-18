@@ -491,7 +491,7 @@ private struct DeskTitleBarLocalOutputMenu: View {
     @State private var outputDevices: [StudioAudioDevice] = []
 
     var body: some View {
-        Menu {
+        Menu { let _ = MenuRenderProbe.hit("TopToolbarView:494:DeskTitleBarLocalOutputMenu.body");
             Toggle(
                 "Mute This Mac's Speakers",
                 isOn: Binding(
@@ -769,13 +769,13 @@ private struct TaskMenuToolbarButton: View {
     var body: some View {
         switch item {
         case .theme:
-            Menu { themeMenuItems } label: { toolbarLabel }
+            Menu { let _ = MenuRenderProbe.hit("TopToolbarView:772:TaskMenuToolbarButton.body"); themeMenuItems } label: { toolbarLabel }
                 .help("Apply a global layout / style template")
         case .more:
-            Menu { moreMenuItems } label: { toolbarLabel }
+            Menu { let _ = MenuRenderProbe.hit("TopToolbarView:775:TaskMenuToolbarButton.body"); moreMenuItems } label: { toolbarLabel }
                 .help("Props, mask, settings, and window shortcuts")
         case .status:
-            Menu { statusMenuItems } label: { toolbarLabel }
+            Menu { let _ = MenuRenderProbe.hit("TopToolbarView:778:TaskMenuToolbarButton.body"); statusMenuItems } label: { toolbarLabel }
                 .help("System alerts and output status")
         default:
             Button {
@@ -905,7 +905,7 @@ private struct TaskMenuToolButton: View {
     var body: some View {
         switch item {
         case .theme:
-            Menu {
+            Menu { let _ = MenuRenderProbe.hit("TopToolbarView:908:TaskMenuToolButton.body");
                 Button("Theme Editor") { controller.openEditor(.theme) }
                 Divider()
                 ForEach(controller.themeMenuVariants, id: \.id) { variant in
@@ -922,7 +922,7 @@ private struct TaskMenuToolButton: View {
             .help("Apply a global layout / style template")
             .accessibilityLabel("Theme")
         case .more:
-            Menu {
+            Menu { let _ = MenuRenderProbe.hit("TopToolbarView:925:TaskMenuToolButton.body");
                 Button("Stage Layout Editor") { controller.openEditor(.stage) }
                 Button("Theme Editor") { controller.openEditor(.theme) }
                 Button("Overlay Editor") { controller.openEditor(.overlays) }
@@ -946,7 +946,7 @@ private struct TaskMenuToolButton: View {
             .accessibilityLabel("More tools")
             .accessibilityAddTraits(item.isSelected(controller: controller) ? .isSelected : [])
         case .status:
-            Menu {
+            Menu { let _ = MenuRenderProbe.hit("TopToolbarView:949:TaskMenuToolButton.body");
                 Button("Pre-Flight…") { controller.openPreFlight() }
                 if controller.isoRecorder.isRecording {
                     Button("Stop Program Recording") { controller.stopProgramRecording() }
@@ -1178,7 +1178,7 @@ private struct LocalPreviewRenderScaleButton: View {
     }
 
     var body: some View {
-        Menu {
+        Menu { let _ = MenuRenderProbe.hit("TopToolbarView:1181:LocalPreviewRenderScaleButton.body");
             Text("Local preview quality")
                 .font(DeskType.micro)
                 .foregroundStyle(ProShowTheme.secondaryLabel)

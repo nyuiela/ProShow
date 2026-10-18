@@ -2325,3 +2325,21 @@ private struct SlotAVPlayerLayerView: View {
     var body: some View { Color.clear }
 }
 #endif
+
+/// Test hook: counts how often each menu's content is rebuilt. A menu rebuilt while open
+/// closes its open submenu, so menu content must not re-evaluate on meter or clock ticks.
+enum MenuRenderProbe {
+    nonisolated(unsafe) static var counts: [String: Int] = [:]
+    nonisolated(unsafe) static var since = Date()
+    @discardableResult
+    static func hit(_ name: String) -> Bool {
+        counts[name, default: 0] += 1
+        return true
+    }
+    static func snapshot(reset: Bool) -> [String: Any] {
+        let secs = max(0.001, Date().timeIntervalSince(since))
+        let rates = counts.mapValues { (Double($0) / secs * 10).rounded() / 10 }
+        if reset { counts = [:]; since = Date() }
+        return ["secs": (secs * 10).rounded() / 10, "per_sec": rates]
+    }
+}

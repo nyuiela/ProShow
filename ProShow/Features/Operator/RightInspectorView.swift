@@ -467,7 +467,7 @@ fileprivate struct ClearLayerStrip: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(DeskPressButtonStyle())
-                .contextMenu {
+                .contextMenu { let _ = MenuRenderProbe.hit("RightInspectorView:470:ClearLayerStrip.body");
                     Button(hidden ? action.restoreTitle : action.title) {
                         requestClearStrip(action: action, hidden: hidden)
                     }
@@ -779,7 +779,7 @@ private struct LayersActionPane: View {
                 .buttonStyle(DeskPressButtonStyle())
                 .help("Restore the visibility from before solo")
             }
-            Menu {
+            Menu { let _ = MenuRenderProbe.hit("RightInspectorView:782:LayersActionPane.programHeader");
                 Button("Hide All", systemImage: "eye.slash") {
                     controller.requestDeskDestructiveConfirm(.hideAllProgramLayers)
                 }
@@ -821,7 +821,7 @@ private struct LayersActionPane: View {
             Text("Live sources")
                 .font(DeskType.meta.weight(.semibold))
                 .foregroundStyle(ShowSidebarPalette.title)
-            Menu {
+            Menu { let _ = MenuRenderProbe.hit("RightInspectorView:824:LayersActionPane.masterHeader");
                 Button("Add Shot…", systemImage: "plus") {
                     controller.openAddShot(layerIndex: controller.addShotLayerIndex)
                 }
@@ -930,7 +930,7 @@ private struct LayersActionPane: View {
             .accessibilityLabel(hidden ? "Show \(layer.title)" : "Hide \(layer.title)")
             .accessibilityValue(hidden ? "Hidden" : "Visible")
 
-            Menu {
+            Menu { let _ = MenuRenderProbe.hit("RightInspectorView:933:LayersActionPane.programLayerRow");
                 Button(hidden ? "Show Layer" : "Hide Layer", systemImage: hidden ? "eye" : "eye.slash") {
                     _ = controller.clearLayer(named: layer.apiName)
                 }
@@ -1123,7 +1123,7 @@ private struct LiveSourceRowView: View {
     }
 
     private var shotMenu: some View {
-        Menu {
+        Menu { let _ = MenuRenderProbe.hit("RightInspectorView:1126:LiveSourceRowView.shotMenu");
             if layer.shots.isEmpty {
                 Text("No shots")
             } else {
@@ -1176,17 +1176,17 @@ private struct LiveSourceRowView: View {
     }
 
     private var actionsMenu: some View {
-        Menu {
+        Menu { let _ = MenuRenderProbe.hit("RightInspectorView:1179:LiveSourceRowView.actionsMenu");
             Button("Add Shot…", systemImage: "plus") {
                 controller.selectMasterLayer(at: index)
                 controller.openAddShot(layerIndex: index)
             }
-            Menu("Shots") {
+            Menu("Shots") { let _ = MenuRenderProbe.hit("RightInspectorView:1184:LiveSourceRowView.actionsMenu");
                 if layer.shots.isEmpty {
                     Text("No shots")
                 } else {
                     ForEach(layer.shots) { shot in
-                        Menu(shot.name) {
+                        Menu(shot.name) { let _ = MenuRenderProbe.hit("RightInspectorView:1189:LiveSourceRowView.actionsMenu");
                             Button("Take Live", systemImage: "play.circle") {
                                 controller.selectMasterLayer(at: index)
                                 controller.takeShotLive(shot, layerIndex: index)
@@ -1597,7 +1597,7 @@ private struct PropActionPane: View {
                                     }
                                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                                     .overlay(alignment: .topTrailing) {
-                                        Menu {
+                                        Menu { let _ = MenuRenderProbe.hit("RightInspectorView:1600:PropActionPane.body");
                                             ForEach(PropOutputTarget.allCases) { target in
                                                 Button(target.title) { controller.setPropShowOn(id: prop.id, target: target) }
                                             }
@@ -1623,7 +1623,7 @@ private struct PropActionPane: View {
                             }
                         }
                         .buttonStyle(DeskPressButtonStyle())
-                        .contextMenu {
+                        .contextMenu { let _ = MenuRenderProbe.hit("RightInspectorView:1626:PropActionPane.body");
                             propContextMenu(prop)
                         }
                     }
@@ -1711,7 +1711,7 @@ private struct PropActionPane: View {
                 _ = copy
             }
         }
-        Menu("Show on") {
+        Menu("Show on") { let _ = MenuRenderProbe.hit("RightInspectorView:1714:PropActionPane.propContextMenu");
             ForEach(PropOutputTarget.allCases) { target in
                 Button {
                     controller.setPropShowOn(id: prop.id, target: target)
@@ -1720,18 +1720,18 @@ private struct PropActionPane: View {
                 }
             }
         }
-        Menu("Auto Clear") {
+        Menu("Auto Clear") { let _ = MenuRenderProbe.hit("RightInspectorView:1723:PropActionPane.propContextMenu");
             Button("Never") { inspector.setPropAutoClear(id: prop.id, mode: .never); controller.persistStudio() }
             Button("On Next Slide") { inspector.setPropAutoClear(id: prop.id, mode: .onNextSlide); controller.persistStudio() }
             Button("After 5s") { inspector.setPropAutoClear(id: prop.id, mode: .afterDelay(seconds: 5)); controller.persistStudio() }
             Button("After 15s") { inspector.setPropAutoClear(id: prop.id, mode: .afterDelay(seconds: 15)); controller.persistStudio() }
         }
-        Menu("Transition") {
+        Menu("Transition") { let _ = MenuRenderProbe.hit("RightInspectorView:1729:PropActionPane.propContextMenu");
             ForEach(DeskSampleData.slideTransitions, id: \.self) { name in
                 Button(name) { inspector.setPropTransition(id: prop.id, transition: name); controller.persistStudio() }
             }
         }
-        Menu("Collection") {
+        Menu("Collection") { let _ = MenuRenderProbe.hit("RightInspectorView:1734:PropActionPane.propContextMenu");
             ForEach(inspector.collections, id: \.self) { name in
                 Button(name) { controller.assignPropCollection(id: prop.id, collection: name) }
             }
@@ -1840,7 +1840,7 @@ fileprivate struct ProgramPreviewFeedButton: View {
     @Bindable var controller: ShowController
 
     var body: some View {
-        Menu {
+        Menu { let _ = MenuRenderProbe.hit("RightInspectorView:1843:ProgramPreviewFeedButton.body");
             ForEach(PreviewFeed.operatorFeeds) { feed in
                 Button {
                     controller.selectPreviewFeed(feed)
