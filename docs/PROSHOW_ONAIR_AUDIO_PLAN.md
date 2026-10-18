@@ -237,3 +237,8 @@ Join page (foundry/showroom `GuestJoinApp.tsx`): today it attaches every remote 
 - Mic content was only energy tested (no loopback device). After the 11:07 relaunch the built-in mic shot delivered frames that were silent (-120 dB) although the device had signal from ffmpeg; the row correctly showed "No signal for 10 s". Recheck with the operator at the Mac.
 - Soundboard and desktop audio rows untested (project has no pads; no desktop audio source used).
 - Return modes Full and Intercom need Phase 3 to do anything.
+
+### Mic Mode (found Oct 18, 11:40-12:20 GMT)
+- Symptom: the built-in mic shot was LIVE and delivering 48 kHz frames, but the meter sat at -120 and the stream carried almost nothing.
+- Cause: macOS Mic Mode for ProShow is Voice Isolation (`AVCaptureDevice.activeMicrophoneMode` and `preferredMicrophoneMode` both `.voiceIsolation`). It removes steady sound: room tone, a 1 kHz test tone from the speakers (heard by ffmpeg on the same device, absent in ProShow), and would remove music or singing. Speech passes (a `say` test reached -21 dB on the stream). Not TCC (tccd authValue=2, designated requirement unchanged) and not the ducking change.
+- Apps cannot set Mic Mode; the operator chooses it in Control Center while the app uses the mic. ProShow now reports it (`GET /v1/audio/pipeline` `mic_mode`), raises an On-Air Audio alert when a mic is on air in Voice Isolation, and the group menu has "Mic Mode..." which opens the system picker.

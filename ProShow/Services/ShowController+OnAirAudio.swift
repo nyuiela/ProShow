@@ -1,4 +1,5 @@
 import Foundation
+import AVFoundation
 import Observation
 
 struct ProgramMeterReading: Hashable, Sendable {
@@ -76,8 +77,12 @@ final class OnAirAudioMonitor {
             isLive: isLive,
             clippedRecently: reading.clipping
         )
+        var withMicMode = nextAlerts
+        if rows.contains(where: { $0.type == .mic && $0.isOnAir }), MicrophoneModeStatus.isVoiceIsolation {
+            withMicMode.append(OnAirAudioAlert(kind: .micMode, message: MicrophoneModeStatus.voiceIsolationWarning))
+        }
         if rows != sources { sources = rows }
-        if nextAlerts != alerts { alerts = nextAlerts }
+        if withMicMode != alerts { alerts = withMicMode }
         if reading != program { program = reading }
     }
 
@@ -199,6 +204,31 @@ extension ShowController {
             inspector.selectedTab = .backstage
         case .audioTab:
             inspector.selectedTab = .audio
+        }
+    }
+}
+
+
+/// macOS Mic Mode (Control Center) for this app. Voice Isolation strips steady sound such as music,
+/// a held note or room tone and only lets speech through, so a mic that "works" can sound empty on air.
+enum MicrophoneModeStatus {
+    static let voiceIsolationWarning = "Mic Mode is Voice Isolation. Music and room sound are removed. Choose Standard."
+
+    static var active: String { name(AVCaptureDevice.activeMicrophoneMode) }
+    static var preferred: String { name(AVCaptureDevice.preferredMicrophoneMode) }
+    static var isVoiceIsolation: Bool { AVCaptureDevice.activeMicrophoneMode == .voiceIsolation }
+
+    /// Opens the system Mic Mode picker. The user picks Standard there; apps cannot set it.
+    static func showPicker() {
+        AVCaptureDevice.showSystemUserInterface(.microphoneModes)
+    }
+
+    static func name(_ mode: AVCaptureDevice.MicrophoneMode) -> String {
+        switch mode {
+        case .standard: return "standard"
+        case .wideSpectrum: return "wide_spectrum"
+        case .voiceIsolation: return "voice_isolation"
+        @unknown default: return "unknown"
         }
     }
 }

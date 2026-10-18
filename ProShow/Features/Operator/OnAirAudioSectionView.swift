@@ -50,6 +50,9 @@ struct OnAirAudioSectionView: View {
                         controller.clearAllAudioSolos()
                     }
                 }
+                Button("Mic Mode...", systemImage: "mic.badge.xmark") {
+                    MicrophoneModeStatus.showPicker()
+                }
                 Button("Open Audio Tab", systemImage: "slider.vertical.3") {
                     controller.inspector.selectedTab = .audio
                 }

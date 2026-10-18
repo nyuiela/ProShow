@@ -3443,6 +3443,10 @@ final class ShowController {
                 UserDefaults.standard.set(args["expand_master"] == "1", forKey: "proshow.inspector.masterExpanded")
             }
             return ["ok": true, "tab": inspector.selectedTab.rawValue]
+        case "mic_mode_ui":
+            // Opens the macOS Mic Mode picker so the operator can choose Standard.
+            MicrophoneModeStatus.showPicker()
+            return ["ok": true, "active": MicrophoneModeStatus.active, "preferred": MicrophoneModeStatus.preferred]
         case "onair_sim_guest":
             // Visual stand-in for a room guest. Adds a row to On-Air Audio only; nothing is mixed.
             if args["clear"] == "1" {
@@ -8261,6 +8265,7 @@ final class ShowController {
                 "jitter": ProgramAudioJitter.snapshot(),
                 "sources": CaptureAudioSources.snapshot(),
                 "laneDepths": ProgramAACEncoder.laneDepthSummary(),
+                "mic_mode": ["active": MicrophoneModeStatus.active, "preferred": MicrophoneModeStatus.preferred],
             ]))
         }
         if method == "GET", parts == ["v1", "audio", "onair"] {

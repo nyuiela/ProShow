@@ -93,7 +93,7 @@ struct OnAirAudioSource: Identifiable, Hashable, Sendable {
 }
 
 enum OnAirAudioAlertKind: String, Codable, Sendable {
-    case solo, clipping, silence, doubled
+    case solo, clipping, silence, doubled, micMode
 }
 
 struct OnAirAudioAlert: Identifiable, Hashable, Sendable {
