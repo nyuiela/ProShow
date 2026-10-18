@@ -1422,6 +1422,7 @@ enum ProgramPCMBridge {
     /// Headphone program bus. Does not feed the guest return.
     static func appendProgramMixMonitor(_ interleavedStereo: [Float]) {
         appendMonitor(interleavedStereo)
+        MonitorBusCapture.feed(interleavedStereo)
     }
 
     /// Room return (program minus guests). RTMP and recording keep the full mix.

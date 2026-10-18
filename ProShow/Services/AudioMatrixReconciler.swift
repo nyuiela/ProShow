@@ -10,14 +10,16 @@ struct ProgramAudioGatePolicy: Equatable, Sendable {
     /// `cameraHasMic`: a live camera shot with its audio on feeds the mic lane from its own mic.
     static func derive(
         from layers: [MasterLayer],
-        cameraHasMic: (LayerShot) -> Bool = { _ in false }
+        cameraHasMic: (LayerShot) -> Bool = { _ in false },
+        isHeard: (LayerShot) -> Bool = { _ in true }
     ) -> ProgramAudioGatePolicy {
         var mic = false
         var desktop = false
         for layer in layers {
             guard let liveID = layer.liveShotID,
                   let shot = layer.shots.first(where: { $0.id == liveID }),
-                  !shot.isAudioMuted
+                  !shot.isAudioMuted,
+                  isHeard(shot)
             else { continue }
             switch shot.source.sourceType {
             case .systemMicrophone:

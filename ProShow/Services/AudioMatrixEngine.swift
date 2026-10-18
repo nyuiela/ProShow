@@ -1,6 +1,13 @@
 import Foundation
 import Observation
 
+enum AudioListenMode: String, Codable, Sendable, CaseIterable {
+    /// Pre-fader: the source as captured (trim only), even if muted or isolated out.
+    case pfl
+    /// After-fader: exactly what the stream gets from this source.
+    case afl
+}
+
 /// Multi-bus mixer: mic, desktop, guest, slide, and soundboard with ducking, EQ, and a limited master.
 @MainActor
 @Observable
@@ -12,6 +19,9 @@ final class AudioMatrixEngine {
     var duckingEnabled: Bool = true
     var duckingActive: Bool = false
     var programMuted: Bool = false
+    /// Listen (PFL/AFL): operator monitor only. Never persisted, never changes the stream bus.
+    var listenChannelIDs: Set<UUID> = []
+    var listenMode: AudioListenMode = .pfl
     private var channelLimiter: Set<UUID> = []
     private var noiseGate: Set<UUID> = []
 
@@ -198,7 +208,25 @@ final class AudioMatrixEngine {
         install(DefaultSeedData.studioManifest().audioChannels)
     }
 
+    var isListening: Bool { !listenChannelIDs.isEmpty }
+
+    func setListen(id: UUID, on: Bool) {
+        if on { listenChannelIDs.insert(id) } else { listenChannelIDs.remove(id) }
+    }
+
+    func clearListen() {
+        listenChannelIDs.removeAll()
+    }
+
     func outputLevel(for channel: AudioMatrixChannel, bus: AudioOutputBus) -> Double {
+        if bus == .monitor, isListening {
+            // Monitor bus only: the listened channels, everything else silent.
+            guard listenChannelIDs.contains(channel.id), !programMuted, !master.muted else { return 0 }
+            switch listenMode {
+            case .pfl: return AudioDSP.linear(fromDb: channel.resolvedTrimDb)
+            case .afl: return outputLevel(for: channel, bus: .stream)
+            }
+        }
         if programMuted || master.muted { return 0 }
         guard routes(channel, to: bus) else { return 0 }
         if channel.muted { return 0 }

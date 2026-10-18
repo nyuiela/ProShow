@@ -258,18 +258,16 @@ struct BackstageControlPanelView: View {
         VStack(alignment: .leading, spacing: DeskSpace.xs) {
             DeskSectionTitle(title: "Return feed")
             returnFeedPicker
-            Toggle("Intercom", isOn: Binding(
-                get: { controller.backstage.intercomActive },
-                set: { controller.backstage.intercomActive = $0 }
+            Toggle("Talk", isOn: Binding(
+                get: { OnAirAudioControls.shared.talkActive },
+                set: { on in
+                    if on { controller.startTalkback() } else { controller.stopTalkback() }
+                }
             ))
             .font(DeskType.body)
-            .fixedSize(horizontal: false, vertical: true)
-            .help("Talk to the green room.")
-            .accessibilityLabel("Talk to the green room")
-            Text(controller.mixMinusReturnDescription(excludingGuestID: nil))
-                .font(DeskType.micro)
-                .foregroundStyle(ShowSidebarPalette.subtitle)
-                .fixedSize(horizontal: false, vertical: true)
+            .disabled(!controller.liveKitDesk.hasStartedConnection)
+            .help("Talkback to guests. Never on program. Hold T to talk.")
+            .accessibilityLabel("Talk to guests")
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -280,7 +278,7 @@ struct BackstageControlPanelView: View {
     private var returnFeedPicker: some View {
         let selection = Binding(
             get: { controller.backstage.returnFeedMode },
-            set: { controller.backstage.returnFeedMode = $0 }
+            set: { controller.setReturnMode(identity: nil, mode: $0) }
         )
         ViewThatFits(in: .horizontal) {
             Picker("Return feed", selection: selection) {

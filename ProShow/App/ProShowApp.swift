@@ -150,6 +150,26 @@ struct ProShowApp: App {
                     .keyboardShortcut("z", modifiers: [.command, .shift])
                     .disabled(!session.controller.editors.canRedo)
             }
+            CommandMenu("Audio") {
+                let audioKeysOff = session.phase != .desk || session.controller.editors.isEditingText
+                ForEach(0..<5, id: \.self) { index in
+                    Button("Mute Layer \(index + 1) Audio") { session.controller.toggleLayerAudioShortcut(index) }
+                        .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: [.option])
+                        .disabled(audioKeysOff)
+                }
+                Divider()
+                Button("Mute Mic") { session.controller.toggleMicChannelShortcut() }
+                    .keyboardShortcut("m", modifiers: [.option])
+                    .disabled(audioKeysOff)
+                Button("Clear Isolate") { session.controller.clearAllAudioSolos() }
+                    .keyboardShortcut("s", modifiers: [.option, .shift])
+                    .disabled(audioKeysOff)
+                Button("Clear Listen") { session.controller.clearOnAirListen() }
+                    .keyboardShortcut("l", modifiers: [.option])
+                    .disabled(audioKeysOff)
+                Divider()
+                Text("Hold T to Talk")
+            }
             CommandGroup(after: .pasteboard) {
                 Divider()
                 Button("Cut Object") { session.controller.editors.cutSelectedObjects() }

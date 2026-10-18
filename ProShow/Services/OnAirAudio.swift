@@ -50,7 +50,7 @@ enum OnAirAudioState: String, Codable, Sendable {
         case .muted: "MUTED"
         case .notRouted: "NOT ROUTED"
         case .noSignal: "NO SIGNAL"
-        case .soloOff: "SOLO OFF"
+        case .soloOff: "SILENCED"
         }
     }
 }
@@ -99,6 +99,18 @@ struct OnAirAudioSource: Identifiable, Hashable, Sendable {
     /// Where the sound actually comes from when it is not the row's own device (camera mic).
     var via: String?
     var fix: OnAirAudioFix?
+    /// Full explanation for the tooltip. The row itself only shows the terse reason.
+    var help: String?
+    /// Control targets.
+    var role: AudioChannelRole?
+    var layerIndex: Int?
+    var shotID: UUID?
+    var guestIdentity: String?
+    /// Control state, filled by the controller after resolve.
+    var muted = false
+    var gainDb: Double = 0
+    var listening = false
+    var follow: AudioFollowMode?
 
     var isOnAir: Bool { state == .live }
 
@@ -115,7 +127,34 @@ struct OnAirAudioSource: Identifiable, Hashable, Sendable {
             "simulated": simulated,
             "via": via ?? NSNull(),
             "fix": fix?.key ?? NSNull(),
+            "help": help ?? NSNull(),
+            "role": role?.rawValue ?? NSNull(),
+            "layer": layerIndex.map { $0 + 1 } ?? NSNull(),
+            "guest_identity": guestIdentity ?? NSNull(),
+            "muted": muted,
+            "gain_db": (gainDb * 10).rounded() / 10,
+            "listening": listening,
+            "follow": (follow ?? .alwaysOn).rawValue,
         ]
+    }
+}
+
+struct OnAirAudioBlock: Sendable {
+    var state: OnAirAudioState
+    var reason: String
+    var help: String
+    init(_ state: OnAirAudioState, _ reason: String, _ help: String) {
+        self.state = state
+        self.reason = reason
+        self.help = help
+    }
+}
+
+extension OnAirAudioSource {
+    mutating func apply(_ block: OnAirAudioBlock) {
+        state = block.state
+        reason = block.reason
+        help = block.help
     }
 }
 
@@ -163,6 +202,8 @@ struct OnAirAudioInputs: Sendable {
     var camerasWithoutMic: Set<UUID> = []
     /// Seconds a source has been under the signal floor while its path is open (keyed by source id).
     var silentSeconds: [String: TimeInterval] = [:]
+    /// Live shots set to follow a slide that is not live now.
+    var followHeld: Set<UUID> = []
 }
 
 enum OnAirAudioResolver {
@@ -192,12 +233,13 @@ enum OnAirAudioResolver {
                 id: id, name: slide.name, type: .slide, origin: "S",
                 state: .live, reason: nil, peakDb: slide.peakDb, jump: .slide
             )
+            row.role = .slide
             if let block = slide.blockReason {
                 row.state = .muted
-                row.reason = "Slide audio off: \(block)"
+                row.reason = block
+                row.help = "Slide audio off: \(block)"
             } else if let block = channelBlock(role: .slide, guestID: nil, input: input) {
-                row.state = block.state
-                row.reason = block.reason
+                row.apply(block)
             }
             rows.append(row)
         }
@@ -206,9 +248,9 @@ enum OnAirAudioResolver {
                 id: "soundboard", name: "Soundboard", type: .soundboard, origin: "SB",
                 state: .live, reason: nil, peakDb: channel(.soundboard, input)?.peak ?? -120, jump: .audioTab
             )
+            row.role = .soundboard
             if let block = channelBlock(role: .soundboard, guestID: nil, input: input) {
-                row.state = block.state
-                row.reason = block.reason
+                row.apply(block)
             }
             rows.append(row)
         }
@@ -217,12 +259,14 @@ enum OnAirAudioResolver {
                 id: "guest:\(guest.identity)", name: guest.name, type: .guest, origin: "Room",
                 state: .live, reason: nil, peakDb: guest.peakDb ?? -120, jump: .room, simulated: guest.simulated
             )
+            row.role = .guest
+            row.guestIdentity = guest.identity
             if !guest.hasMic {
                 row.state = .notRouted
-                row.reason = "No mic published from the room"
+                row.reason = "No mic"
+                row.help = "This guest has not published a mic"
             } else if let block = channelBlock(role: .guest, guestID: guest.guestID, input: input) {
-                row.state = block.state
-                row.reason = block.reason
+                row.apply(block)
             }
             rows.append(row)
         }
@@ -230,8 +274,8 @@ enum OnAirAudioResolver {
     }
 
     /// Ordered checks shared by every source that goes through a mixer channel.
-    static func channelBlock(role: AudioChannelRole, guestID: UUID?, input: OnAirAudioInputs) -> (state: OnAirAudioState, reason: String)? {
-        if input.programMuted { return (.muted, "Program audio is muted") }
+    static func channelBlock(role: AudioChannelRole, guestID: UUID?, input: OnAirAudioInputs) -> OnAirAudioBlock? {
+        if input.programMuted { return OnAirAudioBlock(.muted, "Program muted", "Program audio is muted") }
         let strip: AudioMatrixChannel?
         if let guestID {
             strip = input.channels.first { $0.linkedGuestID == guestID }
@@ -240,20 +284,21 @@ enum OnAirAudioResolver {
         }
         guard let strip else {
             // Guests without a strip still mix at unity; other roles need a strip.
-            return guestID == nil ? (.notRouted, "No mixer channel") : nil
+            return guestID == nil ? OnAirAudioBlock(.notRouted, "No channel", "No mixer channel") : nil
         }
         if strip.muted {
-            return (.muted, guestID == nil ? "Muted on the \(strip.name) channel" : "Muted by the desk")
+            return OnAirAudioBlock(.muted, "Muted", guestID == nil ? "Muted on the \(strip.name) channel" : "Muted by the desk")
         }
         if !(strip.bus == .all || strip.bus == .both || strip.bus == .stream) {
-            return (.notRouted, "\(strip.name) channel is not sent to the stream")
+            return OnAirAudioBlock(.notRouted, "Not to stream", "\(strip.name) channel is not sent to the stream")
         }
         let soloed = input.channels.filter(\.solo)
         if !soloed.isEmpty, !strip.solo {
-            return (.soloOff, "Silenced by solo on \(soloed.map(\.name).joined(separator: ", "))")
+            let names = soloed.map(\.name).joined(separator: ", ")
+            return OnAirAudioBlock(.soloOff, "Isolate: \(names)", "Silenced while Isolate is on for \(names)")
         }
         if !input.captureOpen.contains(role) {
-            return (.notRouted, "\(strip.name) gate is closed")
+            return OnAirAudioBlock(.notRouted, "Gate closed", "\(strip.name) gate is closed")
         }
         return nil
     }
@@ -269,13 +314,13 @@ enum OnAirAudioResolver {
         var out: [OnAirAudioAlert] = []
         let soloed = channels.filter(\.solo).map(\.name)
         if !soloed.isEmpty {
-            out.append(OnAirAudioAlert(kind: .solo, message: "Solo on \(soloed.joined(separator: ", ")). Other audio is silent."))
+            out.append(OnAirAudioAlert(kind: .solo, message: "Isolate: \(soloed.joined(separator: ", "))"))
         }
         if clippedRecently {
-            out.append(OnAirAudioAlert(kind: .clipping, message: "Program is clipping. Lower the loudest source."))
+            out.append(OnAirAudioAlert(kind: .clipping, message: "Clipping"))
         }
         if isLive, programSilentSeconds >= 5 {
-            out.append(OnAirAudioAlert(kind: .silence, message: "Program silent for \(Int(programSilentSeconds)) s."))
+            out.append(OnAirAudioAlert(kind: .silence, message: "Silent \(Int(programSilentSeconds)) s"))
         }
         var doubled: [String] = []
         for (role, keys) in capture where Set(keys).count > 1 {
@@ -286,7 +331,8 @@ enum OnAirAudioResolver {
             doubled.append("two mics")
         }
         if !doubled.isEmpty {
-            out.append(OnAirAudioAlert(kind: .doubled, message: "Doubled source: \(doubled.joined(separator: ", ")) live. Only one is heard."))
+            let label = doubled.map { $0 == "two mics" ? "Two mics" : "Two screens" }.joined(separator: ", ")
+            out.append(OnAirAudioAlert(kind: .doubled, message: label))
         }
         return out
     }
@@ -313,24 +359,35 @@ enum OnAirAudioResolver {
             id: "shot:\(shot.id.uuidString)", name: shot.name, type: type, origin: tag,
             state: .live, reason: nil, peakDb: -120, jump: .layer(layerIndex)
         )
+        row.layerIndex = layerIndex
+        row.shotID = shot.id
+        row.follow = shot.audioFollow
+        switch type {
+        case .mic, .camera: row.role = .microphone
+        case .desktop: row.role = .desktop
+        default: break
+        }
         guard live else {
             // Only sources whose job is audio get a "not taken" row; idle cameras and screens are noise.
             guard type == .mic || shot.source.sourceType == .systemAudioCapture else { return nil }
             row.state = .notRouted
-            row.reason = "Not live: shot added, not taken"
+            row.reason = "Not taken"
+            row.help = "Shot added, not taken live"
             return row
         }
         switch type {
         case .camera:
             if shot.source.sourceType == .rendezvousGuest {
                 row.state = .notRouted
-                row.reason = "Picture only. Room audio is on the guest row"
+                row.reason = "Picture only"
+                row.help = "Room audio is on the guest row"
                 return row
             }
             return cameraRow(row, shot: shot, layerIndex: layerIndex, input: input, liveMicKeys: liveMicKeys)
         case .network:
             row.state = .notRouted
-            row.reason = "No audio path for NDI/SRT yet"
+            row.reason = "No audio path"
+            row.help = "No audio path for NDI/SRT yet"
             return row
         default:
             break
@@ -339,12 +396,18 @@ enum OnAirAudioResolver {
         row.peakDb = channel(role, input)?.peak ?? -120
         if shot.isAudioMuted {
             row.state = .muted
-            row.reason = "Muted on this layer"
+            row.reason = "Muted"
+            row.help = "Muted on this layer"
+            return row
+        }
+        if input.followHeld.contains(shot.id) {
+            row.state = .held
+            row.reason = "Follows slide"
+            row.help = "Heard only while its slide is live"
             return row
         }
         if let block = channelBlock(role: role, guestID: nil, input: input) {
-            row.state = block.state
-            row.reason = block.reason
+            row.apply(block)
             return row
         }
         if type == .mic, liveMicKeys.count > 1 {
@@ -352,19 +415,22 @@ enum OnAirAudioResolver {
             let owner = input.micOwner ?? liveMicKeys.first
             if let owner, owner != key {
                 row.state = .armed
-                row.reason = "Second mic: \(ownerName(owner, input)) owns the mic"
+                row.reason = "Mic in use"
+                row.help = "\(ownerName(owner, input)) owns the mic"
                 row.peakDb = -120
                 return row
             }
         }
         if type == .desktop, input.desktopHeldByMic {
             row.state = .held
-            row.reason = "Held: the mic owns the mix"
+            row.reason = "Held by mic"
+            row.help = "The mic owns the mix"
             return row
         }
         if (input.silentSeconds[row.id] ?? 0) >= noSignalAfter {
             row.state = .noSignal
-            row.reason = "No signal for \(Int(noSignalAfter)) s"
+            row.reason = "No signal"
+            row.help = "No signal for \(Int(noSignalAfter)) s"
         }
         return row
     }
@@ -382,17 +448,20 @@ enum OnAirAudioResolver {
         if !liveMicKeys.isEmpty {
             row.state = .armed
             let owner = ownerName(input.micOwner ?? liveMicKeys[0], input)
-            row.reason = owner == "Another mic" ? "Picture only. A mic shot owns the mic" : "Picture only. The \(owner) shot owns the mic"
+            row.reason = "Mic in use"
+            row.help = owner == "Another mic" ? "A mic shot owns the mic" : "The \(owner) shot owns the mic"
             return row
         }
         guard let micName = input.cameraMics[shot.id] else {
             row.state = .notRouted
             if shot.isAudioMuted, !input.camerasWithoutMic.contains(shot.id) {
                 row.state = .muted
-                row.reason = "Camera mic is off on this layer"
+                row.reason = "Muted"
+                row.help = "Camera mic is off on this layer"
                 row.fix = .useCameraMic(layer: layerIndex, shotID: shot.id)
             } else {
-                row.reason = "Picture only. No mic found for this camera"
+                row.reason = "No mic"
+                row.help = "No mic found for this camera"
                 row.fix = .addMic
             }
             return row
@@ -401,18 +470,25 @@ enum OnAirAudioResolver {
         let owner = cameraMicOwner(input)
         if let owner, owner != shot.id {
             row.state = .armed
-            row.reason = "Picture only. Another camera's mic is on air"
+            row.reason = "Mic in use"
+            row.help = "Another camera's mic is on air"
+            return row
+        }
+        if input.followHeld.contains(shot.id) {
+            row.state = .held
+            row.reason = "Follows slide"
+            row.help = "Heard only while its slide is live"
             return row
         }
         row.peakDb = channel(.microphone, input)?.peak ?? -120
         if let block = channelBlock(role: .microphone, guestID: nil, input: input) {
-            row.state = block.state
-            row.reason = block.reason
+            row.apply(block)
             return row
         }
         if (input.silentSeconds[row.id] ?? 0) >= noSignalAfter {
             row.state = .noSignal
-            row.reason = "No signal for \(Int(noSignalAfter)) s from \(micName)"
+            row.reason = "No signal"
+            row.help = "No signal for \(Int(noSignalAfter)) s from \(micName)"
         }
         return row
     }

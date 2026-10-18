@@ -185,8 +185,7 @@ extension ShowController {
 
     func toggleBackstageIntercom() {
         guard backstage.room.intercomEnabled else { return }
-        backstage.intercomActive.toggle()
-        backstage.returnFeedMode = backstage.intercomActive ? .intercomOnly : .programMixMinus
+        setReturnMode(identity: nil, mode: backstage.intercomActive ? .programMixMinus : .intercomOnly)
     }
 
     func cycleBackstageGuestOnProgram() {

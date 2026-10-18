@@ -211,7 +211,7 @@ enum BackstageReturnFeedMode: String, Codable, Sendable, CaseIterable {
     /// Compact labels for the narrow action-inspector column.
     var pickerShortLabel: String {
         switch self {
-        case .programMixMinus: "Mix−"
+        case .programMixMinus: "Mix"
         case .programFull: "Full"
         case .intercomOnly: "Intercom"
         }

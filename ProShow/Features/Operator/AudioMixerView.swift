@@ -539,7 +539,8 @@ private struct StudioAudioStrip: View {
                     controller.audioMatrix.toggleMute(id: channel.id)
                     controller.tickProgram()
                 }
-                flag("S", on: channel.solo, tint: ProShowTheme.statusOn, label: "\(channel.name) solo") {
+                flag("I", on: channel.solo, tint: ProShowTheme.statusOn, label: "\(channel.name) isolate") {
+                    guard channel.solo || controller.confirmIsolateIfLive(channel.name) else { return }
                     controller.audioMatrix.toggleSolo(id: channel.id)
                     controller.tickProgram()
                 }

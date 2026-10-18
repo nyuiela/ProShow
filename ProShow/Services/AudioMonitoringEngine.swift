@@ -16,6 +16,7 @@ final class AudioMonitoringEngine {
     private enum Storage {
         static let localSpeakerMuted = "proshow.desk.localSpeakerMuted"
         static let outputDeviceUID = "proshow.desk.preferredOutputDeviceUID"
+        static let listenDeviceUID = "proshow.desk.listenDeviceUID"
     }
 
     enum MonitorMode: String, Sendable {
@@ -24,7 +25,7 @@ final class AudioMonitoringEngine {
     }
 
     var monitorMode: MonitorMode = .programMix
-    var monitorVolume: Float = 1
+    var monitorVolume: Float = 1 { didSet { ProgramAudioMonitorBridge.renderVolume = effectiveMonitorVolume } }
     /// Mutes this Mac's speakers / headphones only — stream and ISO encode are unchanged.
     var localSpeakerMuted: Bool {
         didSet {
@@ -43,16 +44,42 @@ final class AudioMonitoringEngine {
             notifyLocalOutputPolicyChanged()
         }
     }
+    /// Headphones for Listen (PFL/AFL). nil = the monitor output above.
+    var listenDeviceUID: String? {
+        didSet {
+            if let listenDeviceUID {
+                UserDefaults.standard.set(listenDeviceUID, forKey: Storage.listenDeviceUID)
+            } else {
+                UserDefaults.standard.removeObject(forKey: Storage.listenDeviceUID)
+            }
+            notifyLocalOutputPolicyChanged()
+        }
+    }
+    /// Set by the mixer while any channel is listened.
+    var isListening = false {
+        didSet { if isListening != oldValue { notifyLocalOutputPolicyChanged() } }
+    }
+
+    /// Where the monitor bus plays now: the Listen headphones while listening, else the monitor output.
+    var activeOutputDeviceUID: String? {
+        isListening ? (listenDeviceUID ?? preferredOutputDeviceUID) : preferredOutputDeviceUID
+    }
+
     private(set) var leftPeakDb: Double = -120
     private(set) var rightPeakDb: Double = -120
 
     var localSpeakerScalar: Float { localSpeakerMuted ? 0 : 1 }
 
-    var effectiveMonitorVolume: Float { monitorVolume * localSpeakerScalar }
+    /// Listening on chosen headphones ignores "Mute This Mac's Speakers" (that mute is for the room).
+    var effectiveMonitorVolume: Float {
+        monitorVolume * ((isListening && listenDeviceUID != nil) ? 1 : localSpeakerScalar)
+    }
 
     private init() {
         localSpeakerMuted = UserDefaults.standard.bool(forKey: Storage.localSpeakerMuted)
         preferredOutputDeviceUID = UserDefaults.standard.string(forKey: Storage.outputDeviceUID)
+        listenDeviceUID = UserDefaults.standard.string(forKey: Storage.listenDeviceUID)
+        ProgramAudioMonitorBridge.renderVolume = effectiveMonitorVolume
     }
 
     func toggleLocalSpeakerMuted() {
@@ -69,6 +96,7 @@ final class AudioMonitoringEngine {
     }
 
     private func notifyLocalOutputPolicyChanged() {
+        ProgramAudioMonitorBridge.renderVolume = effectiveMonitorVolume
         ProgramAudioMonitorBridge.shared.refreshOutputRouting()
         PreviewCueMonitor.shared.refreshOutputRouting()
     }

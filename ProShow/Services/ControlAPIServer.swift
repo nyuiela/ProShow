@@ -102,6 +102,10 @@ enum ControlHTTP {
             || parts == ["v1", "backstage", "disconnect"] {
             return method == "POST"
         }
+        if parts.count >= 3, parts[0] == "v1", parts[1] == "audio",
+           ["source", "listen", "isolate", "returns", "talkback", "monitor", "follow"].contains(parts[2]) {
+            return method == "POST" || method == "GET"
+        }
         if parts == ["v1", "preflight"] || parts == ["v1", "telemetry"] || parts == ["v1", "ws"] {
             return method == "GET" || method == "POST"
         }

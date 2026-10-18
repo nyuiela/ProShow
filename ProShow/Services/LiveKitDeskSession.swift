@@ -120,6 +120,28 @@ final class LiveKitDeskBridge {
         #endif
     }
 
+    func publishReturns(modes: [String: String], defaultMode: String, muted: [String]) {
+        #if canImport(LiveKit)
+        session?.publishReturns(modes: modes, defaultMode: defaultMode, muted: muted)
+        #endif
+    }
+
+    func publishTalk(on: Bool, targets: [String]) {
+        #if canImport(LiveKit)
+        session?.publishTalk(on: on, targets: targets)
+        #endif
+    }
+
+    /// Sendable sender for talkback packets (called off the main actor).
+    func intercomSender() -> (@Sendable (Data, [String]) -> Void)? {
+        #if canImport(LiveKit)
+        guard let session else { return nil }
+        return { [weak session] packet, targets in session?.sendIntercom(packet, targets: targets) }
+        #else
+        return nil
+        #endif
+    }
+
     func setGuestMicrophoneMuted(identity: String, muted: Bool) {
         #if canImport(LiveKit)
         session?.setGuestMicrophoneMuted(identity: identity, muted: muted)
@@ -158,6 +180,7 @@ final class LiveKitDeskSession: NSObject, RoomDelegate {
     private var hiddenVideoGuests: Set<String> = []
     private var programIdentities: [String] = []
     private var tallySeq = 0
+    private var lastReturnsJSON = ""
     private var admitInFlight: Set<String> = []
     private let programPump = ProgramFramePump()
     private var programTrack: LocalVideoTrack?
@@ -349,6 +372,48 @@ final class LiveKitDeskSession: NSObject, RoomDelegate {
             try? await room.localParticipant.publish(
                 data: data,
                 options: DataPublishOptions(topic: "ps.tally", reliable: true)
+            )
+        }
+    }
+
+    /// Per-guest return feed modes ("mix" | "full" | "intercom") plus desk mutes, read by the join page.
+    func publishReturns(modes: [String: String], defaultMode: String, muted: [String]) {
+        let packet: [String: Any] = ["modes": modes, "default": defaultMode, "muted": muted.sorted()]
+        guard let room,
+              let data = try? JSONSerialization.data(withJSONObject: packet, options: [.sortedKeys]),
+              let text = String(data: data, encoding: .utf8),
+              text != lastReturnsJSON
+        else { return }
+        lastReturnsJSON = text
+        Task {
+            try? await room.localParticipant.set(attributes: ["ps.returns": text])
+            try? await room.localParticipant.publish(
+                data: data,
+                options: DataPublishOptions(topic: "ps.returns", reliable: true)
+            )
+        }
+    }
+
+    /// Talkback state for the guest indicator. `targets` empty = everyone.
+    func publishTalk(on: Bool, targets: [String]) {
+        let packet: [String: Any] = ["on": on, "targets": targets]
+        guard let room, let data = try? JSONSerialization.data(withJSONObject: packet) else { return }
+        Task {
+            try? await room.localParticipant.publish(
+                data: data,
+                options: DataPublishOptions(topic: "ps.talk", reliable: true)
+            )
+        }
+    }
+
+    /// One talkback packet, lossy, to the targets (empty = every guest). Never part of the program track.
+    nonisolated func sendIntercom(_ packet: Data, targets: [String]) {
+        Task { @MainActor [weak self] in
+            guard let room = self?.room else { return }
+            let destinations = targets.map { Participant.Identity(from: $0) }
+            try? await room.localParticipant.publish(
+                data: packet,
+                options: DataPublishOptions(destinationIdentities: destinations, topic: "ps.ic", reliable: false)
             )
         }
     }

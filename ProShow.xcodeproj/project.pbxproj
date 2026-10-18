@@ -56,6 +56,8 @@
 		A10000000000000000000027 /* SoundboardStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000027 /* SoundboardStore.swift */; };
 		A10000000000000000000028 /* IsoRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000028 /* IsoRecorder.swift */; };
 		8AE64D35F445B5E6513D7F1C /* ShowController+OnAirAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = 210CDB089B347FEEA793099C /* ShowController+OnAirAudio.swift */; };
+		B162F56202DD4BDD812295B4 /* OnAirAudioControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ECD0E532A5C58254EBCE29D /* OnAirAudioControls.swift */; };
+		4067EAF0E65CD35384009DD6 /* TalkbackEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37C176C4F8F6EA7B483FC581 /* TalkbackEngine.swift */; };
 		918289B4CE06BC726E40E021 /* OnAirAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85C6ABA275E835BF795C055F /* OnAirAudio.swift */; };
 		A10000000000000000000029 /* LiveChatEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000029 /* LiveChatEngine.swift */; };
 		A1000000000000000000002A /* ProShowVirtualCam.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002A /* ProShowVirtualCam.swift */; };
@@ -155,6 +157,7 @@
 		A100000000000000000000A3 /* PlatformLiveApiService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A3 /* PlatformLiveApiService.swift */; };
 		A100000000000000000000A4 /* GoLiveSetupSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A4 /* GoLiveSetupSheet.swift */; };
 		AA469E10A68C1B02BBAF5052 /* OnAirAudioSectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28408C03F2E0D54ABB91D279 /* OnAirAudioSectionView.swift */; };
+		9AFD35FFAE90A09BCED856FC /* OnAirReturnsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 254A9066E64990753F37036B /* OnAirReturnsViews.swift */; };
 		A100000000000000000000A5 /* ShowController+GoLive.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A5 /* ShowController+GoLive.swift */; };
 		A100000000000000000000A6 /* RemoteControlRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A6 /* RemoteControlRuntime.swift */; };
 		A100000000000000000000A7 /* ControlWebSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A7 /* ControlWebSocket.swift */; };
@@ -469,6 +472,8 @@
 		A20000000000000000000027 /* SoundboardStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundboardStore.swift; sourceTree = "<group>"; };
 		A20000000000000000000028 /* IsoRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IsoRecorder.swift; sourceTree = "<group>"; };
 		210CDB089B347FEEA793099C /* ShowController+OnAirAudio.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "ShowController+OnAirAudio.swift"; sourceTree = "<group>"; };
+		3ECD0E532A5C58254EBCE29D /* OnAirAudioControls.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OnAirAudioControls.swift; sourceTree = "<group>"; };
+		37C176C4F8F6EA7B483FC581 /* TalkbackEngine.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TalkbackEngine.swift; sourceTree = "<group>"; };
 		85C6ABA275E835BF795C055F /* OnAirAudio.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OnAirAudio.swift; sourceTree = "<group>"; };
 		A20000000000000000000029 /* LiveChatEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveChatEngine.swift; sourceTree = "<group>"; };
 		A2000000000000000000002A /* ProShowVirtualCam.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProShowVirtualCam.swift; sourceTree = "<group>"; };
@@ -569,6 +574,7 @@
 		A200000000000000000000A3 /* PlatformLiveApiService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformLiveApiService.swift; sourceTree = "<group>"; };
 		A200000000000000000000A4 /* GoLiveSetupSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoLiveSetupSheet.swift; sourceTree = "<group>"; };
 		28408C03F2E0D54ABB91D279 /* OnAirAudioSectionView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OnAirAudioSectionView.swift; sourceTree = "<group>"; };
+		254A9066E64990753F37036B /* OnAirReturnsViews.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OnAirReturnsViews.swift; sourceTree = "<group>"; };
 		A200000000000000000000A5 /* ShowController+GoLive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ShowController+GoLive.swift"; sourceTree = "<group>"; };
 		A200000000000000000000A6 /* RemoteControlRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteControlRuntime.swift; sourceTree = "<group>"; };
 		A200000000000000000000A7 /* ControlWebSocket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlWebSocket.swift; sourceTree = "<group>"; };
@@ -960,6 +966,8 @@
 				A20000000000000000000027 /* SoundboardStore.swift */,
 				A20000000000000000000028 /* IsoRecorder.swift */,
 				210CDB089B347FEEA793099C /* ShowController+OnAirAudio.swift */,
+				3ECD0E532A5C58254EBCE29D /* OnAirAudioControls.swift */,
+				37C176C4F8F6EA7B483FC581 /* TalkbackEngine.swift */,
 				85C6ABA275E835BF795C055F /* OnAirAudio.swift */,
 				B200000000000000000000B1 /* ProgramOutputMode.swift */,
 				B200000000000000000000B2 /* ProgramRenderContract.swift */,
@@ -1231,6 +1239,7 @@
 				C7E410000000000000000012 /* PhoneCanvasMonitorView.swift */,
 				A200000000000000000000A4 /* GoLiveSetupSheet.swift */,
 				28408C03F2E0D54ABB91D279 /* OnAirAudioSectionView.swift */,
+				254A9066E64990753F37036B /* OnAirReturnsViews.swift */,
 				C7E300000000000000000002 /* EncoderPresetPickerView.swift */,
 				A200000000000000000000A9 /* ConnectDestinationSheet.swift */,
 				A20000000000000000000041 /* MapWorkspaceView.swift */,
@@ -1769,6 +1778,7 @@
 				C7E410000000000000000011 /* PhoneCanvasMonitorView.swift in Sources */,
 				A100000000000000000000A4 /* GoLiveSetupSheet.swift in Sources */,
 				AA469E10A68C1B02BBAF5052 /* OnAirAudioSectionView.swift in Sources */,
+				9AFD35FFAE90A09BCED856FC /* OnAirReturnsViews.swift in Sources */,
 				C7E300000000000000000001 /* EncoderPresetPickerView.swift in Sources */,
 				A100000000000000000000A5 /* ShowController+GoLive.swift in Sources */,
 				C6D100000000000000000040 /* ShowController+WorkspaceToolbar.swift in Sources */,
@@ -1803,6 +1813,8 @@
 				A10000000000000000000027 /* SoundboardStore.swift in Sources */,
 				A10000000000000000000028 /* IsoRecorder.swift in Sources */,
 				8AE64D35F445B5E6513D7F1C /* ShowController+OnAirAudio.swift in Sources */,
+				B162F56202DD4BDD812295B4 /* OnAirAudioControls.swift in Sources */,
+				4067EAF0E65CD35384009DD6 /* TalkbackEngine.swift in Sources */,
 				918289B4CE06BC726E40E021 /* OnAirAudio.swift in Sources */,
 				B100000000000000000000B1 /* ProgramOutputMode.swift in Sources */,
 				B100000000000000000000B2 /* ProgramRenderContract.swift in Sources */,

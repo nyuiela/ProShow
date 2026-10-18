@@ -32,6 +32,7 @@ final class OnAirAudioMonitor {
     func attach(_ controller: ShowController) {
         self.controller = controller
         guard timer == nil else { return }
+        OnAirAudioControls.shared.installTalkKey(controller)
         let timer = Timer(timeInterval: 0.2, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.refresh() }
         }
@@ -50,7 +51,8 @@ final class OnAirAudioMonitor {
         let now = Date()
         var input = controller.onAirAudioInputs()
         input.silentSeconds = silentSince.mapValues { now.timeIntervalSince($0) }
-        let rows = OnAirAudioResolver.resolve(input)
+        let rows = controller.decorateOnAirRows(OnAirAudioResolver.resolve(input))
+        controller.publishReturnsState()
         var nextSilent: [String: Date] = [:]
         for row in rows where row.state == .live || row.state == .noSignal {
             guard row.type == .mic || row.type == .desktop || row.type == .slide || row.via != nil else { continue }
@@ -79,7 +81,7 @@ final class OnAirAudioMonitor {
         )
         var withMicMode = nextAlerts
         if rows.contains(where: { ($0.type == .mic || $0.via != nil) && $0.isOnAir }), MicrophoneModeStatus.isVoiceIsolation {
-            withMicMode.append(OnAirAudioAlert(kind: .micMode, message: MicrophoneModeStatus.voiceIsolationWarning))
+            withMicMode.append(OnAirAudioAlert(kind: .micMode, message: "Voice Isolation"))
         }
         if rows != sources { sources = rows }
         if withMicMode != alerts { alerts = withMicMode }
@@ -123,6 +125,7 @@ extension ShowController {
         input.desktopHeldByMic = ProgramStreamAudioGates.isDesktopHeldForMicrophone()
         input.slide = onAirSlideAudio()
         input.soundboardPlaying = !soundboard.playing.isEmpty
+        input.followHeld = followHeldShotIDs
         for layer in masterLayers {
             guard let liveID = layer.liveShotID,
                   let shot = layer.shots.first(where: { $0.id == liveID }),
@@ -168,28 +171,37 @@ extension ShowController {
     }
 
     var onAirReturnsSummary: [String: Any] {
-        [
+        let counts = onAirReturnCounts
+        return [
             "room_connected": liveKitDesk.hasStartedConnection,
             "room_return": liveKitGuestReturnActive,
             "mode": backstage.returnFeedMode.rawValue,
+            "default": backstage.returnFeedMode.wireKey,
             "intercom": backstage.intercomActive,
             "guests": liveKitDesk.guests.count,
+            "modes": Dictionary(uniqueKeysWithValues: liveKitDesk.guests.map { ($0.identity, returnMode(for: $0.identity).wireKey) }),
+            "counts": ["mix": counts.mix, "full": counts.full, "intercom": counts.intercom],
+            "talk": [
+                "active": OnAirAudioControls.shared.talkActive,
+                "target": OnAirAudioControls.shared.talkTarget ?? NSNull(),
+                "packets": Int(OnAirAudioControls.shared.talkPacketsSent),
+                "device": OnAirAudioControls.shared.talkDeviceID ?? NSNull(),
+            ] as [String: Any],
         ]
     }
 
-    /// One line for the group footer. Honest about today's wiring: the room always hears
-    /// the program without guests (guests hear each other directly). Full and Intercom are
-    /// selectable but do not change the return yet (plan phase 3).
+    /// Group footer, terse: "Room off", "Return off", or "2 guests · Mix 1 · Full 1".
     var onAirReturnsLine: String {
         guard liveKitDesk.hasStartedConnection else { return "Room off" }
+        guard liveKitGuestReturnActive else { return "Return off" }
         let count = liveKitDesk.guests.count
-        let guests = "\(count) guest\(count == 1 ? "" : "s")"
-        guard liveKitGuestReturnActive else { return "Room: return off. \(guests)." }
-        var line = "Room hears program without guests. \(guests)."
-        if backstage.returnFeedMode != .programMixMinus || backstage.intercomActive {
-            line += " Full and Intercom are not wired yet."
-        }
-        return line
+        guard count > 0 else { return "No guests" }
+        let counts = onAirReturnCounts
+        var parts = ["\(count) guest\(count == 1 ? "" : "s")"]
+        if counts.mix > 0 { parts.append("Mix \(counts.mix)") }
+        if counts.full > 0 { parts.append("Full \(counts.full)") }
+        if counts.intercom > 0 { parts.append("Intercom \(counts.intercom)") }
+        return parts.joined(separator: " · ")
     }
 
     var soloedAudioChannelNames: [String] {

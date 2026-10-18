@@ -109,7 +109,9 @@ final class CompositorEngine {
             setAudienceLook(look)
         }
         if let media = cue.layers.mediaAction {
-            if media.clearsLayer {
+            if media.clearsLayer, mediaAudioAlwaysOn, stack.media != nil {
+                // Always on: the media (and its audio) carries across slides that bring none.
+            } else if media.clearsLayer {
                 clearProgramMedia()
                 clear(.media)
             } else {
@@ -216,6 +218,9 @@ final class CompositorEngine {
         stack.media = media
         restore(.media)
     }
+
+    /// Media audio mode. false = follow slide (default): the next slide clears it.
+    var mediaAudioAlwaysOn = false
 
     func clearProgramMedia() {
         if stack.media != nil {

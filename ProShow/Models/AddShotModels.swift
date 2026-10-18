@@ -219,6 +219,11 @@ public struct SourceGroup: Identifiable, Equatable, Sendable {
     }
 }
 
+public enum AudioFollowMode: String, Codable, Sendable, CaseIterable {
+    case alwaysOn
+    case followSlide
+}
+
 public struct LayerShot: Identifiable, Hashable, Codable, Sendable {
     public var id: UUID
     public var name: String
@@ -226,6 +231,10 @@ public struct LayerShot: Identifiable, Hashable, Codable, Sendable {
     public var isCopy: Bool
     public var createdAt: Date
     public var audioMuted: Bool? = nil
+    /// nil = always on. `.followSlide`: heard only while the slide it was taken on is live.
+    public var audioFollow: AudioFollowMode? = nil
+    /// Slide this shot's audio follows (set with Follow Slide). nil with followSlide = always heard.
+    public var audioFollowSlideID: UUID? = nil
 
     public init(
         id: UUID = UUID(),

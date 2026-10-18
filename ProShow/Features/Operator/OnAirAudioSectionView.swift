@@ -1,11 +1,12 @@
 import SwiftUI
 
-/// On-Air Audio: what the stream hears right now, what it does not hear, and why.
-/// Visibility only. Rows jump to where the source can be fixed.
+/// On-Air Audio: what the stream hears, what it does not and why, with per-row controls.
 struct OnAirAudioSectionView: View {
     @Bindable var controller: ShowController
     @Bindable private var monitor = OnAirAudioMonitor.shared
     @AppStorage("proshow.inspector.onAirAudioExpanded") private var expanded = true
+    @Bindable private var controls = OnAirAudioControls.shared
+    @State private var pendingIsolate: OnAirAudioSource?
 
     var body: some View {
         DisclosureGroup(isExpanded: $expanded) {
@@ -15,11 +16,32 @@ struct OnAirAudioSectionView: View {
             header
         }
         .onAppear { monitor.attach(controller) }
+        .sheet(isPresented: $controls.routingSheetOpen) { OnAirRoutingSheet(controller: controller) }
+        .alert(
+            "Isolate \(pendingIsolate?.name ?? "")?",
+            isPresented: Binding(get: { pendingIsolate != nil }, set: { if !$0 { pendingIsolate = nil } })
+        ) {
+            Button("Isolate", role: .destructive) {
+                if let row = pendingIsolate { controller.setOnAirIsolate(row.id, on: true, confirmed: true) }
+                pendingIsolate = nil
+            }
+            Button("Cancel", role: .cancel) { pendingIsolate = nil }
+        } message: {
+            Text("Everything else goes silent on the stream.")
+        }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("On-Air Audio")
     }
 
     private var onAir: [OnAirAudioSource] { monitor.sources.filter(\.isOnAir) }
+
+    private func requestIsolate(_ row: OnAirAudioSource) {
+        if controller.onAirIsIsolated(row) {
+            controller.setOnAirIsolate(row.id, on: false, confirmed: true)
+        } else if controller.setOnAirIsolate(row.id, on: true, confirmed: false) == .needsConfirm {
+            pendingIsolate = row
+        }
+    }
     private var notHeard: [OnAirAudioSource] { monitor.sources.filter { !$0.isOnAir } }
 
     private var header: some View {
@@ -46,10 +68,39 @@ struct OnAirAudioSectionView: View {
             }
             Menu {
                 if !controller.soloedAudioChannelNames.isEmpty {
-                    Button("Clear All Solos", systemImage: "circle.slash") {
+                    Button("Clear Isolate", systemImage: "circle.slash") {
                         controller.clearAllAudioSolos()
                     }
                 }
+                if controller.audioMatrix.isListening {
+                    Button("Clear Listen", systemImage: "headphones") {
+                        controller.clearOnAirListen()
+                    }
+                }
+                Picker("Listen", selection: Binding(
+                    get: { controller.audioMatrix.listenMode },
+                    set: { controller.setListenMode($0) }
+                )) {
+                    Text("PFL").tag(AudioListenMode.pfl)
+                    Text("AFL").tag(AudioListenMode.afl)
+                }
+                Menu("Listen Output") {
+                    Button {
+                        AudioMonitoringEngine.shared.listenDeviceUID = nil
+                    } label: {
+                        checkRow("Same as Monitor", AudioMonitoringEngine.shared.listenDeviceUID == nil)
+                    }
+                    ForEach(MacAudioOutputRouting.outputDevices()) { device in
+                        Button {
+                            AudioMonitoringEngine.shared.listenDeviceUID = device.id
+                            if controller.audioMatrix.isListening { ProgramAudioMonitorBridge.shared.refreshOutputRouting() }
+                        } label: {
+                            checkRow(device.name, AudioMonitoringEngine.shared.listenDeviceUID == device.id)
+                        }
+                    }
+                }
+                Button("Routing", systemImage: "square.grid.3x3") { controls.routingSheetOpen = true }
+                Divider()
                 Button("Mic Mode...", systemImage: "mic.badge.xmark") {
                     MicrophoneModeStatus.showPicker()
                 }
@@ -86,30 +137,19 @@ struct OnAirAudioSectionView: View {
             }
             sectionTitle("ON AIR", count: onAir.count)
             if onAir.isEmpty {
-                Text("Nothing is reaching the stream.")
+                Text("Nothing on air")
                     .font(DeskType.micro)
                     .foregroundStyle(ShowSidebarPalette.subtitle)
                     .padding(.leading, 4)
             } else {
-                ForEach(onAir) { OnAirAudioRow(source: $0, onFix: { controller.applyOnAirFix($0) }) { controller.jumpToOnAirSource($0) } }
+                ForEach(onAir) { OnAirAudioRow(source: $0, controller: controller, onIsolate: requestIsolate) }
             }
             if !notHeard.isEmpty {
                 sectionTitle("NOT HEARD", count: notHeard.count)
-                ForEach(notHeard) { OnAirAudioRow(source: $0, onFix: { controller.applyOnAirFix($0) }) { controller.jumpToOnAirSource($0) } }
+                ForEach(notHeard) { OnAirAudioRow(source: $0, controller: controller, onIsolate: requestIsolate) }
             }
             InspectorRowRule()
-            HStack(spacing: 6) {
-                Text("Returns")
-                    .font(DeskType.micro.weight(.semibold))
-                    .foregroundStyle(ShowSidebarPalette.title)
-                Text(controller.onAirReturnsLine)
-                    .font(DeskType.micro)
-                    .foregroundStyle(ShowSidebarPalette.subtitle)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            }
-            .help(controller.onAirReturnsLine)
-            .accessibilityElement(children: .combine)
+            OnAirReturnsRow(controller: controller, showRouting: $controls.routingSheetOpen)
         }
     }
 
@@ -124,18 +164,23 @@ struct OnAirAudioSectionView: View {
             Text(reading.measured ? String(format: "%.0f LUFS", reading.shortTermLUFS) : "-- LUFS")
                 .font(DeskType.micro.monospacedDigit())
                 .foregroundStyle(ShowSidebarPalette.title)
-                .help("Short-term loudness (3 s). Momentary: \(reading.measured ? String(format: "%.1f", reading.momentaryLUFS) : "--") LUFS. Aim for about -14 LUFS.")
+                .help("Short-term \(reading.measured ? String(format: "%.1f", reading.shortTermLUFS) : "--") LUFS, momentary \(reading.measured ? String(format: "%.1f", reading.momentaryLUFS) : "--") LUFS")
             Text(String(format: "pk %.0f", reading.peakDb))
                 .font(DeskType.micro.monospacedDigit())
                 .foregroundStyle(ShowSidebarPalette.subtitle)
             Circle()
                 .fill(reading.clipping ? ProShowTheme.liveRed : ShowSidebarPalette.subtitle.opacity(0.3))
                 .frame(width: 7, height: 7)
-                .help(reading.clipping ? "Clipping in the last 2 s" : "No clipping")
+                .help(reading.clipping ? "Clipping" : "No clipping")
                 .accessibilityLabel(reading.clipping ? "Clipping" : "No clipping")
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Program meter")
+    }
+
+    @ViewBuilder
+    private func checkRow(_ title: String, _ selected: Bool) -> some View {
+        if selected { Label(title, systemImage: "checkmark") } else { Text(title) }
     }
 
     private func sectionTitle(_ title: String, count: Int) -> some View {
@@ -159,70 +204,144 @@ struct OnAirAudioSectionView: View {
 
 private struct OnAirAudioRow: View {
     let source: OnAirAudioSource
-    var onFix: (OnAirAudioFix) -> Void = { _ in }
-    let onJump: (OnAirAudioSource) -> Void
+    let controller: ShowController
+    var onIsolate: (OnAirAudioSource) -> Void
+
+    @State private var showGain = false
+
+    private var hasChannel: Bool { controller.onAirChannelExists(for: source) }
+    private var isolated: Bool { controller.onAirIsIsolated(source) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            jumpButton
-            if let fix = source.fix {
-                Button(fix.title) { onFix(fix) }
-                    .buttonStyle(.bordered)
-                    .controlSize(.mini)
-                    .padding(.leading, 20)
-                    .help(fix == .addMic ? "Add a mic shot on a free layer and take it live" : "Send this camera's mic to program")
-                    .accessibilityLabel("\(fix.title) for \(source.name)")
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 4) {
+                jumpButton
+                Spacer(minLength: 2)
+                if (source.type != .camera && source.type != .network) || source.via != nil {
+                    OnAirLevelBar(db: source.peakDb, dimmed: !source.isOnAir)
+                        .frame(width: 36, height: 5)
+                }
+                controls
+                stateChip
             }
-        }
-    }
-
-    private var jumpButton: some View {
-        Button { onJump(source) } label: {
-            VStack(alignment: .leading, spacing: 1) {
+            if let reason = visibleReason {
                 HStack(spacing: 6) {
-                    Image(systemName: source.type.systemImage)
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(source.isOnAir ? ShowSidebarPalette.symbol : ShowSidebarPalette.subtitle)
-                        .frame(width: 14)
-                    Text(source.simulated ? "\(source.name) (sim)" : source.name)
-                        .font(DeskType.meta.weight(source.isOnAir ? .semibold : .regular))
-                        .foregroundStyle(source.isOnAir ? ShowSidebarPalette.title : ShowSidebarPalette.subtitle)
-                        .lineLimit(1)
-                    Text(source.origin)
-                        .font(DeskType.mono)
-                        .foregroundStyle(ShowSidebarPalette.subtitle)
-                    Spacer(minLength: 4)
-                    if (source.type != .camera && source.type != .network) || source.via != nil {
-                        OnAirLevelBar(db: source.peakDb, dimmed: !source.isOnAir)
-                            .frame(width: 44, height: 5)
-                    }
-                    stateChip
-                }
-                if let via = source.via, source.reason == nil {
-                    Text("Audio from \(via)")
-                        .font(DeskType.micro)
-                        .foregroundStyle(ShowSidebarPalette.subtitle)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .padding(.leading, 20)
-                }
-                if let reason = source.reason {
                     Text(reason)
                         .font(DeskType.micro)
                         .foregroundStyle(reasonColor)
                         .lineLimit(1)
-                        .truncationMode(.tail)
-                        .padding(.leading, 20)
-                        .help(reason)
+                    if let fix = source.fix {
+                        Button(fix.title) { controller.applyOnAirFix(fix) }
+                            .buttonStyle(.bordered)
+                            .controlSize(.mini)
+                            .accessibilityLabel("\(fix.title) for \(source.name)")
+                    }
                 }
+                .padding(.leading, 20)
+                .help(source.help ?? reason)
             }
-            .padding(.vertical, 2)
+        }
+        .padding(.vertical, 1)
+        .contextMenu { menuItems }
+    }
+
+    /// Terse reason only when it adds something the chip does not already say.
+    private var visibleReason: String? {
+        guard let reason = source.reason else { return source.fix == nil ? nil : "" }
+        if reason.caseInsensitiveCompare(source.state.chip) == .orderedSame { return source.fix == nil ? nil : "" }
+        return reason
+    }
+
+    private var jumpButton: some View {
+        Button { controller.jumpToOnAirSource(source) } label: {
+            HStack(spacing: 6) {
+                Image(systemName: source.type.systemImage)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(source.isOnAir ? ShowSidebarPalette.symbol : ShowSidebarPalette.subtitle)
+                    .frame(width: 14)
+                Text(source.simulated ? "\(source.name) (sim)" : source.name)
+                    .font(DeskType.meta.weight(source.isOnAir ? .semibold : .regular))
+                    .foregroundStyle(source.isOnAir ? ShowSidebarPalette.title : ShowSidebarPalette.subtitle)
+                    .lineLimit(1)
+                Text(source.origin)
+                    .font(DeskType.mono)
+                    .foregroundStyle(ShowSidebarPalette.subtitle)
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(DeskPressButtonStyle())
-        .help("Show where \(source.name) is set up")
+        .help(source.via.map { "\(source.name): \($0)" } ?? source.name)
         .accessibilityLabel("\(source.type.label) \(source.name), \(source.state.chip)")
         .accessibilityValue(source.reason ?? "On air")
+    }
+
+    @ViewBuilder
+    private var controls: some View {
+        if source.type != .network, !(source.type == .camera && source.shotID == nil) {
+            iconToggle(
+                source.muted ? "speaker.slash.fill" : "speaker.wave.1.fill",
+                on: source.muted, onColor: ProShowTheme.statusOn,
+                help: source.muted ? "Unmute" : "Mute"
+            ) { controller.setOnAirMute(source.id, muted: !source.muted) }
+            .accessibilityLabel(source.muted ? "Unmute \(source.name)" : "Mute \(source.name)")
+        }
+        if hasChannel {
+            iconToggle("headphones", on: source.listening, onColor: Color.accentColor, help: "Listen") {
+                controller.setOnAirListen(source.id, on: !source.listening)
+            }
+            .accessibilityLabel(source.listening ? "Stop listening to \(source.name)" : "Listen to \(source.name)")
+            Button { showGain.toggle() } label: {
+                Text(gainLabel)
+                    .font(DeskType.micro.monospacedDigit())
+                    .foregroundStyle(source.gainDb == 0 ? ShowSidebarPalette.subtitle : ShowSidebarPalette.title)
+                    .frame(minWidth: 22)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Gain")
+            .accessibilityLabel("Gain for \(source.name), \(gainLabel) dB")
+            .popover(isPresented: $showGain, arrowEdge: .trailing) {
+                OnAirGainPopover(source: source, controller: controller)
+            }
+        }
+    }
+
+    private var gainLabel: String {
+        let value = Int(source.gainDb.rounded())
+        return value > 0 ? "+\(value)" : "\(value)"
+    }
+
+    @ViewBuilder
+    private var menuItems: some View {
+        if hasChannel {
+            Button(isolated ? "Clear Isolate" : "Isolate") { onIsolate(source) }
+            Button(source.listening ? "Stop Listen" : "Listen") {
+                controller.setOnAirListen(source.id, on: !source.listening)
+            }
+        }
+        if source.shotID != nil || source.type == .slide {
+            Picker("Audio", selection: Binding(
+                get: { source.follow ?? .alwaysOn },
+                set: { controller.setOnAirFollow(source.id, mode: $0) }
+            )) {
+                Text("Always On").tag(AudioFollowMode.alwaysOn)
+                Text("Follow Slide").tag(AudioFollowMode.followSlide)
+            }
+        }
+        Button("Show Source") { controller.jumpToOnAirSource(source) }
+    }
+
+    private func iconToggle(_ symbol: String, on: Bool, onColor: Color, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(on ? onColor : ShowSidebarPalette.subtitle)
+                .frame(width: 16, height: 16)
+                .background(on ? onColor.opacity(0.18) : Color.clear, in: RoundedRectangle(cornerRadius: 3))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
     }
 
     private var reasonColor: Color {
@@ -247,6 +366,35 @@ private struct OnAirAudioRow: View {
             .padding(.vertical, 1)
             .background(source.state == .live ? color : color.opacity(0.15), in: Capsule())
             .fixedSize()
+            .help(source.help ?? source.reason ?? source.state.chip)
+    }
+}
+
+private struct OnAirGainPopover: View {
+    let source: OnAirAudioSource
+    let controller: ShowController
+    @State private var value: Double = 0
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(source.name).font(DeskType.meta.weight(.semibold))
+                Spacer()
+                Text(String(format: "%+.1f dB", value)).font(DeskType.micro.monospacedDigit())
+            }
+            Slider(value: $value, in: -60...12) { editing in
+                if !editing { controller.setOnAirGain(source.id, db: value) }
+            }
+            .onChange(of: value) { _, db in controller.setOnAirGain(source.id, db: db) }
+            HStack {
+                Button("0 dB") { value = 0 }
+                    .controlSize(.small)
+                Spacer()
+            }
+        }
+        .padding(10)
+        .frame(width: 220)
+        .onAppear { value = source.gainDb }
     }
 }
 

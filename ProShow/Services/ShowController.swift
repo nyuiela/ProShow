@@ -2111,6 +2111,9 @@ final class ShowController {
             playback.load(media, restart: true)
             inspector.syncTransportFromPlayback()
             isMediaPlaying = playback.isPlaying
+        case .clear where compositor.mediaAudioAlwaysOn && compositor.stack.media != nil:
+            // Slide audio set to Always On: keep the media (and its sound) across this slide.
+            compositor.restore(.media)
         case .clear:
             compositor.clearProgramMedia()
             compositor.clear(.media)
@@ -3443,6 +3446,10 @@ final class ShowController {
                 UserDefaults.standard.set(args["expand_master"] == "1", forKey: "proshow.inspector.masterExpanded")
             }
             return ["ok": true, "tab": inspector.selectedTab.rawValue]
+        case "onair_routing":
+            // QA: open or close the On-Air routing sheet for screenshots.
+            OnAirAudioControls.shared.routingSheetOpen = args["open"] != "0"
+            return ["ok": true, "open": OnAirAudioControls.shared.routingSheetOpen]
         case "onair_fix":
             // Same as the row's fix button: add_mic, or use_camera_mic for the live camera on layer N.
             switch args["fix"] ?? "" {
@@ -4538,7 +4545,8 @@ final class ShowController {
             guard let liveID = layer.liveShotID,
                   let shot = layer.shots.first(where: { $0.id == liveID }),
                   shot.source.sourceType == .systemMicrophone,
-                  !shot.isAudioMuted
+                  !shot.isAudioMuted,
+                  followSlideAllows(shot)
             else { return nil }
             return shot
         }
@@ -4559,6 +4567,7 @@ final class ShowController {
                   let shot = layer.shots.first(where: { $0.id == liveID }),
                   shot.source.sourceType == .systemCamera,
                   !shot.isAudioMuted,
+                  followSlideAllows(shot),
                   let mic = cameraMic(endpoint: shot.source.connectionString)
             else { return nil }
             let item = DiscoveredSourceItem(
@@ -4577,9 +4586,11 @@ final class ShowController {
     }
 
     func programAudioGates() -> ProgramAudioGatePolicy {
-        ProgramAudioGatePolicy.derive(from: masterLayers) { [weak self] shot in
-            self?.cameraMic(endpoint: shot.source.connectionString) != nil
-        }
+        ProgramAudioGatePolicy.derive(
+            from: masterLayers,
+            cameraHasMic: { [weak self] shot in self?.cameraMic(endpoint: shot.source.connectionString) != nil },
+            isHeard: { [weak self] shot in self?.followSlideAllows(shot) ?? true }
+        )
     }
 
     /// True when a mic is reaching program, room and stream. Drives the tally pill.
@@ -4668,28 +4679,28 @@ final class ShowController {
     /// First condition in `isProgramMediaMuted` that silences slide/media audio, in plain words.
     /// Nil exactly when `isProgramMediaMuted` is false. Read-only, for the On-Air Audio group.
     var programMediaAudioBlockReason: String? {
-        if audioIO.programMuted || compositor.stack.audioMuted { return "program audio is muted" }
-        if compositor.isLayerAudioMuted(.media) { return "Media layer audio is muted" }
+        if audioIO.programMuted || compositor.stack.audioMuted { return "Program muted" }
+        if compositor.isLayerAudioMuted(.media) { return "Media layer muted" }
         if compositor.isLayerAudioMuted(.slide), compositor.stack.media == nil || compositor.stack.isCleared(.media) {
-            return "Slide layer audio is muted"
+            return "Slide layer muted"
         }
         if compositor.stack.isCleared(.media) {
             if let media = compositor.stack.media, !media.clearsLayer, !media.isAudioMuted,
                !compositor.isLayerAudioMuted(.media) {
                 return nil
             }
-            if !isAudienceOutputOn { return "audience output is off" }
-            if isAudienceCleared { return "audience output is cleared" }
-            if liveSlide == nil { return "no slide is live" }
-            if !playback.hasProgramClock { return "slide media is not playing" }
-            if compositor.stack.isCleared(.slide) { return "Slide layer is hidden" }
+            if !isAudienceOutputOn { return "Output off" }
+            if isAudienceCleared { return "Output cleared" }
+            if liveSlide == nil { return "No slide live" }
+            if !playback.hasProgramClock { return "Not playing" }
+            if compositor.stack.isCleared(.slide) { return "Slide hidden" }
         }
         if let media = compositor.stack.media {
-            if media.isAudioMuted { return "this media is muted" }
+            if media.isAudioMuted { return "Muted" }
             if isPlaceholderAudioMuted(media.placeholderLetter) {
-                return "placeholder \(media.placeholderLetter ?? "") is muted"
+                return "Placeholder \(media.placeholderLetter ?? "") muted"
             }
-            if liveMutedShotFeeds(media) { return "a muted live shot feeds this file" }
+            if liveMutedShotFeeds(media) { return "Shot muted" }
         }
         return nil
     }
@@ -8340,6 +8351,9 @@ final class ShowController {
                 "laneDepths": ProgramAACEncoder.laneDepthSummary(),
                 "mic_mode": ["active": MicrophoneModeStatus.active, "preferred": MicrophoneModeStatus.preferred],
             ]))
+        }
+        if let handled = handleOnAirControlAPI(method: method, parts: parts, body: body) {
+            return handled
         }
         if method == "GET", parts == ["v1", "audio", "onair"] {
             // Read-only: what is on air, what is not heard and why, program loudness, alerts.

@@ -146,7 +146,7 @@ struct OnAirAudioTests {
         input.channels = Self.channels()
         let row = try Self.row(OnAirAudioResolver.resolve(input), "Desk mic")
         #expect(row.state == .notRouted)
-        #expect(row.reason == "Not live: shot added, not taken")
+        #expect(row.reason == "Not taken")
     }
 
     @Test
@@ -157,7 +157,7 @@ struct OnAirAudioTests {
         input.channels = Self.channels()
         let row = try Self.row(OnAirAudioResolver.resolve(input), "FaceTime")
         #expect(row.state == .notRouted)
-        #expect(row.reason?.hasPrefix("Picture only") == true)
+        #expect(row.reason == "No mic")
     }
 
     @Test
@@ -174,7 +174,7 @@ struct OnAirAudioTests {
         input.guests = [.init(identity: "ama", name: "Ama", guestID: guestID, hasMic: true, peakDb: -15)]
         let rows = OnAirAudioResolver.resolve(input)
         #expect(try Self.row(rows, "Slide 3 audio").state == .soloOff)
-        #expect(try Self.row(rows, "Slide 3 audio").reason == "Silenced by solo on Mic")
+        #expect(try Self.row(rows, "Slide 3 audio").reason == "Isolate: Mic")
         #expect(try Self.row(rows, "Ama").state == .soloOff)
         // The soloed mic is itself muted: muted wins for its own row.
         #expect(try Self.row(rows, "Desk mic").state == .muted)
@@ -187,13 +187,13 @@ struct OnAirAudioTests {
         var input = OnAirAudioInputs()
         input.layers = [Self.layer(1, [mic], live: mic)]
         input.channels = Self.channels()
-        #expect(try Self.row(OnAirAudioResolver.resolve(input), "Desk mic").reason == "Muted on this layer")
+        #expect(try Self.row(OnAirAudioResolver.resolve(input), "Desk mic").reason == "Muted")
         let unmuted = Self.shot("Desk mic", .systemMicrophone)
         input.layers = [Self.layer(1, [unmuted], live: unmuted)]
         input.channels = Self.channels(micMuted: true)
-        #expect(try Self.row(OnAirAudioResolver.resolve(input), "Desk mic").reason == "Muted on the Mic channel")
+        #expect(try Self.row(OnAirAudioResolver.resolve(input), "Desk mic").reason == "Muted")
         input.programMuted = true
-        #expect(try Self.row(OnAirAudioResolver.resolve(input), "Desk mic").reason == "Program audio is muted")
+        #expect(try Self.row(OnAirAudioResolver.resolve(input), "Desk mic").reason == "Program muted")
     }
 
     @Test
@@ -203,7 +203,7 @@ struct OnAirAudioTests {
         input.slide = .init(name: "Intro video", blockReason: "Slide layer is hidden", peakDb: -10)
         let row = try Self.row(OnAirAudioResolver.resolve(input), "Intro video")
         #expect(row.state == .muted)
-        #expect(row.reason == "Slide audio off: Slide layer is hidden")
+        #expect(row.reason == "Slide layer is hidden")
     }
 
     @Test
@@ -218,7 +218,7 @@ struct OnAirAudioTests {
         #expect(try Self.row(rows, "USB mic").state == .live)
         let armed = try Self.row(rows, "iPhone mic")
         #expect(armed.state == .armed)
-        #expect(armed.reason == "Second mic: USB mic owns the mic")
+        #expect(armed.reason == "Mic in use")
         let alerts = OnAirAudioResolver.alerts(sources: rows, channels: input.channels, capture: [:],
                                                programSilentSeconds: 0, isLive: true, clippedRecently: false)
         #expect(alerts.contains { $0.kind == .doubled })
@@ -233,7 +233,7 @@ struct OnAirAudioTests {
         input.desktopHeldByMic = true
         let row = try Self.row(OnAirAudioResolver.resolve(input), "Screen")
         #expect(row.state == .held)
-        #expect(row.reason == "Held: the mic owns the mix")
+        #expect(row.reason == "Held by mic")
     }
 
     @Test
@@ -247,7 +247,7 @@ struct OnAirAudioTests {
         for name in ["OBS NDI", "SRT in"] {
             let row = try Self.row(rows, name)
             #expect(row.state == .notRouted)
-            #expect(row.reason == "No audio path for NDI/SRT yet")
+            #expect(row.reason == "No audio path")
         }
     }
 
@@ -261,7 +261,7 @@ struct OnAirAudioTests {
         input.guests = [.init(identity: "ama", name: "Ama", guestID: guestID, hasMic: true, peakDb: -15)]
         let row = try Self.row(OnAirAudioResolver.resolve(input), "Ama")
         #expect(row.state == .muted)
-        #expect(row.reason == "Muted by the desk")
+        #expect(row.reason == "Muted")
         input.channels = Self.channels()
         input.guests = [.init(identity: "ama", name: "Ama", guestID: guestID, hasMic: false, peakDb: nil)]
         #expect(try Self.row(OnAirAudioResolver.resolve(input), "Ama").state == .notRouted)
