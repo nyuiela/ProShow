@@ -2101,7 +2101,7 @@ enum CaptureAudioSources {
     private struct Entry { var frames: Int = 0; var since: CFAbsoluteTime; var last: CFAbsoluteTime; var rejected: Int = 0 }
     private static var entries: [AudioChannelRole: [String: Entry]] = [:]
     private static var owner: [AudioChannelRole: String] = [:]
-    private static let stale: CFAbsoluteTime = 0.6
+    private static let stale: CFAbsoluteTime = 0.3
 
     /// True when `source` may feed `role`. A second source is refused while the owner is live.
     static func admit(role: AudioChannelRole, source: String, frames: Int) -> Bool {
