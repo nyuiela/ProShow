@@ -768,6 +768,7 @@ final class ProShowAppDelegate: NSObject, NSApplicationDelegate {
     var sessionProvider: (() -> AppSession?)?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        MenuItemEnableCoalescer.install()
         // Keep the bundle AppIcon in the Dock. Overriding it at runtime with
         // ProShowLogo swapped the look (inverted colors, larger mark) right after launch.
     }

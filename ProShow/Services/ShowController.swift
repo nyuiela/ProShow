@@ -3548,6 +3548,10 @@ final class ShowController {
                 try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
             }
             return ["ok": true, "path": path]
+        case "menu_watch":
+            // Test hook: NSMenu and key-window events with stacks (see MenuEventWatch).
+            MenuEventWatch.install()
+            return MenuEventWatch.dump(reset: args["reset"] == "1")
         case "menu_probe":
             // Test hook: menu content rebuilds per second since the last reset.
             return MenuRenderProbe.snapshot(reset: args["reset"] == "1")

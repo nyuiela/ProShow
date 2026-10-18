@@ -2354,3 +2354,228 @@ struct StableMenuContent<Key: Equatable, Content: View>: View, Equatable {
 
     var body: some View { content() }
 }
+
+#if os(macOS)
+/// Test hook: records NSMenu tracking, item churn and key-window changes with call stacks,
+/// to find what closes an open submenu. Off until `install()`; read with `dump(reset:)`.
+@MainActor
+enum MenuEventWatch {
+    private static var tokens: [NSObjectProtocol] = []
+    private static var events: [[String: Any]] = []
+    private static var tracking = 0
+    private static var idleChurn: [String: Int] = [:]
+    private static var idleStacks: [String: [String]] = [:]
+    private static let start = Date()
+
+    static func install() {
+        guard tokens.isEmpty else { return }
+        let nc = NotificationCenter.default
+        let menuNames: [Notification.Name] = [
+            NSMenu.didBeginTrackingNotification, NSMenu.didEndTrackingNotification,
+            NSMenu.didAddItemNotification, NSMenu.didRemoveItemNotification, NSMenu.didChangeItemNotification,
+        ]
+        for name in menuNames {
+            tokens.append(nc.addObserver(forName: name, object: nil, queue: nil) { note in
+                let title = (note.object as? NSMenu)?.title ?? "?"
+                let short = name.rawValue.replacingOccurrences(of: "NSMenu", with: "").replacingOccurrences(of: "Notification", with: "")
+                MainActor.assumeIsolated {
+                    if name == NSMenu.didBeginTrackingNotification { tracking += 1 }
+                    if name == NSMenu.didEndTrackingNotification { tracking = max(0, tracking - 1) }
+                    // Item churn on the menu bar is normal; while a menu is open it is the suspect.
+                    guard tracking > 0 || name == NSMenu.didEndTrackingNotification else {
+                        let key = short + ":" + title
+                        idleChurn[key, default: 0] += 1
+                        if idleStacks[key] == nil { idleStacks[key] = stackLines() }
+                        return
+                    }
+                    record(short, title, stack: name != NSMenu.didChangeItemNotification || events.count < 40)
+                }
+            })
+        }
+        let windowNames: [Notification.Name] = [
+            NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification,
+            NSWindow.didBecomeMainNotification, NSApplication.didResignActiveNotification,
+            NSApplication.didBecomeActiveNotification,
+        ]
+        for name in windowNames {
+            tokens.append(nc.addObserver(forName: name, object: nil, queue: nil) { note in
+                let title = (note.object as? NSWindow)?.title ?? "app"
+                MainActor.assumeIsolated { record(name.rawValue, title, stack: true) }
+            })
+        }
+    }
+
+    private static func record(_ kind: String, _ title: String, stack: Bool) {
+        var e: [String: Any] = ["t": (Date().timeIntervalSince(start) * 1000).rounded() / 1000, "kind": kind, "menu": title, "tracking": tracking]
+        if stack {
+            e["stack"] = stackLines()
+        }
+        events.append(e)
+        if events.count > 400 { events.removeFirst(events.count - 400) }
+    }
+
+    private static func stackLines() -> [String] {
+        Thread.callStackSymbols.dropFirst(3).prefix(40).map { line in
+            line.split(separator: " ", omittingEmptySubsequences: true).dropFirst(3).joined(separator: " ")
+        }
+    }
+
+    static func dump(reset: Bool) -> [String: Any] {
+        let out: [String: Any] = [
+            "ok": true, "installed": !tokens.isEmpty, "tracking": tracking, "events": events,
+            "coalescer": MenuItemEnableCoalescer.stats, "idle_churn": idleChurn, "idle_stacks": idleStacks, "secs": Date().timeIntervalSince(start),
+        ]
+        if reset { events = []; idleChurn = [:]; idleStacks = [:] }
+        return out
+    }
+}
+#endif
+
+#if os(macOS)
+/// SwiftUI refreshes an open menu's items on every layout pass of its window and flips
+/// `isEnabled` off and back on. AppKit treats each flip as a change and dismisses the open
+/// submenu, so nested menus closed within a second. While a menu is tracking, enabled changes
+/// are coalesced to the end of the run loop turn and only real changes are applied.
+@MainActor
+enum MenuItemEnableCoalescer {
+    private static var installed = false
+    fileprivate static var tracking = 0
+    fileprivate static var flushing = false
+    private static var pending: [ObjectIdentifier: (item: NSMenuItem, enabled: Bool)] = [:]
+    private static var scheduled = false
+    private(set) static var skipped = 0
+    private(set) static var applied = 0
+    // Submenu detach/reattach from SwiftUI's prepareForReuse, held the same way.
+    private static var pendingSubmenus: [(item: NSMenuItem, submenu: NSMenu?)] = []
+    fileprivate static var pendingSubmenuByItem: [ObjectIdentifier: NSMenu?] = [:]
+    private(set) static var submenuSkipped = 0
+    private(set) static var submenuApplied = 0
+
+    static func install() {
+        guard !installed else { return }
+        installed = true
+        guard let original = class_getInstanceMethod(NSMenuItem.self, #selector(setter: NSMenuItem.isEnabled)),
+              let replacement = class_getInstanceMethod(NSMenuItem.self, #selector(NSMenuItem.proshow_setEnabled(_:)))
+        else { return }
+        method_exchangeImplementations(original, replacement)
+        if let setSub = class_getInstanceMethod(NSMenuItem.self, #selector(setter: NSMenuItem.submenu)),
+           let setSubNew = class_getInstanceMethod(NSMenuItem.self, #selector(NSMenuItem.proshow_setSubmenu(_:))),
+           let getSub = class_getInstanceMethod(NSMenuItem.self, #selector(getter: NSMenuItem.submenu)),
+           let getSubNew = class_getInstanceMethod(NSMenuItem.self, #selector(NSMenuItem.proshow_submenu)) {
+            method_exchangeImplementations(setSub, setSubNew)
+            method_exchangeImplementations(getSub, getSubNew)
+        }
+        let nc = NotificationCenter.default
+        nc.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: nil) { _ in
+            MainActor.assumeIsolated { tracking += 1 }
+        }
+        nc.addObserver(forName: NSMenu.didEndTrackingNotification, object: nil, queue: nil) { _ in
+            MainActor.assumeIsolated {
+                tracking = max(0, tracking - 1)
+                if tracking == 0 { flush() }
+            }
+        }
+    }
+
+    fileprivate static func hold(_ item: NSMenuItem, _ enabled: Bool) {
+        pending[ObjectIdentifier(item)] = (item, enabled)
+        schedule()
+    }
+
+    fileprivate static func holdSubmenu(_ item: NSMenuItem, _ submenu: NSMenu?) {
+        pendingSubmenus.append((item, submenu))
+        pendingSubmenuByItem[ObjectIdentifier(item)] = .some(submenu)
+        schedule()
+    }
+
+    private static func schedule() {
+        guard !scheduled else { return }
+        scheduled = true
+        RunLoop.main.perform(inModes: [.common, .eventTracking]) {
+            MainActor.assumeIsolated { flush() }
+        }
+    }
+
+    private static func flush() {
+        scheduled = false
+        let work = pending
+        pending = [:]
+        let subs = pendingSubmenus
+        pendingSubmenus = []
+        pendingSubmenuByItem = [:]
+        flushing = true
+        defer { flushing = false }
+        // Last value per item; detaches first so a menu moving between items is free when attached.
+        var finalSub: [ObjectIdentifier: (item: NSMenuItem, submenu: NSMenu?)] = [:]
+        var order: [ObjectIdentifier] = []
+        for entry in subs {
+            let id = ObjectIdentifier(entry.item)
+            if finalSub[id] == nil { order.append(id) }
+            finalSub[id] = entry
+        }
+        let changes = order.compactMap { finalSub[$0] }.filter { entry in
+            if entry.item.submenu === entry.submenu { submenuSkipped += 1; return false }
+            return true
+        }
+        for entry in changes where entry.submenu == nil || entry.item.submenu != nil {
+            entry.item.submenu = nil
+        }
+        for entry in changes where entry.submenu != nil {
+            submenuApplied += 1
+            if let menu = entry.submenu, let owner = menu.supermenu?.items.first(where: { $0.submenu === menu }), owner !== entry.item {
+                owner.submenu = nil
+            }
+            entry.item.submenu = entry.submenu
+        }
+        for (_, entry) in work {
+            if entry.item.isEnabled == entry.enabled {
+                skipped += 1
+            } else {
+                applied += 1
+                entry.item.isEnabled = entry.enabled
+            }
+        }
+    }
+
+    static var stats: [String: Int] {
+        ["skipped": skipped, "applied": applied, "submenu_skipped": submenuSkipped, "submenu_applied": submenuApplied, "tracking": tracking]
+    }
+}
+
+extension NSMenuItem {
+    /// Swapped with `setEnabled:` by MenuItemEnableCoalescer; calling it runs the original.
+    @objc fileprivate func proshow_setEnabled(_ enabled: Bool) {
+        if Thread.isMainThread {
+            let held = MainActor.assumeIsolated { () -> Bool in
+                guard MenuItemEnableCoalescer.tracking > 0, !MenuItemEnableCoalescer.flushing else { return false }
+                MenuItemEnableCoalescer.hold(self, enabled)
+                return true
+            }
+            if held { return }
+        }
+        proshow_setEnabled(enabled)
+    }
+
+    /// Swapped with `setSubmenu:`; calling it runs the original.
+    @objc fileprivate func proshow_setSubmenu(_ submenu: NSMenu?) {
+        if Thread.isMainThread {
+            let held = MainActor.assumeIsolated { () -> Bool in
+                guard MenuItemEnableCoalescer.tracking > 0, !MenuItemEnableCoalescer.flushing else { return false }
+                MenuItemEnableCoalescer.holdSubmenu(self, submenu)
+                return true
+            }
+            if held { return }
+        }
+        proshow_setSubmenu(submenu)
+    }
+
+    /// Swapped with the `submenu` getter: a held value reads back as set.
+    @objc fileprivate func proshow_submenu() -> NSMenu? {
+        if Thread.isMainThread {
+            let held = MainActor.assumeIsolated { MenuItemEnableCoalescer.pendingSubmenuByItem[ObjectIdentifier(self)] }
+            if let held { return held }
+        }
+        return proshow_submenu()
+    }
+}
+#endif
