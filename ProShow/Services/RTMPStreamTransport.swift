@@ -1198,6 +1198,20 @@ enum ProgramStreamAudioGates {
         return false
     }
 
+    static func enqueueCapture(role: AudioChannelRole, mono: [Float], sampleRate: Double, source: String?) {
+        guard !mono.isEmpty else { return }
+        if let source, role == .microphone || role == .desktop {
+            lock.lock()
+            let open = hardwareCaptureOpen.contains(role)
+            lock.unlock()
+            if open, !CaptureAudioSources.admit(role: role, source: source, frames: mono.count) {
+                StreamAudioPipelineDiagnostics.recordGateReject()
+                return
+            }
+        }
+        enqueueCapture(role: role, mono: mono, sampleRate: sampleRate)
+    }
+
     static func enqueueCapture(role: AudioChannelRole, mono: [Float], sampleRate: Double) {
         guard !mono.isEmpty else { return }
         lock.lock()
@@ -1579,6 +1593,7 @@ enum ProgramAACEncoder {
             lanes[role] = []
             lock.unlock()
         }
+        ProgramAudioJitter.reset(role: role)
     }
 
     static func flushAll() {
@@ -1646,13 +1661,17 @@ enum ProgramAACEncoder {
     }
 
     /// Drop stale PCM so a slow slide (low video bitrate, deep capture buffer) cannot play sound late.
+    /// Live capture (mic, desktop) arrives in bursts of up to ~100 ms (AVAudioEngine taps, Continuity
+    /// mics, ScreenCaptureKit). The old 120 ms ceiling cut 40 ms out of almost every burst and the lane
+    /// then ran dry before the next one, so speech was chopped about ten times a second (robotic).
     private static func trimLanesToLiveHorizonLocked() {
-        let ceiling = 48_000 * 2 * 120 / 1000
-        let keep = 48_000 * 2 * 80 / 1000
         for role in streamRoles {
-            guard var lane = lanes[role], lane.count > ceiling else { continue }
-            lane.removeFirst(lane.count - keep)
+            let horizon = ProgramAudioJitter.horizon(for: role)
+            guard var lane = lanes[role], lane.count > horizon.ceiling else { continue }
+            let dropped = lane.count - horizon.keep
+            lane.removeFirst(dropped)
             lanes[role] = lane
+            ProgramAudioJitter.noteTrim(role: role, droppedSamples: dropped)
         }
     }
 
@@ -1667,9 +1686,18 @@ enum ProgramAACEncoder {
         var monitor = [Float](repeating: 0, count: take)
         var contributed = false
         for role in streamRoles where role != .guest {
-            guard var lane = lanes[role], !lane.isEmpty else { continue }
+            guard var lane = lanes[role], !lane.isEmpty else {
+                ProgramAudioJitter.noteEmpty(role: role)
+                continue
+            }
+            // Wait for a small prefill after the lane ran dry so a bursty source plays smoothly
+            // instead of alternating sound and zeros.
+            guard ProgramAudioJitter.admit(role: role, depth: lane.count, take: take) else { continue }
             contributed = true
             let consume = min(lane.count, take)
+            if consume < take {
+                ProgramAudioJitter.noteUnderrun(role: role)
+            }
             let known = gains.stream[role] != nil || gains.monitor[role] != nil
             let streamGain = known ? (gains.stream[role] ?? 0) : 1
             let monitorGain = known ? (gains.monitor[role] ?? 0) : 1
@@ -1964,5 +1992,158 @@ enum ProgramEncoderAudioPump {
         lock.lock()
         defer { lock.unlock() }
         return CFAbsoluteTimeGetCurrent() - lastTick < 0.15
+    }
+}
+
+
+/// Jitter policy and counters for the program mix lanes. One lane per role, drained 1024 frames
+/// per AAC access unit. Counters are cumulative and read by GET /v1/audio/pipeline.
+enum ProgramAudioJitter {
+    private static let lock = NSLock()
+    private static var primed: Set<AudioChannelRole> = []
+    private static var trims: [AudioChannelRole: Int] = [:]
+    private static var trimmedSamples: [AudioChannelRole: Int] = [:]
+    private static var underruns: [AudioChannelRole: Int] = [:]
+    private static var waits: [AudioChannelRole: Int] = [:]
+
+    /// `defaults write com.kaleel.proshow ProShowLegacyAudioHorizon -bool YES` restores the old
+    /// 120/80 ms trim with no prefill (A/B checks only).
+    static var legacy: Bool { UserDefaults.standard.bool(forKey: "ProShowLegacyAudioHorizon") }
+
+    /// Interleaved stereo sample counts at 48 kHz.
+    static func horizon(for role: AudioChannelRole) -> (ceiling: Int, keep: Int) {
+        let ms: (Int, Int)
+        if legacy {
+            ms = (120, 80)
+        } else {
+            switch role {
+            case .microphone, .desktop:
+                ms = (320, 180)
+            case .guest, .slide, .soundboard:
+                ms = (200, 120)
+            }
+        }
+        return (48_000 * 2 * ms.0 / 1000, 48_000 * 2 * ms.1 / 1000)
+    }
+
+    /// Prefill before a dry lane plays again (interleaved samples).
+    static func prefill(for role: AudioChannelRole, take: Int) -> Int {
+        if legacy { return 1 }
+        switch role {
+        case .microphone, .desktop:
+            return max(take * 2, 48_000 * 2 * 45 / 1000)
+        case .guest, .slide, .soundboard:
+            return 1
+        }
+    }
+
+    static func admit(role: AudioChannelRole, depth: Int, take: Int) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if primed.contains(role) { return true }
+        if depth >= prefill(for: role, take: take) {
+            primed.insert(role)
+            return true
+        }
+        waits[role, default: 0] += 1
+        return false
+    }
+
+    static func noteEmpty(role: AudioChannelRole) {
+        lock.lock()
+        if primed.remove(role) != nil {
+            underruns[role, default: 0] += 1
+        }
+        lock.unlock()
+    }
+
+    static func noteUnderrun(role: AudioChannelRole) {
+        lock.lock()
+        underruns[role, default: 0] += 1
+        primed.remove(role)
+        lock.unlock()
+    }
+
+    static func noteTrim(role: AudioChannelRole, droppedSamples: Int) {
+        lock.lock()
+        trims[role, default: 0] += 1
+        trimmedSamples[role, default: 0] += droppedSamples
+        lock.unlock()
+    }
+
+    static func reset(role: AudioChannelRole) {
+        lock.lock()
+        primed.remove(role)
+        lock.unlock()
+    }
+
+    static func snapshot() -> [String: Any] {
+        lock.lock()
+        defer { lock.unlock() }
+        var roles: [String: Any] = [:]
+        for role in [AudioChannelRole.microphone, .desktop, .guest, .slide, .soundboard] {
+            roles[role.shortDiagnosticLabel] = [
+                "trims": trims[role] ?? 0,
+                "trimmedMs": (trimmedSamples[role] ?? 0) * 1000 / (48_000 * 2),
+                "underruns": underruns[role] ?? 0,
+                "prefillWaits": waits[role] ?? 0,
+            ]
+        }
+        return ["legacyHorizon": legacy, "lanes": roles]
+    }
+}
+
+/// Which capture sources are feeding each hardware role. Two sources on one role (camera mic plus
+/// a mic shot, two screen shares with audio) used to be interleaved into one lane: the same voice
+/// twice, a few ms apart, chopped by the trim. Only the first live source owns the role.
+enum CaptureAudioSources {
+    private static let lock = NSLock()
+    private struct Entry { var frames: Int = 0; var since: CFAbsoluteTime; var last: CFAbsoluteTime; var rejected: Int = 0 }
+    private static var entries: [AudioChannelRole: [String: Entry]] = [:]
+    private static var owner: [AudioChannelRole: String] = [:]
+    private static let stale: CFAbsoluteTime = 0.6
+
+    /// True when `source` may feed `role`. A second source is refused while the owner is live.
+    static func admit(role: AudioChannelRole, source: String, frames: Int) -> Bool {
+        let now = CFAbsoluteTimeGetCurrent()
+        lock.lock()
+        defer { lock.unlock() }
+        var map = entries[role] ?? [:]
+        var entry = map[source] ?? Entry(since: now, last: now)
+        if now - entry.last > 2 { entry = Entry(since: now, last: now) }
+        entry.last = now
+        var allowed = true
+        if let current = owner[role], current != source,
+           let held = map[current], now - held.last < stale {
+            allowed = false
+            entry.rejected += frames
+        } else {
+            owner[role] = source
+            entry.frames += frames
+        }
+        map[source] = entry
+        entries[role] = map
+        return allowed
+    }
+
+    static func snapshot() -> [String: Any] {
+        let now = CFAbsoluteTimeGetCurrent()
+        lock.lock()
+        defer { lock.unlock() }
+        var out: [String: Any] = [:]
+        for (role, map) in entries {
+            var sources: [[String: Any]] = []
+            for (name, entry) in map where now - entry.last < 2 {
+                let span = max(0.001, entry.last - entry.since)
+                sources.append([
+                    "source": name,
+                    "owner": owner[role] == name,
+                    "framesPerSecond": Int(Double(entry.frames) / span),
+                    "rejectedFramesPerSecond": Int(Double(entry.rejected) / span),
+                ])
+            }
+            out[role.shortDiagnosticLabel] = sources
+        }
+        return out
     }
 }

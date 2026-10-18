@@ -330,8 +330,8 @@ final class ShowController {
         inspector.attachPlayback(playback)
         transportClock.attach(playback: playback)
         studioAudio.attach(matrix: audioMatrix, io: audioIO, playback: playback)
-        videoInputs.ingest.onCaptureAudio = { role, samples, rate in
-            ProgramStreamAudioGates.enqueueCapture(role: role, mono: samples, sampleRate: rate)
+        videoInputs.ingest.onCaptureAudio = { role, samples, rate, source in
+            ProgramStreamAudioGates.enqueueCapture(role: role, mono: samples, sampleRate: rate, source: source)
         }
         videoInputs.ingest.onCaptureAudioPeak = { [weak self] role, db in
             Task { @MainActor in
@@ -8124,6 +8124,15 @@ final class ShowController {
                 toggleLiveShotAudio(layerIndex: index)
             }
             return (200, ControlJSON.encode(["ok": true, "index": index, "muted": isLiveShotAudioMuted(layerIndex: index), "mic_live": isProgramMicLive]))
+        }
+        if method == "GET", parts == ["v1", "audio", "pipeline"] {
+            // Lane trims, underruns and which capture source owns each hardware role.
+            return (200, ControlJSON.encode([
+                "ok": true,
+                "jitter": ProgramAudioJitter.snapshot(),
+                "sources": CaptureAudioSources.snapshot(),
+                "laneDepths": ProgramAACEncoder.laneDepthSummary(),
+            ]))
         }
         if method == "GET", parts == ["v1", "audio", "meters"] {
             return (200, audioMatrix.metersJSON())

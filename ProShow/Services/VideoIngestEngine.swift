@@ -332,7 +332,7 @@ final class VideoIngestEngine {
     @ObservationIgnored nonisolated(unsafe) private var pendingLanePublish: (@MainActor () -> Void)?
     @ObservationIgnored private nonisolated let lanePublishLock = NSLock()
     /// Invoked on `videoIngestQueue` — must not hop through MainActor (live stream latency).
-    @ObservationIgnored nonisolated(unsafe) var onCaptureAudio: ((AudioChannelRole, [Float], Double) -> Void)?
+    @ObservationIgnored nonisolated(unsafe) var onCaptureAudio: ((AudioChannelRole, [Float], Double, String) -> Void)?
     @ObservationIgnored nonisolated(unsafe) var onCaptureAudioPeak: ((AudioChannelRole, Double) -> Void)?
 
     func configureOutput(width: Int, height: Int, fps: Int, captureAboveOutput: Bool = false) {
@@ -618,7 +618,8 @@ final class VideoIngestEngine {
             if source.kind == .camera || source.kind == .continuity {
                 #if canImport(AVFoundation)
                 if let session = lane.session, sessionHasAudioOutput(session) {
-                    lane.audioCaptureEnabled = true
+                    // Picture only: a camera session's audio output never feeds the mic lane.
+                    lane.audioCaptureEnabled = false
                     wireCameraCaptureAudio(lane: lane)
                     return
                 }
@@ -639,8 +640,9 @@ final class VideoIngestEngine {
             }
             if source.kind == .screenShare, lane.stream != nil {
                 #if canImport(ScreenCaptureKit)
+                let sourceKey = lane.endpoint
                 lane.screenRelay.onAudioPCM = { [weak self] samples, rate in
-                    self?.onCaptureAudio?(.desktop, samples, rate)
+                    self?.onCaptureAudio?(.desktop, samples, rate, sourceKey)
                 }
                 #endif
                 return
@@ -1386,7 +1388,8 @@ final class VideoIngestEngine {
             }
             if let audio = output as? AVCaptureAudioDataOutput {
                 audio.setSampleBufferDelegate(relay, queue: relay.queue)
-                lane.audioCaptureEnabled = true
+                // Only a dedicated mic lane carries mic PCM; a reused camera session stays picture only.
+                lane.audioCaptureEnabled = lane.backend == "avfoundation-audio"
             }
         }
     }
@@ -1548,8 +1551,9 @@ final class VideoIngestEngine {
         relay.onAudioPeak = { [weak self] peak in
             self?.onCaptureAudioPeak?(.desktop, peak)
         }
+        let sourceKey = lane.endpoint
         relay.onAudioPCM = { [weak self] samples, rate in
-            self?.onCaptureAudio?(.desktop, samples, rate)
+            self?.onCaptureAudio?(.desktop, samples, rate, sourceKey)
         }
         let previous = screenCaptureChain
         screenCaptureChain = Task { @MainActor in
@@ -1770,16 +1774,13 @@ final class VideoIngestEngine {
         return AVCaptureDevice.default(for: .audio) ?? audioDevices.first
     }
 
-    /// Picture-only when a mic, the system input, or slide/desktop audio is already the program voice.
+    /// A camera is picture only (ProgramAudioGatePolicy). The mic reaches program only through an
+    /// explicit mic shot (dedicated mic lane or the system input tap). A camera that also opened its
+    /// companion mic put a second, slightly delayed copy of the same voice into the mic lane, and
+    /// with one capture session per camera (95eb06d) the iPhone's Continuity mic could join as well.
     private func shouldAddCameraMicrophone(except lane: LiveInputLane) -> Bool {
-        let otherMic = lanes.values.contains { other in
-            other !== lane
-                && other.isLive
-                && other.audioCaptureEnabled
-                && laneProvidesMicrophonePCM(other)
-        }
-        if otherMic { return false }
-        return !ProgramStreamAudioGates.programVoiceBlocksExtraMicrophone()
+        _ = lane
+        return false
     }
 
     private func companionAudioDevice(for videoDevice: AVCaptureDevice?) -> AVCaptureDevice? {
@@ -1798,8 +1799,9 @@ final class VideoIngestEngine {
             owner.cameraRelay.onAudioPeak = nil
             return
         }
+        let sourceKey = owner.endpoint
         owner.cameraRelay.onAudioPCM = { [weak self] samples, rate in
-            self?.onCaptureAudio?(.microphone, samples, rate)
+            self?.onCaptureAudio?(.microphone, samples, rate, sourceKey)
         }
         owner.cameraRelay.onAudioPeak = { [weak self] db in
             self?.onCaptureAudioPeak?(.microphone, db)
