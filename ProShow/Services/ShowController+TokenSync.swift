@@ -139,3 +139,32 @@ private extension RenderStack {
         return hasher.finalize()
     }
 }
+
+/// Values the operator window puts in the environment, created once so a re-render of the
+/// window root does not hand every descendant (and every open menu) a new environment.
+@MainActor
+final class ControllerEnvironmentHandles {
+    private weak var controller: ShowController?
+    init(controller: ShowController) { self.controller = controller }
+
+    private(set) lazy var resolvePlaceholder: (String) -> AssignedMediaSource? = { [weak self] letter in
+        self?.controller?.resolvedAssignedSource(forPlaceholder: letter)
+    }
+
+    /// Program text: re-evaluated by its readers when timers, quotes or the frame revision change.
+    private(set) lazy var programText = DynamicTextSource { [weak self] in
+        guard let controller = self?.controller else { return .empty }
+        let _ = controller.inspector.timers.map { "\($0.id)-\($0.displaySeconds)-\($0.isRunning)-\($0.durationSeconds)" }
+        let _ = controller.liveQuotePresentationStamp
+        let _ = controller.programFrameRevisionStamp
+        return controller.canonicalProgramDynamicText()
+    }
+
+    /// Editor text (same fields, evaluated now rather than from the last program tick).
+    private(set) lazy var editorText = DynamicTextSource { [weak self] in
+        guard let controller = self?.controller else { return .empty }
+        let _ = controller.liveQuotePresentationStamp
+        let _ = controller.programFrameRevisionStamp
+        return controller.dynamicTextContext()
+    }
+}

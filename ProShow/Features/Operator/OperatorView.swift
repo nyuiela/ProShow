@@ -8,10 +8,12 @@ struct OperatorView: View {
     var onOpenStreamWindow: (() -> Void)?
     var onOpenMultiViewerWindow: (() -> Void)? = nil
 
+    /// Built once: fresh closures here gave every descendant a new environment on each root render.
+    @State private var windowActions = DeskWindowActions()
+
     var body: some View {
-        let _ = controller.inspector.timers.map { "\($0.id)-\($0.displaySeconds)-\($0.isRunning)-\($0.durationSeconds)" }
-        let _ = controller.liveQuotePresentationStamp
-        let _ = controller.programFrameRevisionStamp
+        // Live text is read by its views through `dynamicTextSource`; reading timers or the frame
+        // revision here re-rendered the whole window each second and closed open submenus.
         VStack(spacing: 0) {
             #if os(macOS)
             AppWorkspaceRouter(controller: controller)
@@ -27,22 +29,15 @@ struct OperatorView: View {
             }
             #endif
         }
-        .environment(\.deskWindowActions, DeskWindowActions(
-            openAudience: { onOpenAudienceWindow?() },
-            openStage: { onOpenStageWindow?() },
-            openStream: { onOpenStreamWindow?() },
-            openMultiViewer: { onOpenMultiViewerWindow?() }
-        ))
+        .environment(\.deskWindowActions, windowActions)
         .background(ProShowTheme.canvas.ignoresSafeArea())
         .lockFlickerFreeBackground()
         .preferredColorScheme(.dark)
         .focusEffectDisabled()
         .environment(\.proShowVideoInputs, controller.videoInputs)
         .environment(\.proShowPlayback, controller.playback)
-        .environment(\.resolvePlaceholderSource) { letter in
-            controller.resolvedAssignedSource(forPlaceholder: letter)
-        }
-        .environment(\.dynamicText, controller.canonicalProgramDynamicText())
+        .environment(\.resolvePlaceholderSource, controller.environmentHandles.resolvePlaceholder)
+        .environment(\.dynamicTextSource, controller.environmentHandles.programText)
         .environment(\.liveQuoteEngine, controller.liveQuotes)
         .environment(\.buildClock, controller.liveBuildClock())
         .environment(\.mirrorsProgramPlayer, true)
@@ -53,6 +48,12 @@ struct OperatorView: View {
             #endif
         }
         .onAppear {
+            windowActions = DeskWindowActions(
+                openAudience: { onOpenAudienceWindow?() },
+                openStage: { onOpenStageWindow?() },
+                openStream: { onOpenStreamWindow?() },
+                openMultiViewer: { onOpenMultiViewerWindow?() }
+            )
             controller.evaluateProgramClockState()
         }
         .onReceive(NotificationCenter.default.publisher(for: .proShowProjectSaveStateChanged)) { _ in

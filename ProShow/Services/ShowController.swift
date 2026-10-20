@@ -252,6 +252,8 @@ final class ShowController {
     /// Bumps when project save/dirty state changes so desk chrome can refresh the ⚪ indicator.
     private(set) var projectSaveRevision: UInt64 = 0
     @ObservationIgnored var programFrame: Int = 0
+    /// Environment values with fixed identity (see DynamicTextSource).
+    @ObservationIgnored lazy var environmentHandles = ControllerEnvironmentHandles(controller: self)
     @ObservationIgnored private var programClock: Timer?
     @ObservationIgnored private var programClockIntervalActive: TimeInterval?
     @ObservationIgnored private var lastRecordEncodeSubmitAt = Date.distantPast

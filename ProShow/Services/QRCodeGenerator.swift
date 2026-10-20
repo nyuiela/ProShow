@@ -42,7 +42,9 @@ import SwiftUI
 
 struct QRCodeCanvasView: View {
     var payload: String
-    @Environment(\.dynamicText) private var dynamicText
+    @Environment(\.dynamicText) private var explicitDynamicText
+    @Environment(\.dynamicTextSource) private var dynamicTextSource
+    private var dynamicText: DynamicTextContext { dynamicTextSource?.context ?? explicitDynamicText }
 
     private var encodedPayload: String {
         DynamicTextEngine.interpolate(payload, context: dynamicText)

@@ -89,6 +89,7 @@ struct CanvasEditorView: View {
                     .frame(width: InspectorTokens.panelWidth)
             }
             statusBar
+                .background(EnvironmentChurnProbe(name: "env.editor"))
         }
         .background(ProShowTheme.canvas)
         .lockFlickerFreeBackground()
@@ -96,7 +97,7 @@ struct CanvasEditorView: View {
             let _ = controller.liveQuotePresentationStamp
             Color.clear
         }
-        .environment(\.dynamicText, controller.dynamicTextContext())
+        .environment(\.dynamicTextSource, controller.environmentHandles.editorText)
         .environment(\.liveQuoteEngine, controller.liveQuotes)
         .environment(\.proShowVideoInputs, controller.videoInputs)
         .environment(\.proShowProgramVideoInput, editorCameraPreviewInput)
@@ -2199,7 +2200,9 @@ private struct CanvasObjectView: View {
     var editing: Bool = false
     var onEdit: ((String) -> Void)? = nil
     var onCommit: ((String) -> Void)? = nil
-    @Environment(\.dynamicText) private var dynamicText
+    @Environment(\.dynamicText) private var explicitDynamicText
+    @Environment(\.dynamicTextSource) private var dynamicTextSource
+    private var dynamicText: DynamicTextContext { dynamicTextSource?.context ?? explicitDynamicText }
     @Environment(\.liveQuoteEngine) private var liveQuoteEngine
     @Environment(\.proShowPlayback) private var playback
     @Environment(\.accessibilityReduceMotion) private var reduceMotion

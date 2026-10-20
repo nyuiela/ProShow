@@ -2344,6 +2344,17 @@ enum MenuRenderProbe {
     }
 }
 
+/// Test hook: its body runs only when the environment at this spot changes. A changing
+/// environment makes SwiftUI re-apply open menus here, which closes their submenus.
+struct EnvironmentChurnProbe: View {
+    let name: String
+    @Environment(\.self) private var environment
+    var body: some View {
+        let _ = MenuRenderProbe.hit(name)
+        Color.clear.frame(width: 0, height: 0).accessibilityHidden(true)
+    }
+}
+
 /// Wraps a Menu (or menu content) so it only re-renders when `key` changes. Parents that redraw
 /// often (closures, clocks, meters) otherwise rebuild the menu, and a rebuilt menu drops its open submenu.
 struct StableMenuContent<Key: Equatable, Content: View>: View, Equatable {

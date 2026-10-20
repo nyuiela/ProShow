@@ -102,6 +102,7 @@ struct OnAirReturnsRow: View {
         .fixedSize()
         .help("Return feeds")
         .accessibilityLabel("Return feeds")
+        .background(EnvironmentChurnProbe(name: "env.returns"))
     }
 
     private func modePicker(title: String, identity: String?) -> some View {

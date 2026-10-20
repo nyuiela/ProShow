@@ -395,6 +395,7 @@ private struct OnAirAudioActionsMenu: View {
         .fixedSize()
         .help("On-Air Audio actions")
         .accessibilityLabel("On-Air Audio actions")
+        .background(EnvironmentChurnProbe(name: "env.onAir"))
     }
 
     @ViewBuilder
