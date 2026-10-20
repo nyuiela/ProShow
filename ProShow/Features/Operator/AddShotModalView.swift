@@ -113,6 +113,7 @@ struct AddShotModalView: View {
         .onAppear {
             refreshCatalog()
             rescanHardware()
+            applyQASeed()
         }
         .onChange(of: controller.liveKitDesk.revision) { _, _ in
             refreshCatalog()
@@ -785,6 +786,14 @@ struct AddShotModalView: View {
         }
     }
 
+    private func applyQASeed() {
+        guard let seed = controller.qaAddShotSeed else { return }
+        controller.qaAddShotSeed = nil
+        if let raw = seed["category"], let value = AddShotCategory(rawValue: raw) { category = value }
+        if let value = seed["query"] { query = value }
+        if let name = seed["select"] { selectedID = discovery.items.first { $0.name == name }?.id }
+    }
+
     private func refreshCatalog() {
         discovery.refresh(
             media: controller.importedMedia,
@@ -811,19 +820,18 @@ private struct DevicePreviewPlate: View {
     var prefersLive: Bool
 
     var body: some View {
-        ZStack {
-            Color.black
-            liveLayer
-            if !showsLivePicture, let image = store.image(for: item) {
-                previewImage(image)
-            } else if !showsLivePicture {
-                Image(systemName: item.category.iconName)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.4))
+        ThumbnailBox(cornerRadius: cornerRadius) {
+            ZStack {
+                liveLayer
+                if !showsLivePicture, let image = store.image(for: item) {
+                    previewImage(image)
+                } else if !showsLivePicture {
+                    Image(systemName: item.category.iconName)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.4))
+                }
             }
         }
-        .clipped()
-        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .accessibilityHidden(true)
     }
 

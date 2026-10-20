@@ -235,6 +235,8 @@ final class ShowController {
     var addShotPurpose: AddShotPurpose = .addToLayer
     /// When set, the next Add Shot confirmation replaces this shot instead of appending.
     var addShotReplaceTarget: (shotID: UUID, layerIndex: Int)?
+    /// Test hook (QA add_shot): category, query and selection applied once when the modal appears.
+    @ObservationIgnored var qaAddShotSeed: [String: String]?
     var customSolidColors: [SolidColorSwatch] = []
     var placeholderBindings: [String: PlaceholderBinding] = [:]
     var placeholderMatrix = PlaceholderMatrixEngine()
@@ -3501,6 +3503,22 @@ final class ShowController {
                                     kind: .video(duration: "0:10"), tintHex: "#336699", source: .resources, filePath: path)
             triggerMedia(item, takeProgram: true)
             return ["ok": true, "media": compositor.stack.media?.title ?? ""]
+        case "media_import":
+            // Test hook: import a file into the media bin, same as dropping it there.
+            guard let path = args["path"], FileManager.default.fileExists(atPath: path) else {
+                return ["ok": false, "error": "missing_file"]
+            }
+            let item = importMedia(url: URL(fileURLWithPath: path))
+            return ["ok": item != nil, "title": item?.title ?? ""]
+        case "add_shot":
+            // Test hook: open (open=1, purpose=add|assign) or close the Add Shot / Assign Source modal.
+            if args["open"] == "1" {
+                qaAddShotSeed = args.filter { ["category", "query", "select"].contains($0.key) }
+                if args["purpose"] == "assign" { openAddShotToAssign() } else { openAddShot(layerIndex: Int(args["layer"] ?? "") ?? 0) }
+            } else {
+                closeAddShot()
+            }
+            return ["ok": true, "open": isAddShotOpen]
         case "media_clear":
             emptyProgramLayer(.media)
             return ["ok": true]

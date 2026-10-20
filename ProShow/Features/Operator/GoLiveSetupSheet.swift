@@ -263,12 +263,11 @@ struct GoLiveSetupSheet: View {
     private var thumbnailDropContent: some View {
         #if os(macOS)
         if let data = controller.broadcastMetadata.thumbnailJPEG, let image = NSImage(data: data) {
-            Image(nsImage: image)
-                .resizable()
-                .scaledToFill()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipped()
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            ThumbnailBox(cornerRadius: 12) {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFill()
+            }
         } else {
             emptyThumbnailPrompt
         }

@@ -270,6 +270,8 @@ enum DeskLiveLayer {
 
     static func lockHost(_ view: NSView, color: NSColor = .black) {
         view.wantsLayer = true
+        // Aspect-fill video must not draw outside the host (thumbnails, rows).
+        view.layer?.masksToBounds = true
         view.layer?.backgroundColor = color.cgColor
         view.layer?.isOpaque = true
         view.layer?.contentsGravity = .resize
@@ -1262,6 +1264,23 @@ struct DeskTransparencyGrid: View {
     }
 }
 
+/// Fixed thumbnail box: the box takes exactly the size it is offered; content fills or fits
+/// inside it and is clipped to rounded corners. A fill image in a ZStack grew the stack to the
+/// image's size, so portrait media spilled out of rows.
+struct ThumbnailBox<Content: View>: View {
+    var cornerRadius: CGFloat
+    var background: Color = .black
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        Rectangle()
+            .fill(background)
+            .overlay { content() }
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+    }
+}
+
 struct MediaPreviewFrame: View {
     var filePath: String?
     var artworkURL: URL?
@@ -1270,8 +1289,7 @@ struct MediaPreviewFrame: View {
     var cornerRadius: CGFloat = DeskRadius.control
 
     var body: some View {
-        ZStack {
-            (Color(hex: tintHex) ?? ProShowTheme.well)
+        ThumbnailBox(cornerRadius: cornerRadius, background: Color(hex: tintHex) ?? ProShowTheme.well) {
             if let image = previewImage {
                 image
                     .resizable()
@@ -1282,8 +1300,6 @@ struct MediaPreviewFrame: View {
                     .foregroundStyle(.white.opacity(0.32))
             }
         }
-        .clipped()
-        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .accessibilityHidden(true)
     }
 
