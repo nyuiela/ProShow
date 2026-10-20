@@ -2432,63 +2432,63 @@ enum MenuEventWatch {
 #endif
 
 #if os(macOS)
-/// SwiftUI refreshes an open menu's items on every layout pass of its window and flips
-/// `isEnabled` off and back on. AppKit treats each flip as a change and dismisses the open
-/// submenu, so nested menus closed within a second. While a menu is tracking, enabled changes
-/// are coalesced to the end of the run loop turn and only real changes are applied.
+/// SwiftUI re-applies an open menu's items when its window updates and flips `isEnabled` off
+/// and back on; AppKit dismisses the open submenu on each flip. Once a menu has been open for a
+/// moment (never while it is being presented), enabled changes are coalesced to the end of the
+/// run loop turn and only real changes are applied. Nothing else about NSMenuItem is touched.
 @MainActor
 enum MenuItemEnableCoalescer {
     private static var installed = false
-    fileprivate static var tracking = 0
+    private static var depth = 0
+    private static var openSince: Date?
     fileprivate static var flushing = false
     private static var pending: [ObjectIdentifier: (item: NSMenuItem, enabled: Bool)] = [:]
     private static var scheduled = false
     private(set) static var skipped = 0
     private(set) static var applied = 0
-    // Submenu detach/reattach from SwiftUI's prepareForReuse, held the same way.
-    private static var pendingSubmenus: [(item: NSMenuItem, submenu: NSMenu?)] = []
-    fileprivate static var pendingSubmenuByItem: [ObjectIdentifier: NSMenu?] = [:]
-    private(set) static var submenuSkipped = 0
-    private(set) static var submenuApplied = 0
+    /// Presentation (item creation, context menu setup) happens before this.
+    private static let settle: TimeInterval = 0.3
 
     static func install() {
-        guard !installed else { return }
-        installed = true
-        guard let original = class_getInstanceMethod(NSMenuItem.self, #selector(setter: NSMenuItem.isEnabled)),
+        guard !installed,
+              let original = class_getInstanceMethod(NSMenuItem.self, #selector(setter: NSMenuItem.isEnabled)),
               let replacement = class_getInstanceMethod(NSMenuItem.self, #selector(NSMenuItem.proshow_setEnabled(_:)))
         else { return }
         method_exchangeImplementations(original, replacement)
-        if let setSub = class_getInstanceMethod(NSMenuItem.self, #selector(setter: NSMenuItem.submenu)),
-           let setSubNew = class_getInstanceMethod(NSMenuItem.self, #selector(NSMenuItem.proshow_setSubmenu(_:))),
-           let getSub = class_getInstanceMethod(NSMenuItem.self, #selector(getter: NSMenuItem.submenu)),
-           let getSubNew = class_getInstanceMethod(NSMenuItem.self, #selector(NSMenuItem.proshow_submenu)) {
-            method_exchangeImplementations(setSub, setSubNew)
-            method_exchangeImplementations(getSub, getSubNew)
-        }
+        installed = true
         let nc = NotificationCenter.default
         nc.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: nil) { _ in
-            MainActor.assumeIsolated { tracking += 1 }
+            MainActor.assumeIsolated {
+                depth += 1
+                if depth == 1 { openSince = Date() }
+            }
         }
         nc.addObserver(forName: NSMenu.didEndTrackingNotification, object: nil, queue: nil) { _ in
             MainActor.assumeIsolated {
-                tracking = max(0, tracking - 1)
-                if tracking == 0 { flush() }
+                depth = max(0, depth - 1)
+                if depth == 0 { endSession() }
+            }
+        }
+        nc.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: nil) { _ in
+            MainActor.assumeIsolated {
+                depth = 0
+                endSession()
             }
         }
     }
 
+    private static func endSession() {
+        openSince = nil
+        flush()
+    }
+
+    fileprivate static var holding: Bool {
+        guard !flushing, let openSince else { return false }
+        return Date().timeIntervalSince(openSince) >= settle
+    }
+
     fileprivate static func hold(_ item: NSMenuItem, _ enabled: Bool) {
         pending[ObjectIdentifier(item)] = (item, enabled)
-        schedule()
-    }
-
-    fileprivate static func holdSubmenu(_ item: NSMenuItem, _ submenu: NSMenu?) {
-        pendingSubmenus.append((item, submenu))
-        pendingSubmenuByItem[ObjectIdentifier(item)] = .some(submenu)
-        schedule()
-    }
-
-    private static func schedule() {
         guard !scheduled else { return }
         scheduled = true
         RunLoop.main.perform(inModes: [.common, .eventTracking]) {
@@ -2498,35 +2498,11 @@ enum MenuItemEnableCoalescer {
 
     private static func flush() {
         scheduled = false
+        guard !pending.isEmpty else { return }
         let work = pending
         pending = [:]
-        let subs = pendingSubmenus
-        pendingSubmenus = []
-        pendingSubmenuByItem = [:]
         flushing = true
         defer { flushing = false }
-        // Last value per item; detaches first so a menu moving between items is free when attached.
-        var finalSub: [ObjectIdentifier: (item: NSMenuItem, submenu: NSMenu?)] = [:]
-        var order: [ObjectIdentifier] = []
-        for entry in subs {
-            let id = ObjectIdentifier(entry.item)
-            if finalSub[id] == nil { order.append(id) }
-            finalSub[id] = entry
-        }
-        let changes = order.compactMap { finalSub[$0] }.filter { entry in
-            if entry.item.submenu === entry.submenu { submenuSkipped += 1; return false }
-            return true
-        }
-        for entry in changes where entry.submenu == nil || entry.item.submenu != nil {
-            entry.item.submenu = nil
-        }
-        for entry in changes where entry.submenu != nil {
-            submenuApplied += 1
-            if let menu = entry.submenu, let owner = menu.supermenu?.items.first(where: { $0.submenu === menu }), owner !== entry.item {
-                owner.submenu = nil
-            }
-            entry.item.submenu = entry.submenu
-        }
         for (_, entry) in work {
             if entry.item.isEnabled == entry.enabled {
                 skipped += 1
@@ -2537,9 +2513,7 @@ enum MenuItemEnableCoalescer {
         }
     }
 
-    static var stats: [String: Int] {
-        ["skipped": skipped, "applied": applied, "submenu_skipped": submenuSkipped, "submenu_applied": submenuApplied, "tracking": tracking]
-    }
+    static var stats: [String: Int] { ["skipped": skipped, "applied": applied, "depth": depth] }
 }
 
 extension NSMenuItem {
@@ -2547,35 +2521,13 @@ extension NSMenuItem {
     @objc fileprivate func proshow_setEnabled(_ enabled: Bool) {
         if Thread.isMainThread {
             let held = MainActor.assumeIsolated { () -> Bool in
-                guard MenuItemEnableCoalescer.tracking > 0, !MenuItemEnableCoalescer.flushing else { return false }
+                guard MenuItemEnableCoalescer.holding else { return false }
                 MenuItemEnableCoalescer.hold(self, enabled)
                 return true
             }
             if held { return }
         }
         proshow_setEnabled(enabled)
-    }
-
-    /// Swapped with `setSubmenu:`; calling it runs the original.
-    @objc fileprivate func proshow_setSubmenu(_ submenu: NSMenu?) {
-        if Thread.isMainThread {
-            let held = MainActor.assumeIsolated { () -> Bool in
-                guard MenuItemEnableCoalescer.tracking > 0, !MenuItemEnableCoalescer.flushing else { return false }
-                MenuItemEnableCoalescer.holdSubmenu(self, submenu)
-                return true
-            }
-            if held { return }
-        }
-        proshow_setSubmenu(submenu)
-    }
-
-    /// Swapped with the `submenu` getter: a held value reads back as set.
-    @objc fileprivate func proshow_submenu() -> NSMenu? {
-        if Thread.isMainThread {
-            let held = MainActor.assumeIsolated { MenuItemEnableCoalescer.pendingSubmenuByItem[ObjectIdentifier(self)] }
-            if let held { return held }
-        }
-        return proshow_submenu()
     }
 }
 #endif
