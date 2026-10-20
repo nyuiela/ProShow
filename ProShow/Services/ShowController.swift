@@ -125,6 +125,8 @@ final class ShowController {
     let meetingBridge = MeetingSdkBridge()
     var chatStream: LiveChatStreamManager?
     var chatIngest: ChatIngestHub?
+    /// Live chat shown in its own window (set by that window's appear/disappear).
+    var isChatDetached = false
     var virtualCameraOutput: VirtualCameraOutputService?
     let backstageSignaling = BackstageSignalingEngine()
     let guestWebRTCIngest = BackstageWebRTCIngestEngine()
@@ -3546,6 +3548,22 @@ final class ShowController {
             masterLayers = layers
             reconcileAudioCaptureGraph()
             return ["ok": removed > 0, "removed": removed]
+        case "chat_ui":
+            // Test hook for screenshots. Sets the reply draft and target, opens or closes
+            // the chat window and the More popover. Never sends a message.
+            guard let hub = chatIngest else { return ["ok": false, "error": "no_chat"] }
+            if let draft = args["draft"] { hub.replyDraft = draft }
+            if let index = args["target_index"].flatMap(Int.init), let inbox = chatStream?.inbox, inbox.indices.contains(index) {
+                hub.setReplyTarget(inbox[index])
+            }
+            if args["clear_target"] != nil { hub.setReplyTarget(nil) }
+            if let more = args["more"] { hub.moreMenuOpen = more == "1" }
+            #if os(macOS)
+            if let window = args["window"] {
+                NotificationCenter.default.post(name: window == "1" ? .proShowOpenChatWindow : .proShowCloseChatWindow, object: nil)
+            }
+            #endif
+            return ["ok": true, "detached": isChatDetached, "draft": hub.replyDraft, "target": hub.replyTarget?.senderName ?? "", "blocked": hub.replyBlockedReason ?? ""]
         case "set_mode":
             // Test hook: switch workspace (show, edit, rundown, map, ...), same as the Workspace menu.
             guard let mode = OperatorMode(rawValue: args["mode"] ?? "") else { return ["ok": false, "error": "unknown_mode"] }

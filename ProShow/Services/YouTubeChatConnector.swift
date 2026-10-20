@@ -114,6 +114,9 @@ enum YouTubeChatError: Error, Equatable {
     case rateLimited
     case noActiveChat
     case budgetReached
+    case notConnected
+    case emptyMessage
+    case messageInvalid
     case streamUnsupported
     case http(Int)
     case malformed
@@ -130,6 +133,9 @@ enum YouTubeChatError: Error, Equatable {
         case .rateLimited: return "Rate limited"
         case .noActiveChat: return "No live chat on this video"
         case .budgetReached: return "Daily quota budget reached"
+        case .notConnected: return "Connect YouTube chat first"
+        case .emptyMessage: return "Type a message"
+        case .messageInvalid: return "YouTube rejected the message"
         case .streamUnsupported: return "Stream unavailable"
         case .http(let code): return "YouTube error \(code)"
         case .malformed: return "Bad response"
@@ -182,6 +188,33 @@ enum YouTubeChatAPI {
         var r = request("\(base)/liveChat/messages/stream", q, token: token)
         r.timeoutInterval = 600
         return r
+    }
+
+    /// YouTube caps chat messages at 200 characters.
+    static let maxReplyLength = 200
+
+    /// liveChatMessages.insert. 20 quota units. Posts as the signed in channel.
+    static func insertRequest(liveChatID: String, text: String, token: String) -> URLRequest {
+        var r = request("\(base)/liveChat/messages", ["part": "snippet"], token: token)
+        r.httpMethod = "POST"
+        r.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: Any] = [
+            "snippet": [
+                "liveChatId": liveChatID,
+                "type": "textMessageEvent",
+                "textMessageDetails": ["messageText": text],
+            ],
+        ]
+        r.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        return r
+    }
+
+    /// Trims, collapses newlines, caps at 200 characters. Nil when empty.
+    static func replyText(_ raw: String) -> String? {
+        let flat = raw.replacingOccurrences(of: "\r", with: " ").replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !flat.isEmpty else { return nil }
+        return String(flat.prefix(maxReplyLength))
     }
 
     private static func request(_ url: String, _ query: [String: String], token: String) -> URLRequest {
@@ -309,6 +342,7 @@ enum YouTubeChatAPI {
         if has("liveChatEnded") { return .ended }
         if has("liveChatDisabled") { return .disabled }
         if has("liveChatNotFound") { return .notFound }
+        if has("messageTextInvalid") || has("messageTextRequired") { return .messageInvalid }
         if has("quotaExceeded") || has("dailyLimitExceeded") { return .quotaExceeded }
         if has("rateLimitExceeded") || status == 429 { return .rateLimited }
         if status == 401 { return .unauthorized }
@@ -489,6 +523,23 @@ actor YouTubeChatConnector {
         loop?.cancel()
         loop = nil
         await onUpdate(YouTubeChatUpdate(state: .idle))
+    }
+
+    /// Posts one message to the connected chat. Call only from an explicit operator
+    /// action (Send or Return). Returns the posted message for the inbox.
+    func send(_ raw: String) async throws -> LiveChatMessage? {
+        guard let text = YouTubeChatAPI.replyText(raw) else { throw YouTubeChatError.emptyMessage }
+        guard let chatID = liveChatID else { throw YouTubeChatError.notConnected }
+        var request = YouTubeChatAPI.insertRequest(liveChatID: chatID, text: text, token: try await currentToken())
+        do {
+            let data = try await send(request, units: 20)
+            return YouTubeChatAPI.parsePage(["items": [((try? JSONSerialization.jsonObject(with: data)) as? [String: Any]) ?? [:]]]).messages.first
+        } catch YouTubeChatError.unauthorized {
+            forceRefreshNext = true
+            request = YouTubeChatAPI.insertRequest(liveChatID: chatID, text: text, token: try await currentToken())
+            let data = try await send(request, units: 20)
+            return YouTubeChatAPI.parsePage(["items": [((try? JSONSerialization.jsonObject(with: data)) as? [String: Any]) ?? [:]]]).messages.first
+        }
     }
 
     /// Waits for the current loop to finish. Tests only.

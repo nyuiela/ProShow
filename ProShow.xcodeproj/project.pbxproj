@@ -368,6 +368,7 @@
 		C7F100000000000000000007 /* MeetingSdkBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F200000000000000000007 /* MeetingSdkBridge.swift */; };
 		C7F100000000000000000008 /* ShowController+Backstage.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F200000000000000000008 /* ShowController+Backstage.swift */; };
 		C7F100000000000000000009 /* BackstageControlPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F200000000000000000009 /* BackstageControlPanelView.swift */; };
+		2750DB37224DEB4DAF8642D9 /* LiveChatFeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9035DC6315A490D1FCE4F1AA /* LiveChatFeedView.swift */; };
 		93BB5E00F85E48519651CF34 /* ChatAvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DB06D7C6E8A3E6C22AF7C16 /* ChatAvatarView.swift */; };
 		C7F10000000000000000000A /* BackstageEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F20000000000000000000A /* BackstageEngineTests.swift */; };
 		C7F10000000000000000000B /* VirtualCameraFrameQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F20000000000000000000B /* VirtualCameraFrameQueue.swift */; };
@@ -790,6 +791,7 @@
 		C7F200000000000000000007 /* MeetingSdkBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingSdkBridge.swift; sourceTree = "<group>"; };
 		C7F200000000000000000008 /* ShowController+Backstage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ShowController+Backstage.swift"; sourceTree = "<group>"; };
 		C7F200000000000000000009 /* BackstageControlPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackstageControlPanelView.swift; sourceTree = "<group>"; };
+		9035DC6315A490D1FCE4F1AA /* LiveChatFeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveChatFeedView.swift; sourceTree = "<group>"; };
 		5DB06D7C6E8A3E6C22AF7C16 /* ChatAvatarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatAvatarView.swift; sourceTree = "<group>"; };
 		C7F20000000000000000000A /* BackstageEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackstageEngineTests.swift; sourceTree = "<group>"; };
 		C7F20000000000000000000B /* VirtualCameraFrameQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualCameraFrameQueue.swift; sourceTree = "<group>"; };
@@ -1244,6 +1246,7 @@
 				A20000000000000000000081 /* CanvasEditorMouseTracker.swift */,
 				A20000000000000000000031 /* RightInspectorView.swift */,
 				C7F200000000000000000009 /* BackstageControlPanelView.swift */,
+				9035DC6315A490D1FCE4F1AA /* LiveChatFeedView.swift */,
 				5DB06D7C6E8A3E6C22AF7C16 /* ChatAvatarView.swift */,
 				A200000000000000000000AE /* ActionStackInspectorView.swift */,
 				C6D200000000000000000030 /* UserCompositionPanelView.swift */,
@@ -1688,6 +1691,7 @@
 				C7F100000000000000000008 /* ShowController+Backstage.swift in Sources */,
 				C7F100000000000000000013 /* ShowController+LibraryHierarchy.swift in Sources */,
 				C7F100000000000000000009 /* BackstageControlPanelView.swift in Sources */,
+				2750DB37224DEB4DAF8642D9 /* LiveChatFeedView.swift in Sources */,
 				93BB5E00F85E48519651CF34 /* ChatAvatarView.swift in Sources */,
 				C7F10000000000000000000B /* VirtualCameraFrameQueue.swift in Sources */,
 				C7F10000000000000000000C /* VirtualAudioLoopbackService.swift in Sources */,

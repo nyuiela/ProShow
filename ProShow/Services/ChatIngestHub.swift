@@ -13,6 +13,15 @@ final class ChatIngestHub {
     var youtubeConnects = 0
     var youtubeLastHoldSeconds: Double?
     var youtubeDayUnits = 0
+    /// Reply composer state. Sending happens only from `sendReply()`, which the
+    /// UI calls on the operator's Send click or Return. No API route sends.
+    var replyTarget: LiveChatMessage?
+    var replyDraft = ""
+    var replySending = false
+    var replyError: String?
+    /// More popover open. Lives here so the QA hook can open it for screenshots.
+    var moreMenuOpen = false
+
     /// True when Go Live started the connector (stopping the broadcast stops it).
     private(set) var youtubeAutoStarted = false
 
@@ -65,6 +74,60 @@ final class ChatIngestHub {
         youtube = nil
         youtubeAutoStarted = false
         youtubeState = .idle
+    }
+
+    /// Platform the next reply goes to: the target's platform, else YouTube.
+    var replyPlatform: ChatPlatform {
+        replyTarget.map { ChatPlatform.from(displayName: $0.platformSource) } ?? .youtube
+    }
+
+    /// Nil when Send can run. Otherwise a terse reason shown under the box.
+    var replyBlockedReason: String? {
+        switch replyPlatform {
+        case .youtube:
+            return youtube != nil && youtubeState.isActive ? nil : "Connect YouTube chat first"
+        case .x:
+            return "Sign in to X"
+        default:
+            return "Replies go to YouTube or X"
+        }
+    }
+
+    func setReplyTarget(_ message: LiveChatMessage?) {
+        replyTarget = message
+        replyError = nil
+    }
+
+    /// Operator action only. Posts the draft to the target platform.
+    func sendReply() async {
+        guard !replySending else { return }
+        guard replyBlockedReason == nil, let youtube else {
+            replyError = replyBlockedReason
+            return
+        }
+        var text = replyDraft
+        if let target = replyTarget, ChatPlatform.from(displayName: target.platformSource) == .youtube,
+           !text.hasPrefix("@") {
+            let handle = target.senderName.hasPrefix("@") ? target.senderName : "@\(target.senderName)"
+            text = "\(handle) \(text)"
+        }
+        guard YouTubeChatAPI.replyText(replyDraft) != nil else {
+            replyError = YouTubeChatError.emptyMessage.reason
+            return
+        }
+        replySending = true
+        replyError = nil
+        defer { replySending = false }
+        do {
+            let posted = try await youtube.send(text)
+            replyDraft = ""
+            replyTarget = nil
+            if let posted { _ = stream?.ingestBatch([posted]) }
+        } catch let error as YouTubeChatError {
+            replyError = error.reason
+        } catch {
+            replyError = "Send failed"
+        }
     }
 
     func stopAutoStarted() {

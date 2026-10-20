@@ -13,6 +13,8 @@ final class LiveChatStreamManager {
 
     private weak var chatEngine: LiveChatEngine?
     private var seenKeys: Set<String> = []
+    /// Session-only blocks, keyed by platform:authorID.
+    private(set) var blockedAuthors: Set<String> = []
     private var seenOrder: [String] = []
     static let seenLimit = 2000
     private var autoClearTask: Task<Void, Never>?
@@ -34,6 +36,7 @@ final class LiveChatStreamManager {
     func ingest(_ message: LiveChatMessage) -> Bool {
         let platform = ChatPlatform.from(displayName: message.platformSource)
         guard enabledSources.contains(platform) else { return false }
+        if let author = message.authorID, blockedAuthors.contains("\(platform.rawValue):\(author)") { return false }
         if let key = message.dedupeKey {
             guard !seenKeys.contains(key) else { return false }
             remember(key)
@@ -54,6 +57,24 @@ final class LiveChatStreamManager {
         var added = 0
         for message in messages where ingest(message) { added += 1 }
         return added
+    }
+
+    /// Operator hide. The message never comes back on replay. True when it was on screen.
+    @discardableResult
+    func hide(id: String) -> Bool {
+        guard let message = inbox.first(where: { $0.id == id }) else { return false }
+        if let key = message.dedupeKey, !seenKeys.contains(key) { remember(key) }
+        return removeWhere { $0.id == id }
+    }
+
+    /// Operator block for this session: hides the author's messages now and later.
+    @discardableResult
+    func blockAuthor(of id: String) -> Bool {
+        guard let message = inbox.first(where: { $0.id == id }) else { return false }
+        let platform = ChatPlatform.from(displayName: message.platformSource)
+        guard let author = message.authorID else { return hide(id: id) }
+        blockedAuthors.insert("\(platform.rawValue):\(author)")
+        return removeAuthors(platform: platform, authorIDs: [author])
     }
 
     /// Upstream delete. Returns true when the removed message was on screen.

@@ -46,6 +46,12 @@ enum YouTubeChatFixtures {
     static let ended = #"""
     {"nextPageToken":"TOK3","offlineAt":"2026-10-20T23:00:00Z","items":[{"id":"e1","snippet":{"type":"chatEndedEvent"}}]}
     """#
+    static let posted = #"""
+    {"kind":"youtube#liveChatMessage","id":"posted1","snippet":{"type":"textMessageEvent","publishedAt":"2026-10-20T23:59:00Z",
+     "displayMessage":"@Ama hi","textMessageDetails":{"messageText":"@Ama hi"}},
+     "authorDetails":{"channelId":"UC_me","displayName":"Kaleel","isChatOwner":true}}
+    """#
+
     static func error(_ code: Int, _ reason: String) -> String {
         #"{"error":{"code":\#(code),"message":"x","errors":[{"domain":"youtube.liveChat","reason":"\#(reason)"}]}}"#
     }
@@ -392,6 +398,115 @@ struct YouTubeChatIngestTests {
         #expect(YouTubeQuotaLedger.spend(5, now: lateLA, defaults: defaults) == 10)
         #expect(YouTubeQuotaLedger.spend(1, now: nextLA, defaults: defaults) == 1)
         #expect(YouTubeQuotaLedger.today(now: lateLA, defaults: defaults) == 0)
+    }
+
+    @Test
+    func insertRequest_postsTextMessageToChat() throws {
+        let r = YouTubeChatAPI.insertRequest(liveChatID: "CHAT", text: "hello", token: "t")
+        #expect(r.httpMethod == "POST")
+        #expect(r.url!.absoluteString.contains("/liveChat/messages?part=snippet"))
+        let body = try JSONSerialization.jsonObject(with: r.httpBody!) as! [String: Any]
+        let snippet = body["snippet"] as! [String: Any]
+        #expect(snippet["liveChatId"] as? String == "CHAT")
+        #expect(snippet["type"] as? String == "textMessageEvent")
+        #expect((snippet["textMessageDetails"] as? [String: Any])?["messageText"] as? String == "hello")
+        #expect(YouTubeChatAPI.replyText("  a\nb  ") == "a b")
+        #expect(YouTubeChatAPI.replyText("   ") == nil)
+        #expect(YouTubeChatAPI.replyText(String(repeating: "x", count: 300))?.count == 200)
+    }
+
+    @Test
+    func send_requiresConnection_andRespectsBudget() async {
+        let idle = YouTubeChatConnector(transport: FakeLiveTransport([]), streamTransport: FakeStreamTransport([]),
+            token: { _ in "t" }, sleep: { _ in }, spendUnits: TestLedger().spend, onUpdate: { _ in })
+        await #expect(throws: YouTubeChatError.notConnected) { _ = try await idle.send("hi") }
+
+        // Connected (chat id known after polling), 6,985 spent: list (5) fits, the 20 unit send does not.
+        let transport = FakeLiveTransport([("liveChatId=", 200, YouTubeChatFixtures.ended)])
+        let tight = YouTubeChatConnector(transport: transport, streamTransport: FakeStreamTransport([]),
+            preferStream: false, token: { _ in "t" }, sleep: { _ in }, dailyBudget: 7000,
+            spendUnits: TestLedger(start: 6985).spend, onUpdate: { _ in })
+        await tight.start(.chatID("CHAT"))
+        await tight.waitUntilFinished()
+        await #expect(throws: YouTubeChatError.budgetReached) { _ = try await tight.send("hi") }
+        #expect(transport.urls.count == 1)
+        await #expect(throws: YouTubeChatError.emptyMessage) { _ = try await tight.send("  ") }
+    }
+
+    @Test
+    func send_postsOnce_andReturnsPostedMessage() async throws {
+        let transport = FakeLiveTransport([
+            ("liveChatId=", 200, YouTubeChatFixtures.ended),
+            ("messages?part=snippet", 200, YouTubeChatFixtures.posted),
+        ])
+        let connector = YouTubeChatConnector(transport: transport, streamTransport: FakeStreamTransport([]),
+            preferStream: false, token: { _ in "t" }, sleep: { _ in }, spendUnits: TestLedger().spend, onUpdate: { _ in })
+        await connector.start(.chatID("CHAT"))
+        await connector.waitUntilFinished()
+        let posted = try await connector.send("@Ama hi")
+        #expect(posted?.externalID == "posted1")
+        #expect(posted?.authorRole == "owner")
+        let inserts = transport.requests.filter { $0.httpMethod == "POST" }
+        #expect(inserts.count == 1)
+        #expect(await connector.quotaUnits == 5 + 20)
+    }
+
+    @Test @MainActor
+    func hub_replyRouting_andOperatorSend() async throws {
+        let saved = LiveChatIngestFlags.liveChatIngestV1
+        defer { LiveChatIngestFlags.liveChatIngestV1 = saved }
+        LiveChatIngestFlags.liveChatIngestV1 = true
+        let manager = LiveChatStreamManager(chatEngine: LiveChatEngine())
+        let hub = ChatIngestHub(stream: manager)
+        hub.tokenProvider = { _ in "t" }
+        #expect(hub.replyBlockedReason == "Connect YouTube chat first")
+        hub.setReplyTarget(LiveChatMessage(senderName: "xuser", platformSource: "X", messageText: "yo"))
+        #expect(hub.replyBlockedReason == "Sign in to X")
+        hub.setReplyTarget(nil)
+
+        let transport = FakeLiveTransport([
+            ("liveChatId=", 200, YouTubeChatFixtures.page1),
+            ("messages?part=snippet", 200, YouTubeChatFixtures.posted),
+        ])
+        hub.makeConnector = { token, onUpdate in
+            YouTubeChatConnector(transport: transport, streamTransport: FakeStreamTransport([]), preferStream: false,
+                token: token, sleep: { _ in try await Task.sleep(nanoseconds: 20_000_000) },
+                spendUnits: TestLedger().spend, onUpdate: onUpdate)
+        }
+        #expect(hub.connectYouTube(.chatID("CHAT")))
+        for _ in 0..<100 where manager.inbox.isEmpty { try await Task.sleep(nanoseconds: 20_000_000) }
+        let ama = try #require(manager.inbox.first(where: { $0.externalID == "m1" }))
+        hub.setReplyTarget(ama)
+        #expect(hub.replyBlockedReason == nil)
+        // Nothing is posted until sendReply runs (the composer calls it on Send or Return only).
+        hub.replyDraft = "hi"
+        #expect(transport.requests.filter { $0.httpMethod == "POST" }.isEmpty)
+        await hub.sendReply()
+        let posts = transport.requests.filter { $0.httpMethod == "POST" }
+        #expect(posts.count == 1)
+        let body = try JSONSerialization.jsonObject(with: posts[0].httpBody!) as! [String: Any]
+        #expect(((body["snippet"] as? [String: Any])?["textMessageDetails"] as? [String: Any])?["messageText"] as? String == "@Ama hi")
+        #expect(hub.replyDraft.isEmpty)
+        #expect(hub.replyTarget == nil)
+        #expect(hub.replyError == nil)
+        #expect(manager.inbox.first?.externalID == "posted1")
+        hub.stopYouTube()
+    }
+
+    @Test @MainActor
+    func inbox_hideAndBlockAuthor() throws {
+        let manager = LiveChatStreamManager(chatEngine: LiveChatEngine())
+        manager.setSourceEnabled(.youtube, enabled: true)
+        let p1 = try YouTubeChatAPI.parsePage(Data(YouTubeChatFixtures.page1.utf8))
+        manager.ingestBatch(p1.messages)
+        manager.hide(id: "youtube:m1")
+        #expect(manager.inbox.map(\.externalID) == ["m2"])
+        #expect(manager.ingestBatch(p1.messages) == 0)
+        manager.blockAuthor(of: "youtube:m2")
+        #expect(manager.inbox.isEmpty)
+        let again = LiveChatMessage(id: "youtube:m9", senderName: "Kofi", platformSource: "YouTube", messageText: "back",
+            externalID: "m9", authorID: "UC_b")
+        #expect(!manager.ingest(again))
     }
 
     @Test @MainActor
