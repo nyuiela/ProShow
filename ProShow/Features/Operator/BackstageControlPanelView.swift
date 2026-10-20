@@ -5,6 +5,8 @@ struct BackstageControlPanelView: View {
     @Bindable var controller: ShowController
     @Environment(\.colorScheme) private var scheme
     @State private var guestPendingRemoval: LiveKitGuestFeed?
+    @State private var youtubeChatInput = ""
+    @State private var chatMoreOpen = false
 
     private var backstage: ProShowBackstageEngine { controller.backstage }
     private var chatStream: LiveChatStreamManager? { controller.chatStream }
@@ -301,9 +303,16 @@ struct BackstageControlPanelView: View {
 
     private var chatSection: some View {
         VStack(alignment: .leading, spacing: DeskSpace.sm) {
-            DeskSectionTitle(title: "Live chat stream")
+            HStack(spacing: 6) {
+                DeskSectionTitle(title: "Live chat stream")
+                if let chatStream {
+                    chatMoreButton(chatStream)
+                }
+            }
+            if let hub = controller.chatIngest, hub.isEnabled, hub.youtubeState != .idle {
+                youtubeStatusLine(hub)
+            }
             if let chatStream {
-                chatSourceToggles(chatStream)
                 if let active = chatStream.activeOverlay {
                     activeOverlayCard(active, chatStream: chatStream)
                 }
@@ -317,9 +326,35 @@ struct BackstageControlPanelView: View {
         .background(ShowSidebarPalette.selection(scheme), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
+    private func chatMoreButton(_ chatStream: LiveChatStreamManager) -> some View {
+        Button {
+            chatMoreOpen.toggle()
+        } label: {
+            HStack(spacing: 3) {
+                Text("More")
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+            }
+            .font(DeskType.micro)
+        }
+        .buttonStyle(.borderless)
+        .fixedSize()
+        .popover(isPresented: $chatMoreOpen, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 10) {
+                if let hub = controller.chatIngest, hub.isEnabled {
+                    youtubeChatRow(hub)
+                    Divider()
+                }
+                chatSourceToggles(chatStream)
+            }
+            .padding(12)
+            .frame(width: 290)
+        }
+    }
+
     private func chatSourceToggles(_ chatStream: LiveChatStreamManager) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            ForEach([ChatPlatform.zoom, .googleMeet, .backstage], id: \.self) { platform in
+            ForEach(chatSourcePlatforms, id: \.self) { platform in
                 Toggle(platform.displayTitle, isOn: Binding(
                     get: { chatStream.enabledSources.contains(platform) },
                     set: { chatStream.setSourceEnabled(platform, enabled: $0) }
@@ -329,42 +364,86 @@ struct BackstageControlPanelView: View {
         }
     }
 
+    private var chatSourcePlatforms: [ChatPlatform] {
+        var list: [ChatPlatform] = [.zoom, .googleMeet, .backstage]
+        if controller.chatIngest?.isEnabled == true { list.insert(.youtube, at: 0) }
+        return list
+    }
+
+    private func youtubeChatRow(_ hub: ChatIngestHub) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                TextField("YouTube URL or video ID", text: $youtubeChatInput)
+                    .textFieldStyle(.roundedBorder)
+                    .font(DeskType.micro)
+                    .disabled(hub.youtubeState.isActive)
+                if hub.youtubeState.isActive {
+                    Button("Stop") { hub.stopYouTube() }
+                        .controlSize(.small)
+                } else {
+                    Button("Connect") {
+                        let input = youtubeChatInput.trimmingCharacters(in: .whitespacesAndNewlines)
+                        hub.connectYouTube(input.isEmpty ? .autoActive : .video(input))
+                    }
+                    .controlSize(.small)
+                }
+            }
+            youtubeStatusLine(hub)
+        }
+    }
+
+    private func youtubeStatusLine(_ hub: ChatIngestHub) -> some View {
+        HStack(spacing: 6) {
+            Text("YouTube: \(hub.youtubeState.label)")
+            if let title = hub.youtubeTitle, !title.isEmpty {
+                Text(title).lineLimit(1).truncationMode(.tail)
+            }
+        }
+        .font(DeskType.micro)
+        .foregroundStyle(ShowSidebarPalette.subtitle)
+        .help("\(hub.youtubeMessageCount) messages. Quota today about \(hub.youtubeDayUnits) of \(YouTubeQuotaLedger.dailyBudget) units")
+    }
+
     private func chatMessageRow(_ message: LiveChatMessage, chatStream: LiveChatStreamManager) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(message.senderName)
-                        .font(DeskType.bodyEmph)
-                        .lineLimit(1)
-                    Text(message.platformSource)
-                        .font(DeskType.micro)
-                        .foregroundStyle(ShowSidebarPalette.subtitle)
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .center, spacing: 6) {
+                ChatAvatarView(url: message.senderAvatarUrl, name: message.senderName, size: 22)
+                Text(message.senderName)
+                    .font(DeskType.bodyEmph)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Text(message.platformSource)
+                    .font(DeskType.micro)
+                    .foregroundStyle(ShowSidebarPalette.subtitle)
+                    .lineLimit(1)
+                    .layoutPriority(-1)
+                Spacer(minLength: 4)
+                Button {
+                    controller.triggerChatOverlay(message)
+                } label: {
+                    Image(systemName: message.isFeaturedOnScreen ? "tv.fill" : "tv")
+                        .foregroundStyle(message.isFeaturedOnScreen ? ProShowTheme.statusOn : ShowSidebarPalette.subtitle)
                 }
-                Spacer(minLength: 0)
-                if message.isStarred {
-                    Image(systemName: "star.fill")
-                        .font(.caption2)
-                        .foregroundStyle(ProShowTheme.statusOn)
-                        .accessibilityLabel("Starred")
+                .buttonStyle(.borderless)
+                .help("Display on screen")
+                .accessibilityLabel("Display on screen")
+                Button {
+                    chatStream.toggleStar(id: message.id)
+                } label: {
+                    Image(systemName: message.isStarred ? "star.fill" : "star")
+                        .foregroundStyle(message.isStarred ? ProShowTheme.statusOn : ShowSidebarPalette.subtitle)
                 }
+                .buttonStyle(.borderless)
+                .help(message.isStarred ? "Unstar" : "Star")
+                .accessibilityLabel(message.isStarred ? "Unstar" : "Star")
             }
             Text(message.messageText)
                 .font(DeskType.body)
                 .foregroundStyle(ShowSidebarPalette.title)
                 .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 8) {
-                Button("Display on screen") {
-                    controller.triggerChatOverlay(message)
-                }
-                .controlSize(.small)
-                Button(message.isStarred ? "Unstar" : "Star") {
-                    chatStream.toggleStar(id: message.id)
-                }
-                .controlSize(.small)
-                Spacer(minLength: 0)
-            }
+                .padding(.leading, 28)
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 5)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 

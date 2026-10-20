@@ -152,7 +152,8 @@ Dedupe key: `"\(platform.rawValue):\(externalID)"`. The inbox keeps a bounded se
 
 ## 5. Costs and quotas
 
-- YouTube: 10,000 units/day default. streamList is 5 units per connect. A 2 hour show with a few reconnects is under 100 units. List polling at the server `pollingIntervalMillis` (often 3 to 10 s) is about 5 units per call; 1 hour of polling at 5 s is about 3,600 units, so polling is fallback only and the connector stops polling when quota errors appear. Discovery calls cost 1 unit each.
+- YouTube: 10,000 units/day default. streamList is 5 units per connect. Measured 2026-10-20: over HTTP the server holds each streamList connection about 10.5 s and then closes it (long poll), so the connector reconnects with the page token about 6 times a minute: about 30 units/min, 1,800 units/hour. That is about 3.9 hours of chat a day inside the 7,000 unit chat budget. Only gRPC keeps one connection open for the whole show (Phase 1b). List polling costs the same 5 units per call. Discovery calls cost 1 unit each.
+- Guard: `YouTubeQuotaLedger` keeps a local per Pacific day estimate (quota resets at midnight Pacific) and the connector stops with `Daily quota budget reached` before it would pass 7,000 units, so Go Live provisioning (same quota) keeps working. `GET /v1/chat/youtube` reports `quota_units_today`, `stream_connects`, `last_hold_s`.
 - X: push only. About $0.01 per show for broadcast start/end. Do not poll `/2/broadcasts/{id}/chat` until the price is published. Budget stays under $0.50/day per account and $1/day combined.
 - The connector keeps a running `quotaUnitsUsed` estimate, shown in the panel tooltip and in `GET /v1/chat/youtube`.
 
@@ -186,7 +187,7 @@ Acceptance:
 - Kill network for 30 s: connector shows Retrying, then resumes with no duplicates and no gap beyond what YouTube keeps.
 - Chat ends: state Ended, no further calls.
 - Flag off: zero network calls, UI unchanged.
-- Under 100 quota units per hour in stream mode.
+- Quota: about 1,800 units per hour over HTTP streamList (measured). Hard stop at 7,000 units per Pacific day. Phase 1b (gRPC streamList, one long-lived connection) targets under 100 units per hour.
 
 ### Phase 2: X
 
@@ -209,7 +210,17 @@ Acceptance: blocked author never reappears in session; filtered words never reac
 - Twitch and Kick: when an account is added. Twitch EventSub WebSocket needs no public endpoint, so it comes first.
 - TikTok: not viable without a public API. Revisit if TikTok publishes one.
 
-## 8. Risks
+## 8. Replies (research only, not built)
+
+| Platform | Endpoint | Auth | Cost | Notes |
+| --- | --- | --- | --- | --- |
+| YouTube | `liveChatMessages.insert` (`POST /youtube/v3/liveChat/messages`, `snippet.type=textMessageEvent`) | `youtube` or `youtube.force-ssl`. ProShow already requests `youtube`, so no re-consent | 20 units per message | Posts as the signed in channel. `rateLimitExceeded` if sending too fast. Source: https://developers.google.com/youtube/v3/live/docs/liveChatMessages/insert |
+| X | `POST /2/broadcasts/{id}/chat` (send to a live broadcast) | OAuth 2.0 user token with `broadcast.write` (same re-consent as Phase 2) | Pay per use, price not confirmed | Broadcast must be live (400 otherwise). Third party reports a 140 character cap. No MCP tool for it (MCP `send_chat_message` is encrypted X Chat DMs, not broadcast chat). Moderation exists: `DELETE /2/broadcasts/{id}/chat/{message_id}`, mute and unmute |
+| LinkedIn, Facebook, Instagram | Comment replies need partner access or Meta App Review | | | Later |
+
+Rules if built: operator types and confirms every reply, nothing automatic, posts as the signed in account, separate flag `proshow.liveChatReplyV1`.
+
+## 9. Risks
 
 - streamList over HTTP framing is not documented in detail. The parser accepts JSON array framing and newline framing, and the connector falls back to list polling on any framing failure.
 - YouTube `rateLimitExceeded` if we poll faster than `pollingIntervalMillis`. The connector always waits at least the server interval.

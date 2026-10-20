@@ -124,6 +124,7 @@ final class ShowController {
     let backstage = ProShowBackstageEngine()
     let meetingBridge = MeetingSdkBridge()
     var chatStream: LiveChatStreamManager?
+    var chatIngest: ChatIngestHub?
     var virtualCameraOutput: VirtualCameraOutputService?
     let backstageSignaling = BackstageSignalingEngine()
     let guestWebRTCIngest = BackstageWebRTCIngestEngine()
@@ -388,6 +389,7 @@ final class ShowController {
         configureVideoFrameInvalidation()
         configureDocumentStateSubscriptions()
         bootstrapBackstageServices()
+        bootstrapChatIngest()
     }
 
     private func configureDocumentStateSubscriptions() {
@@ -8312,6 +8314,9 @@ final class ShowController {
             }
             let ok = playSoundboardPad(id)
             return (ok ? 200 : 404, #"{"ok":\#(ok),"action":"soundboard_play"}"#)
+        }
+        if parts == ["v1", "chat", "youtube"] {
+            return handleYouTubeChatControl(method: method, body: body)
         }
         if method == "POST", parts == ["v1", "chat", "overlay"] {
             let parsed = ControlHTTP.jsonObject(body)

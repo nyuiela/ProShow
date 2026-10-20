@@ -23,6 +23,7 @@ extension ShowController {
 
     func stopBroadcast() {
         streaming.stop()
+        chatIngest?.stopAutoStarted()
         isProvisioningStreams = false
         lastBroadcastError = nil
         evaluateProgramClockState()
@@ -256,6 +257,7 @@ extension ShowController {
         Task {
             let listingIngests = await prepareXBroadcasts(ingests, metadata: metadata, api: api)
             await transitionYouTubeBroadcasts(listingIngests, api: api)
+            startYouTubeChatAfterGoLive(listingIngests)
             await finishXBroadcasts(listingIngests, metadata: metadata, api: api)
         }
         return true

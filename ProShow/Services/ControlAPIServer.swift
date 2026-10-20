@@ -115,6 +115,9 @@ enum ControlHTTP {
         if parts.count == 4, parts[0] == "v1", parts[1] == "chat", parts[2] == "ingest" {
             return method == "POST"
         }
+        if parts == ["v1", "chat", "youtube"] {
+            return method == "POST" || method == "GET"
+        }
         if method == "GET" { return true }
         return false
     }

@@ -12,6 +12,9 @@ final class LiveChatStreamManager {
     var lastIngestError: String?
 
     private weak var chatEngine: LiveChatEngine?
+    private var seenKeys: Set<String> = []
+    private var seenOrder: [String] = []
+    static let seenLimit = 2000
     private var autoClearTask: Task<Void, Never>?
 
     init(chatEngine: LiveChatEngine) {
@@ -26,15 +29,63 @@ final class LiveChatStreamManager {
         }
     }
 
-    func ingest(_ message: LiveChatMessage) {
+    /// Returns false when the source is off or the message is a duplicate.
+    @discardableResult
+    func ingest(_ message: LiveChatMessage) -> Bool {
         let platform = ChatPlatform.from(displayName: message.platformSource)
-        guard enabledSources.contains(platform) else { return }
+        guard enabledSources.contains(platform) else { return false }
+        if let key = message.dedupeKey {
+            guard !seenKeys.contains(key) else { return false }
+            remember(key)
+        }
         inbox.insert(message, at: 0)
         if inbox.count > 200 {
             inbox = Array(inbox.prefix(200))
         }
         if let studio = message.asStudioChatMessage() {
             chatEngine?.ingest(studio)
+        }
+        return true
+    }
+
+    /// Oldest first batch from a connector. Returns how many were added.
+    @discardableResult
+    func ingestBatch(_ messages: [LiveChatMessage]) -> Int {
+        var added = 0
+        for message in messages where ingest(message) { added += 1 }
+        return added
+    }
+
+    /// Upstream delete. Returns true when the removed message was on screen.
+    @discardableResult
+    func removeExternal(platform: ChatPlatform, ids: [String]) -> Bool {
+        let keys = Set(ids.map { "\(platform.rawValue):\($0)" })
+        for key in keys where !seenKeys.contains(key) { remember(key) }
+        return removeWhere { $0.dedupeKey.map(keys.contains) ?? false }
+    }
+
+    /// Upstream ban. Returns true when a removed message was on screen.
+    @discardableResult
+    func removeAuthors(platform: ChatPlatform, authorIDs: [String]) -> Bool {
+        let ids = Set(authorIDs)
+        return removeWhere {
+            ChatPlatform.from(displayName: $0.platformSource) == platform && ($0.authorID.map(ids.contains) ?? false)
+        }
+    }
+
+    private func removeWhere(_ match: (LiveChatMessage) -> Bool) -> Bool {
+        let onScreen = activeOverlay.map(match) ?? false
+        inbox.removeAll(where: match)
+        return onScreen
+    }
+
+    private func remember(_ key: String) {
+        seenKeys.insert(key)
+        seenOrder.append(key)
+        if seenOrder.count > Self.seenLimit {
+            let drop = seenOrder.count - Self.seenLimit
+            for old in seenOrder.prefix(drop) { seenKeys.remove(old) }
+            seenOrder.removeFirst(drop)
         }
     }
 

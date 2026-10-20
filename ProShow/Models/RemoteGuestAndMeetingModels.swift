@@ -113,6 +113,14 @@ public struct LiveChatMessage: Identifiable, Codable, Equatable, Sendable {
     public var timestamp: Date
     public var isStarred: Bool
     public var isFeaturedOnScreen: Bool
+    /// Platform message id. With the platform, the dedupe key.
+    public var externalID: String?
+    public var authorID: String?
+    /// owner, moderator, member, verified
+    public var authorRole: String?
+    /// text, superChat, superSticker, membership
+    public var kind: String?
+    public var amountDisplay: String?
 
     public init(
         id: String = UUID().uuidString,
@@ -122,7 +130,12 @@ public struct LiveChatMessage: Identifiable, Codable, Equatable, Sendable {
         messageText: String,
         timestamp: Date = Date(),
         isStarred: Bool = false,
-        isFeaturedOnScreen: Bool = false
+        isFeaturedOnScreen: Bool = false,
+        externalID: String? = nil,
+        authorID: String? = nil,
+        authorRole: String? = nil,
+        kind: String? = nil,
+        amountDisplay: String? = nil
     ) {
         self.id = id
         self.senderName = senderName
@@ -132,6 +145,17 @@ public struct LiveChatMessage: Identifiable, Codable, Equatable, Sendable {
         self.timestamp = timestamp
         self.isStarred = isStarred
         self.isFeaturedOnScreen = isFeaturedOnScreen
+        self.externalID = externalID
+        self.authorID = authorID
+        self.authorRole = authorRole
+        self.kind = kind
+        self.amountDisplay = amountDisplay
+    }
+
+    /// Nil for messages without a platform id (webhooks), which are never deduped.
+    var dedupeKey: String? {
+        guard let externalID, !externalID.isEmpty else { return nil }
+        return "\(ChatPlatform.from(displayName: platformSource).rawValue):\(externalID)"
     }
 
     func asStudioChatMessage() -> ChatMessage? {

@@ -17,16 +17,16 @@ struct CaptureBudgetTests {
 
     @Test
     func largerMachinesDefaultTo1080p() {
-        let sixteen = 16 * 1024 * 1024 * 1024
+        let sixteen: UInt64 = 16 * 1024 * 1024 * 1024
         #expect(!CaptureBudget.prefersCompactOutput(physicalMemory: sixteen))
         #expect(CaptureBudget.factoryResolution(physicalMemory: sixteen) == .res1080p)
     }
 
     @Test
     func fourKNeedsSixteenGBOrHardwareHEVC() {
-        let four = 4 * 1024 * 1024 * 1024
-        let eight = 8 * 1024 * 1024 * 1024
-        let sixteen = 16 * 1024 * 1024 * 1024
+        let four: UInt64 = 4 * 1024 * 1024 * 1024
+        let eight: UInt64 = 8 * 1024 * 1024 * 1024
+        let sixteen: UInt64 = 16 * 1024 * 1024 * 1024
         #expect(!CaptureBudget.allows4KOutput(physicalMemory: four, hardwareHEVC: false))
         #expect(!CaptureBudget.allows4KOutput(physicalMemory: eight, hardwareHEVC: false))
         #expect(CaptureBudget.allows4KOutput(physicalMemory: eight, hardwareHEVC: true))

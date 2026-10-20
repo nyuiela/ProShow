@@ -153,6 +153,7 @@ enum ControlAPIOpenAPI {
             "/v1/soundboard/{pad_id}/play": post("Fire a soundboard pad."),
             "/v1/chat/overlay": post("Push a chat overlay card."),
             "/v1/chat/ingest/{platform}": post("Zoom / Meet / YouTube / Twitch webhook ingest."),
+            "/v1/chat/youtube": post("YouTube chat ingest: input (URL, video id, or auto), chat_id, or stop. GET for state."),
             "/v1/backstage/{room_slug}/signal": [
                 "post": op("WebRTC signaling relay (join, offer, answer, ice, mediaFrame)."),
                 "get": op("Upgrade to WebSocket for the same signaling envelope."),
