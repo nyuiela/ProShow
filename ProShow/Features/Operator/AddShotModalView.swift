@@ -791,7 +791,15 @@ struct AddShotModalView: View {
         controller.qaAddShotSeed = nil
         if let raw = seed["category"], let value = AddShotCategory(rawValue: raw) { category = value }
         if let value = seed["query"] { query = value }
-        if let name = seed["select"] { selectedID = discovery.items.first { $0.name == name }?.id }
+        guard let name = seed["select"] else { return }
+        Task { @MainActor in
+            // Hardware sources arrive after the async rescan; wait for the item before selecting.
+            for _ in 0..<50 where !discovery.items.contains(where: { $0.name == name }) {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
+            selectedID = discovery.items.first { $0.name == name }?.id
+            if seed["confirm"] == "1", selectedID != nil { addSelected(asCopy: false) }
+        }
     }
 
     private func refreshCatalog() {

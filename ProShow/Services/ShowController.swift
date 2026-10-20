@@ -3513,7 +3513,7 @@ final class ShowController {
         case "add_shot":
             // Test hook: open (open=1, purpose=add|assign) or close the Add Shot / Assign Source modal.
             if args["open"] == "1" {
-                qaAddShotSeed = args.filter { ["category", "query", "select"].contains($0.key) }
+                qaAddShotSeed = args.filter { ["category", "query", "select", "confirm"].contains($0.key) }
                 if args["purpose"] == "assign" { openAddShotToAssign() } else { openAddShot(layerIndex: Int(args["layer"] ?? "") ?? 0) }
             } else {
                 closeAddShot()
