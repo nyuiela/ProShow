@@ -750,6 +750,10 @@ final class ShowController {
             )
         } else {
             compositor.triggerCue(makeCue(for: slide, index: index))
+            if ProShowFeatureFlags.multiDestinationRoutingV1 {
+                // The Phone lane follows the live slide's Phone canvas; none falls back to Fit from Stream.
+                streaming.notePhoneCanvas(prepareSlideForProgramCue(slide).editorCanvases)
+            }
         }
         applyMediaLayerDecision(decision)
         syncSlideLiveInputLayer(slide)
@@ -1362,6 +1366,7 @@ final class ShowController {
     func clearAudience() {
         isAudienceCleared = true
         compositor.clear(.slide)
+        if ProShowFeatureFlags.multiDestinationRoutingV1 { streaming.notePhoneCanvas([]) }
         refreshLiveStack()
     }
 
@@ -1375,6 +1380,7 @@ final class ShowController {
         if let liveSlideID, let slide = show.slide(id: liveSlideID), let index = show.indexOfSlide(id: liveSlideID) {
             compositor.triggerCue(makeCue(for: slide, index: index))
         }
+        publishCurrentPhoneCanvas()
         refreshLiveStack()
     }
 
@@ -2843,7 +2849,9 @@ final class ShowController {
             streamPropCanvases.contains { $0.id == canvas.id } || PhonePropCanvasStore.shared.isPhoneOnly(canvas.id)
         }
         let pixels: [UUID: CVPixelBuffer]
-        if reusePriorPixels, let prior, !prior.pixels.isEmpty {
+        if reusePriorPixels, let prior, !prior.pixels.isEmpty,
+           prior.objects.map(\.id) == objects.map(\.id),
+           prior.props.map(\.id) == props.map(\.id) {
             pixels = prior.pixels
         } else {
             var probe = stack
