@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.2 build 9 (2026-10-21)
+
+- Settings > About ("Installed") shows the running app's version and build, read from the bundle at launch, for example "ProShow 0.5.2 (9)". Before, it showed the project file format version (1.0.0).
+- GET /v1/status and the remote telemetry include app_version and app_build. The OpenAPI document carries x-proshow-app-version next to the Control API version.
+
 ## 0.5.2 build 8 (2026-10-21)
 
 - Props play their enter and exit builds on Stream and Phone, the same as in the editor. Before, they switched on and off at once on both outputs.
