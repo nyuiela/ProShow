@@ -1101,7 +1101,7 @@ final class ShowController {
     @discardableResult
     func beginPropExit(id: UUID, at date: Date = Date()) -> Bool {
         let objects = inspector.props.first(where: { $0.id == id })?.elements ?? []
-        let duration = BuildAnimationEngine.authoredBuildOutDuration(in: objects)
+        let duration = BuildAnimationEngine.authoredPropBuildOutDuration(in: objects)
         emitPropLifecycle(id: id, phase: .leave, at: date)
         guard duration > 0.02 else {
             finishPropBuild(id: id)
@@ -1251,7 +1251,7 @@ final class ShowController {
     func tickPropBuildClears(now: Date = Date()) {
         let expired = propBuildClearStartedAt.compactMap { id, started -> UUID? in
             let objects = inspector.props.first(where: { $0.id == id })?.elements ?? []
-            let duration = BuildAnimationEngine.authoredBuildOutDuration(in: objects)
+            let duration = BuildAnimationEngine.authoredPropBuildOutDuration(in: objects)
             return now.timeIntervalSince(started) >= duration ? id : nil
         }
         guard !expired.isEmpty else { return }

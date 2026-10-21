@@ -30,6 +30,18 @@ enum BuildAnimationEngine {
         return longest
     }
 
+    /// Props store builds in the legacy per-element `build` form, so their exit length
+    /// must come from the resolved steps (same source the build-in span uses).
+    static func authoredPropBuildOutDuration(in objects: [CanvasObject]) -> Double {
+        var longest = 0.0
+        for object in objects {
+            for step in object.resolvedBuildSteps where step.phase == .buildOut {
+                longest = max(longest, max(0, step.durationSeconds) + max(0, step.delaySeconds))
+            }
+        }
+        return longest
+    }
+
     static func authoredBuildInDuration(in objects: [CanvasObject]) -> Double {
         var longest = 0.0
         for object in objects {

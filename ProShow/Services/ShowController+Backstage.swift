@@ -235,7 +235,7 @@ extension ShowController {
         }
         _ = toggleInspectorProp(id: id, at: date)
         // Keep the message on the card while it fades; the sample comes back after.
-        let hold = BuildAnimationEngine.authoredBuildOutDuration(in: prop.elements) + 0.15
+        let hold = BuildAnimationEngine.authoredPropBuildOutDuration(in: prop.elements) + 0.15
         chatTemplateClearTask?.cancel()
         chatTemplateClearTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(max(0.05, hold)))
