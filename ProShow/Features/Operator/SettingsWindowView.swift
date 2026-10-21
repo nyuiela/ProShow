@@ -982,7 +982,7 @@ struct SettingsWindowView: View {
     private var updatesPane: some View {
         SettingsGroup {
             SettingsRow(title: "Installed", detail: "Check releases when you are ready. This build does not phone home.") {
-                Text("ProShow \(ProjectJSON.schemaVersion)")
+                Text("ProShow \(AppBuildInfo.display)")
                     .font(DeskType.mono)
                     .foregroundStyle(ShowSidebarPalette.subtitle)
             }

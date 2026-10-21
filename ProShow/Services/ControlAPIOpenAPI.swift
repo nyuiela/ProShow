@@ -11,6 +11,7 @@ enum ControlAPIOpenAPI {
             "info": [
                 "title": title,
                 "version": version,
+                "x-proshow-app-version": AppBuildInfo.display,
                 "description": "Localhost-only operator API for Stream Deck, Bitfocus Companion, and automation. Bound to 127.0.0.1.",
             ],
             "servers": [
@@ -29,6 +30,8 @@ enum ControlAPIOpenAPI {
                         "type": "object",
                         "properties": [
                             "ok": ["type": "boolean"],
+                            "app_version": ["type": "string", "description": "CFBundleShortVersionString of the running app"],
+                            "app_build": ["type": "string", "description": "CFBundleVersion of the running app"],
                             "is_streaming": ["type": "boolean"],
                             "is_recording": ["type": "boolean"],
                             "active_slide_index": ["type": "integer", "nullable": true],

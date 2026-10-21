@@ -149,6 +149,8 @@ enum RemoteControlBridge {
     static func telemetryJSON(_ controller: ShowController) -> [String: Any] {
         [
             "ok": true,
+            "app_version": AppBuildInfo.shortVersion,
+            "app_build": AppBuildInfo.build,
             "is_streaming": controller.streaming.isLive,
             "is_recording": controller.isoRecorder.isRecording,
             "active_slide_index": controller.liveIndex as Any? ?? NSNull(),

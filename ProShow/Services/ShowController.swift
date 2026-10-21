@@ -8387,6 +8387,8 @@ final class ShowController {
         if method == "GET", parts == ["v1", "status"] {
             return (200, ControlJSON.encode([
                 "ok": true,
+                "app_version": AppBuildInfo.shortVersion,
+                "app_build": AppBuildInfo.build,
                 "is_streaming": streaming.isLive,
                 "is_recording": isoRecorder.isRecording,
                 "active_slide_index": liveIndex.map { $0 as Any } ?? NSNull(),
