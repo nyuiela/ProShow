@@ -1926,8 +1926,13 @@ final class ProgramOutputComposer: @unchecked Sendable {
         ctx.interpolationQuality = .high
         ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
         guard let scaled = ctx.makeImage() else { return nil }
-        if stillScaleCache.count >= 48 { stillScaleCache.removeAll() }
+        let bytes = scaled.bytesPerRow * scaled.height
+        if stillScaleCache.count >= 48 || stillScaleBytes + bytes > Self.stillScaleBudget {
+            stillScaleCache.removeAll()
+            stillScaleBytes = 0
+        }
         stillScaleCache[key] = (image, scaled)
+        stillScaleBytes += bytes
         return scaled
     }
 
@@ -1937,6 +1942,8 @@ final class ProgramOutputComposer: @unchecked Sendable {
         var height: Int
     }
     private var stillScaleCache: [StillScaleKey: (source: CGImage, scaled: CGImage)] = [:]
+    private var stillScaleBytes = 0
+    private static let stillScaleBudget = 48 << 20
 
     private func aspectFill(_ image: CGImage, in rect: CGRect) -> CGRect {
         let imageRatio = CGFloat(image.width) / max(1, CGFloat(image.height))
