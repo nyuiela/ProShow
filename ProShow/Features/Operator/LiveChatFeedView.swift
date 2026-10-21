@@ -130,6 +130,7 @@ struct LiveChatFeedView: View {
         ), arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: 10) {
                 if let hub, hubEnabled {
+                    autoConnectRow(hub)
                     youtubeChatRow(hub)
                     xChatRow(hub)
                     Divider()
@@ -157,6 +158,28 @@ struct LiveChatFeedView: View {
         var list: [ChatPlatform] = [.zoom, .googleMeet, .backstage]
         if hubEnabled { list.insert(contentsOf: [.youtube, .x], at: 0) }
         return list
+    }
+
+    private func autoConnectRow(_ hub: ChatIngestHub) -> some View {
+        HStack(spacing: 6) {
+            Toggle("Auto-connect chat", isOn: Binding(
+                get: { hub.autoConnectChat },
+                set: { hub.autoConnectChat = $0 }
+            ))
+            .toggleStyle(.switch)
+            .controlSize(.mini)
+            Spacer(minLength: 4)
+            Button {
+                hub.findLiveChats?()
+            } label: {
+                Image(systemName: "arrow.clockwise")
+            }
+            .buttonStyle(.borderless)
+            .help("Find live chat")
+            .accessibilityLabel("Find live chat")
+            .accessibilityIdentifier("chat.findLive")
+        }
+        .font(DeskType.micro)
     }
 
     private func youtubeChatRow(_ hub: ChatIngestHub) -> some View {

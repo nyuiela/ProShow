@@ -358,6 +358,7 @@ struct YouTubeChatIngestTests {
     func autoActive_findsMyBroadcastChat() async {
         let transport = FakeLiveTransport([
             ("broadcastStatus=active", 200, YouTubeChatFixtures.broadcastEmpty),
+            ("broadcastStatus=upcoming", 200, YouTubeChatFixtures.broadcastEmpty),
             ("broadcastStatus=active", 200, YouTubeChatFixtures.broadcastActive),
             ("/liveChat/messages?", 200, YouTubeChatFixtures.ended),
         ])
@@ -459,6 +460,8 @@ struct YouTubeChatIngestTests {
         let manager = LiveChatStreamManager(chatEngine: LiveChatEngine())
         let hub = ChatIngestHub(stream: manager)
         hub.tokenProvider = { _ in "t" }
+        #expect(hub.replyBlockedReason == "No chat connected")
+        hub.setReplyTarget(LiveChatMessage(senderName: "ytuser", platformSource: "YouTube", messageText: "hey"))
         #expect(hub.replyBlockedReason == "Connect YouTube chat first")
         hub.setReplyTarget(LiveChatMessage(senderName: "xuser", platformSource: "X", messageText: "yo"))
         #expect(hub.replyBlockedReason == "Sign in to X")
@@ -573,6 +576,72 @@ struct YouTubeChatIngestTests {
         hub.tokenProvider = { _ in "t" }
         #expect(!hub.connectYouTube(.chatID("CHAT")))
         #expect(hub.youtubeState == .idle)
+    }
+
+    @Test @MainActor
+    func hub_replyNeverBlamesYouTubeForXOrNoChat() {
+        let saved = LiveChatIngestFlags.liveChatIngestV1
+        defer { LiveChatIngestFlags.liveChatIngestV1 = saved }
+        LiveChatIngestFlags.liveChatIngestV1 = true
+        let hub = ChatIngestHub(stream: LiveChatStreamManager(chatEngine: LiveChatEngine()))
+        #expect(hub.replyPlatform == nil)
+        #expect(hub.replyBlockedReason == "No chat connected")
+        hub.xState = .polling
+        #expect(hub.replyPlatform == .x)
+        #expect(hub.replyBlockedReason != "Connect YouTube chat first")
+        hub.youtubeState = .polling
+        #expect(hub.replyPlatform == nil)
+        #expect(hub.replyBlockedReason == "Pick a message")
+        hub.xState = .idle
+        #expect(hub.replyPlatform == .youtube)
+        hub.setReplyTarget(LiveChatMessage(senderName: "guest", platformSource: "Backstage", messageText: "hi"))
+        #expect(hub.replyBlockedReason == "Replies go to YouTube or X")
+    }
+
+    @Test
+    func pickBroadcast_boundStreamWins_upcomingNeedsOneWarm() {
+        typealias C = YouTubeChatAPI.BroadcastCandidate
+        let old = C(chatID: "OLD", title: nil, boundStreamID: "s1", lifeCycle: "ready")
+        let test = C(chatID: "TEST", title: nil, boundStreamID: "s2", lifeCycle: "testing")
+        let other = C(chatID: "OTHER", title: nil, boundStreamID: "s3", lifeCycle: "ready")
+        #expect(YouTubeChatAPI.pickBroadcast([old, test], streamIDs: ["s1"], upcoming: true)?.chatID == "OLD")
+        #expect(YouTubeChatAPI.pickBroadcast([old, test], streamIDs: [], upcoming: true)?.chatID == "TEST")
+        #expect(YouTubeChatAPI.pickBroadcast([old, other], streamIDs: [], upcoming: true) == nil)
+        #expect(YouTubeChatAPI.pickBroadcast([old, other], streamIDs: ["zz"], upcoming: true) == nil)
+        #expect(YouTubeChatAPI.pickBroadcast([other], streamIDs: [], upcoming: true)?.chatID == "OTHER")
+        #expect(YouTubeChatAPI.pickBroadcast([old, test], streamIDs: [], upcoming: false)?.chatID == "OLD")
+        #expect(YouTubeChatAPI.pickBroadcast([], streamIDs: [], upcoming: false) == nil)
+    }
+
+    @Test
+    func autoActive_plainKeyMapsToBoundUpcomingBroadcast() async {
+        let streams = #"{"items":[{"id":"sA","cdn":{"ingestionInfo":{"streamName":"key-a"}}},{"id":"sB","cdn":{"ingestionInfo":{"streamName":"key-b"}}}]}"#
+        let upcoming = #"{"items":[{"id":"b1","snippet":{"title":"Old","liveChatId":"CHAT_OLD"},"contentDetails":{"boundStreamId":"sA"},"status":{"lifeCycleStatus":"ready"}},{"id":"b2","snippet":{"title":"Tonight","liveChatId":"CHAT_B"},"contentDetails":{"boundStreamId":"sB"},"status":{"lifeCycleStatus":"ready"}}]}"#
+        let transport = FakeLiveTransport([
+            ("/liveStreams", 200, streams),
+            ("broadcastStatus=active", 200, YouTubeChatFixtures.broadcastEmpty),
+            ("broadcastStatus=upcoming", 200, upcoming),
+            ("/liveChat/messages?", 200, YouTubeChatFixtures.ended),
+        ])
+        let connector = YouTubeChatConnector(transport: transport, streamTransport: FakeStreamTransport([]),
+            preferStream: false, token: { _ in "t" }, sleep: { _ in }, spendUnits: TestLedger().spend, onUpdate: { _ in })
+        await connector.setStreamHint(YouTubeStreamHint(streamID: "", streamKey: "key-b"))
+        await connector.start(.autoActive)
+        await connector.waitUntilFinished()
+        #expect(await connector.liveChatID == "CHAT_B")
+        #expect(transport.urls.allSatisfy { !$0.contains("key-b") })
+    }
+
+    @Test
+    func autoActive_noBroadcast_endsQuietlyAfterSpacedTries() async {
+        let transport = FakeLiveTransport((0..<12).map { i in (i % 2 == 0 ? "broadcastStatus=active" : "broadcastStatus=upcoming", 200, YouTubeChatFixtures.broadcastEmpty) })
+        let log = UpdateLog()
+        let connector = YouTubeChatConnector(transport: transport, streamTransport: FakeStreamTransport([]),
+            preferStream: false, token: { _ in "t" }, sleep: { _ in }, spendUnits: TestLedger().spend, onUpdate: { await log.add($0) })
+        await connector.start(.autoActive)
+        await connector.waitUntilFinished()
+        #expect(transport.requests.count == 12)
+        #expect(await log.states.last == .failed("No live broadcast"))
     }
 
     @Test @MainActor

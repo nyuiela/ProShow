@@ -31,6 +31,15 @@ final class ChatIngestHub {
     var xSigningIn = false
     var xSignInError: String?
     private(set) var xAutoStarted = false
+    /// Connect chat from the live broadcast when a stream starts. On unless turned off.
+    var autoConnectChat: Bool = UserDefaults.standard.object(forKey: ChatIngestHub.autoConnectKey) as? Bool ?? true {
+        didSet { UserDefaults.standard.set(autoConnectChat, forKey: Self.autoConnectKey) }
+    }
+    static let autoConnectKey = "proshow.chat.autoConnect"
+    /// Finds the live broadcast chat now (More menu refresh). Set by the controller.
+    @ObservationIgnored var findLiveChats: (() -> Void)?
+    /// Stream id and key of the last Go Live YouTube ingest, so a refresh can match the bound broadcast.
+    @ObservationIgnored var lastYouTubeStreamHint = YouTubeStreamHint()
     /// More popover open. Lives here so the QA hook can open it for screenshots.
     var moreMenuOpen = false
 
@@ -58,7 +67,7 @@ final class ChatIngestHub {
     var isEnabled: Bool { LiveChatIngestFlags.liveChatIngestV1 }
 
     @discardableResult
-    func connectYouTube(_ target: YouTubeChatTarget, auto: Bool = false) -> Bool {
+    func connectYouTube(_ target: YouTubeChatTarget, auto: Bool = false, streamHint: YouTubeStreamHint = .init()) -> Bool {
         guard isEnabled else { return false }
         guard let tokenProvider else {
             youtubeState = .failed("Connect a YouTube account")
@@ -80,7 +89,10 @@ final class ChatIngestHub {
             ?? YouTubeChatConnector(token: tokenProvider, onUpdate: onUpdate)
         youtube = connector
         youtubeState = .resolving
-        Task { await connector.start(target) }
+        Task {
+            await connector.setStreamHint(streamHint)
+            await connector.start(target)
+        }
         return true
     }
 
@@ -169,14 +181,24 @@ final class ChatIngestHub {
         }
     }
 
-    /// Platform the next reply goes to: the target's platform, else YouTube.
-    var replyPlatform: ChatPlatform {
-        replyTarget.map { ChatPlatform.from(displayName: $0.platformSource) } ?? .youtube
+    /// Platform the next reply goes to: the target's platform, else the one connected chat.
+    /// Nil when there is no target and zero or two chats are connected.
+    var replyPlatform: ChatPlatform? {
+        if let replyTarget { return ChatPlatform.from(displayName: replyTarget.platformSource) }
+        switch (youtubeState.isActive, xState.isActive) {
+        case (true, false): return .youtube
+        case (false, true): return .x
+        default: return nil
+        }
     }
 
     /// Nil when Send can run. Otherwise a terse reason shown under the box.
+    /// Only a reply to a YouTube message needs YouTube; X and local actions never do.
     var replyBlockedReason: String? {
-        switch replyPlatform {
+        guard let platform = replyPlatform else {
+            return youtubeState.isActive || xState.isActive ? "Pick a message" : "No chat connected"
+        }
+        switch platform {
         case .youtube:
             return youtube != nil && youtubeState.isActive ? nil : "Connect YouTube chat first"
         case .x:
@@ -299,6 +321,8 @@ final class ChatIngestHub {
             "stream_connects": youtubeConnects,
             "last_hold_s": youtubeLastHoldSeconds.map { (($0 * 10).rounded()) / 10 } ?? 0,
             "auto": youtubeAutoStarted,
+            "auto_connect": autoConnectChat,
+            "reply_blocked": replyBlockedReason ?? "",
             "x": xStatusJSON(),
         ]
     }

@@ -288,3 +288,12 @@ show's own design is on air instead of the built-in card.
 - YouTube `rateLimitExceeded` if we poll faster than `pollingIntervalMillis`. The connector always waits at least the server interval.
 - X pricing can change and has no broadcast line today. Re-check the pricing page and the X usage dashboard after the first real show. Keep a Developer Console spending limit as the hard stop.
 - Chat is untrusted input. It is rendered as plain text only; never parsed as markup or links on screen.
+
+## Auto-connect from the broadcast (0.5.0 build 4)
+
+"Auto-connect chat" in the chat More menu is on by default. When a stream starts (Go Live), ProShow connects chat by itself; the refresh button next to the toggle runs the same lookup by hand. Pasting a link stays in the More menu as a fallback. There is no polling loop for discovery.
+
+- YouTube: with a YouTube destination, its broadcast id from Go Live is used. Without an id (plain RTMP key) or without a YouTube destination but a signed in YouTube account, ProShow lists the account's broadcasts (`liveBroadcasts.list`, `broadcastStatus=active`, then `upcoming`; `broadcastStatus` already scopes to the signed in account and cannot be combined with `mine=true`). Up to 6 tries 10 s apart, 1 or 2 units each.
+- Matching a plain RTMP key: when only the stream key is known, one `liveStreams.list` (mine, 1 unit) finds the stream whose `cdn.ingestionInfo.streamName` equals the key, and the broadcast whose `contentDetails.boundStreamId` is that stream wins. The key is compared locally and never sent. Without a match an active broadcast is taken as is; an upcoming one only when it is the single testing or starting broadcast, or the only one, so an old scheduled show is never picked. A YouTube key that is not bound to any broadcast (the default stream) can still go to a different live broadcast; paste the link in that case.
+- X: only when signed in to X chat. Go Live's X broadcast id when there is one, else the account's live broadcast; spend stays under the X chat daily cap. Not signed in: nothing, silently.
+- Replies: only a reply to a YouTube message needs YouTube. With no message picked, the reply goes to the one connected chat; with none connected the box says "No chat connected". Display on screen and Star never need a platform.

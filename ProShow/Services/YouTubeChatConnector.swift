@@ -104,6 +104,11 @@ enum YouTubeChatTarget: Equatable, Sendable {
     }
 }
 
+struct YouTubeStreamHint: Equatable, Sendable {
+    var streamID = ""
+    var streamKey = ""
+}
+
 enum YouTubeChatError: Error, Equatable {
     case ended
     case disabled
@@ -113,6 +118,7 @@ enum YouTubeChatError: Error, Equatable {
     case quotaExceeded
     case rateLimited
     case noActiveChat
+    case noLiveBroadcast
     case budgetReached
     case notConnected
     case emptyMessage
@@ -132,6 +138,7 @@ enum YouTubeChatError: Error, Equatable {
         case .quotaExceeded: return "YouTube quota exceeded"
         case .rateLimited: return "Rate limited"
         case .noActiveChat: return "No live chat on this video"
+        case .noLiveBroadcast: return "No live broadcast"
         case .budgetReached: return "Daily quota budget reached"
         case .notConnected: return "Connect YouTube chat first"
         case .emptyMessage: return "Type a message"
@@ -144,7 +151,7 @@ enum YouTubeChatError: Error, Equatable {
 
     var isTerminal: Bool {
         switch self {
-        case .ended, .disabled, .notFound, .forbidden, .quotaExceeded, .noActiveChat, .budgetReached: return true
+        case .ended, .disabled, .notFound, .forbidden, .quotaExceeded, .noActiveChat, .noLiveBroadcast, .budgetReached: return true
         default: return false
         }
     }
@@ -172,8 +179,67 @@ enum YouTubeChatAPI {
         request("\(base)/liveBroadcasts", ["part": "snippet", "id": broadcastID], token: token)
     }
 
+    /// The signed in account's own broadcasts. broadcastStatus already scopes to the account (it cannot be combined with mine=true).
     static func activeBroadcastsRequest(token: String) -> URLRequest {
-        request("\(base)/liveBroadcasts", ["part": "snippet", "broadcastStatus": "active", "broadcastType": "all"], token: token)
+        broadcastsRequest(status: "active", token: token)
+    }
+
+    static func upcomingBroadcastsRequest(token: String) -> URLRequest {
+        broadcastsRequest(status: "upcoming", token: token)
+    }
+
+    private static func broadcastsRequest(status: String, token: String) -> URLRequest {
+        request("\(base)/liveBroadcasts", ["part": "snippet,contentDetails,status", "broadcastStatus": status, "broadcastType": "all", "maxResults": "25"], token: token)
+    }
+
+    /// The account's ingest streams, to map a plain RTMP key to the broadcast bound to it.
+    static func myStreamsRequest(token: String) -> URLRequest {
+        request("\(base)/liveStreams", ["part": "id,cdn", "mine": "true", "maxResults": "50"], token: token)
+    }
+
+    struct BroadcastCandidate: Equatable {
+        var chatID: String
+        var title: String?
+        var boundStreamID: String
+        var lifeCycle: String
+    }
+
+    static func parseBroadcastCandidates(_ data: Data) throws -> [BroadcastCandidate] {
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw YouTubeChatError.malformed }
+        return (obj["items"] as? [[String: Any]] ?? []).compactMap { item in
+            let snippet = item["snippet"] as? [String: Any]
+            guard let chat = snippet?["liveChatId"] as? String, !chat.isEmpty else { return nil }
+            return BroadcastCandidate(
+                chatID: chat,
+                title: snippet?["title"] as? String,
+                boundStreamID: (item["contentDetails"] as? [String: Any])?["boundStreamId"] as? String ?? "",
+                lifeCycle: ((item["status"] as? [String: Any])?["lifeCycleStatus"] as? String ?? "").lowercased()
+            )
+        }
+    }
+
+    /// Stream ids whose ingest key equals `streamKey`. The key is only compared here, never sent.
+    static func parseStreamIDs(_ data: Data, streamKey: String) -> Set<String> {
+        guard !streamKey.isEmpty,
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [] }
+        var ids = Set<String>()
+        for item in obj["items"] as? [[String: Any]] ?? [] {
+            let ingest = (item["cdn"] as? [String: Any])?["ingestionInfo"] as? [String: Any]
+            if ingest?["streamName"] as? String == streamKey, let id = item["id"] as? String { ids.insert(id) }
+        }
+        return ids
+    }
+
+    /// Picks the broadcast whose chat to read. A broadcast bound to our stream wins. Without a match an
+    /// active broadcast is taken as is; an upcoming one only when it is the single warm (testing or
+    /// starting) one, or the only one, so an old scheduled show is never picked by mistake.
+    static func pickBroadcast(_ list: [BroadcastCandidate], streamIDs: Set<String>, upcoming: Bool) -> BroadcastCandidate? {
+        if !streamIDs.isEmpty, let bound = list.first(where: { streamIDs.contains($0.boundStreamID) }) { return bound }
+        if !upcoming { return list.first }
+        if !streamIDs.isEmpty { return nil }
+        let warm = list.filter { ["testing", "teststarting", "livestarting", "live"].contains($0.lifeCycle) }
+        if warm.count == 1 { return warm[0] }
+        return list.count == 1 ? list[0] : nil
     }
 
     static func listRequest(liveChatID: String, pageToken: String?, token: String) -> URLRequest {
@@ -510,6 +576,13 @@ actor YouTubeChatConnector {
         dayUnits = spendUnits(units)
     }
 
+    /// Go Live's YouTube ingest, used to pick the broadcast bound to it.
+    private var streamHint = YouTubeStreamHint()
+
+    func setStreamHint(_ hint: YouTubeStreamHint) {
+        streamHint = hint
+    }
+
     func start(_ target: YouTubeChatTarget) {
         loop?.cancel()
         pageToken = nil
@@ -668,7 +741,9 @@ actor YouTubeChatConnector {
             await onUpdate(YouTubeChatUpdate(title: title, quotaUnits: quotaUnits))
             guard let chat else { throw YouTubeChatError.noActiveChat }
             return chat
-        case .broadcast, .autoActive:
+        case .autoActive:
+            return try await resolveMyBroadcast()
+        case .broadcast:
             for i in 0..<max(1, discoveryAttempts) {
                 try Task.checkCancellation()
                 let tok = try await currentToken()
@@ -687,6 +762,32 @@ actor YouTubeChatConnector {
             }
             throw YouTubeChatError.noActiveChat
         }
+    }
+
+    /// Active broadcasts first, then upcoming (testing or not started yet). One stream lookup when
+    /// only a plain RTMP key is known. A few spaced tries, no tight polling.
+    private func resolveMyBroadcast() async throws -> String {
+        var streamIDs: Set<String> = []
+        if !streamHint.streamID.isEmpty {
+            streamIDs = [streamHint.streamID]
+        } else if !streamHint.streamKey.isEmpty,
+                  let data = try? await send(YouTubeChatAPI.myStreamsRequest(token: try await currentToken()), units: 1) {
+            streamIDs = YouTubeChatAPI.parseStreamIDs(data, streamKey: streamHint.streamKey)
+        }
+        for i in 0..<max(1, discoveryAttempts) {
+            try Task.checkCancellation()
+            for upcoming in [false, true] {
+                let tok = try await currentToken()
+                let request = upcoming ? YouTubeChatAPI.upcomingBroadcastsRequest(token: tok) : YouTubeChatAPI.activeBroadcastsRequest(token: tok)
+                let list = try YouTubeChatAPI.parseBroadcastCandidates(try await send(request, units: 1))
+                if let pick = YouTubeChatAPI.pickBroadcast(list, streamIDs: streamIDs, upcoming: upcoming) {
+                    await onUpdate(YouTubeChatUpdate(title: pick.title, quotaUnits: quotaUnits))
+                    return pick.chatID
+                }
+            }
+            if i < discoveryAttempts - 1 { try await sleep(10) }
+        }
+        throw YouTubeChatError.noLiveBroadcast
     }
 
     private func deliver(_ page: YouTubeChatPage) async {

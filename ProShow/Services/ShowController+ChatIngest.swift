@@ -14,7 +14,27 @@ extension ShowController {
             self.chatStream?.dismissOverlay(compositor: self.compositor)
         }
         bootstrapXChat(hub)
+        hub.findLiveChats = { [weak self] in self?.findLiveChatsNow() }
         chatIngest = hub
+    }
+
+    /// A YouTube account with a stored token (keychain read only, no network).
+    var isYouTubeChatSignedIn: Bool {
+        deviceSettings.document.accounts.contains {
+            $0.platform == .youtube && StreamAccountManager.shared.accessToken(for: $0) != nil
+        }
+    }
+
+    /// More menu refresh: find the live broadcast chat for each signed in platform not already connected.
+    func findLiveChatsNow() {
+        guard LiveChatIngestFlags.liveChatIngestV1, let hub = chatIngest else { return }
+        let auto = streaming.isLive
+        if !hub.youtubeState.isActive, isYouTubeChatSignedIn {
+            hub.connectYouTube(.autoActive, auto: auto, streamHint: hub.lastYouTubeStreamHint)
+        }
+        if !hub.xState.isActive, hub.xSignedIn {
+            hub.connectX(.auto, auto: auto)
+        }
     }
 
     /// Armed YouTube destination first, then any signed in YouTube account.
@@ -31,13 +51,23 @@ extension ShowController {
         return tokens.accessToken
     }
 
-    /// Called after the encoder is live. Leaves a manual session alone.
+    /// Called after the encoder is live. Leaves a manual session alone. With a YouTube destination it reads
+    /// that broadcast (or the one bound to its stream key); otherwise, when signed in to YouTube, the
+    /// account's live broadcast. One discovery per stream start, nothing when auto-connect is off.
     func startYouTubeChatAfterGoLive(_ ingests: [ResolvedIngest]) {
         guard LiveChatIngestFlags.liveChatIngestV1, let hub = chatIngest else { return }
+        let youtube = ingests.first(where: { $0.platform == .youtube })
+        hub.lastYouTubeStreamHint = youtube.map { YouTubeStreamHint(streamID: $0.streamID, streamKey: $0.streamKey) } ?? .init()
+        guard hub.autoConnectChat else { return }
         if hub.youtubeState.isActive && !hub.youtubeAutoStarted { return }
-        guard let youtube = ingests.first(where: { $0.platform == .youtube }) else { return }
-        let id = youtube.broadcastID.trimmingCharacters(in: .whitespacesAndNewlines)
-        hub.connectYouTube(id.isEmpty ? .autoActive : .broadcast(id), auto: true)
+        if let youtube {
+            let id = youtube.broadcastID.trimmingCharacters(in: .whitespacesAndNewlines)
+            let hint = hub.lastYouTubeStreamHint
+            hub.connectYouTube(id.isEmpty ? .autoActive : .broadcast(id), auto: true, streamHint: hint)
+            return
+        }
+        guard isYouTubeChatSignedIn else { return }
+        hub.connectYouTube(.autoActive, auto: true)
     }
 
     func handleYouTubeChatControl(method: String, body: Data?) -> (Int, String) {
@@ -117,13 +147,14 @@ extension ShowController {
     }
 
     /// Called after the encoder is live, with the X broadcast id from Go Live when there is one.
+    /// Signed in to X only (otherwise nothing, silently). Uses Go Live's X broadcast id when there is one,
+    /// else the account's live broadcast. Spend stays under the X chat daily cap.
     func startXChatAfterGoLive(_ ingests: [ResolvedIngest]) {
-        guard LiveChatIngestFlags.liveChatIngestV1, let hub = chatIngest, hub.xSignedIn else { return }
+        guard LiveChatIngestFlags.liveChatIngestV1, let hub = chatIngest, hub.xSignedIn, hub.autoConnectChat else { return }
         if hub.xState.isActive && !hub.xAutoStarted { return }
         let x = ingests.filter {
             $0.platform == .twitter || ($0.url.host ?? "").contains("pscp.tv") || ($0.url.host ?? "").contains("periscope")
         }
-        guard !x.isEmpty else { return }
         let id = x.map { $0.broadcastID.trimmingCharacters(in: .whitespacesAndNewlines) }.first(where: XChatAPI.isBroadcastID)
         hub.connectX(id.map { .broadcast($0) } ?? .auto, auto: true)
     }
