@@ -761,7 +761,8 @@ final class ProgramOutputComposer: @unchecked Sendable {
                     renderNow: renderNow,
                     marketStreamItems: marketStreamItems,
                     tickerColorConfig: tickerColorConfig,
-                    matchOnAirVisibility: matchOnAirVisibility
+                    matchOnAirVisibility: matchOnAirVisibility,
+                    animatesText: true
                 )
                 ctx.restoreGState()
             }
@@ -1092,7 +1093,8 @@ final class ProgramOutputComposer: @unchecked Sendable {
         renderNow: Date,
         marketStreamItems: [MarketTickerItem],
         tickerColorConfig: TickerColorConfig,
-        matchOnAirVisibility: Bool = false
+        matchOnAirVisibility: Bool = false,
+        animatesText: Bool = false
     ) {
         let layoutScale = CGFloat(width) / max(1, canvasW)
         for object in canvasObjects {
@@ -1104,7 +1106,7 @@ final class ProgramOutputComposer: @unchecked Sendable {
                 height: height
             )
             let hasBuildTimeline = !object.resolvedBuildSteps.isEmpty
-            let settleOnAir = settlesOnAir(object, matchOnAirVisibility: matchOnAirVisibility)
+            let settleOnAir = settlesOnAir(object, matchOnAirVisibility: matchOnAirVisibility, animatesText: animatesText)
             var buildState: TransformedRenderState
             if settleOnAir {
                 // Stream/ISO: settled rest. A dissolve or click-build must not blank lyrics, cameras, or screen share.
@@ -1132,7 +1134,7 @@ final class ProgramOutputComposer: @unchecked Sendable {
             applyBuildTransform(buildState, rect: rect, layoutScale: layoutScale, in: ctx)
             clip(ctx, rect: rect, object: object, radius: radius)
             var elementAlpha = CGFloat(max(0, min(1, object.opacity * (hasBuildTimeline ? buildState.opacity : 1))))
-            if object.isTextLike && matchOnAirVisibility && elementAlpha < 0.05 {
+            if object.isTextLike && matchOnAirVisibility && !animatesText && elementAlpha < 0.05 {
                 elementAlpha = CGFloat(max(0, min(1, object.opacity)))
             }
             ctx.setAlpha(elementAlpha)
@@ -1449,9 +1451,10 @@ final class ProgramOutputComposer: @unchecked Sendable {
     #endif
 
     /// Stream/ISO: text, cameras, screen share and pages stay at rest during a build.
-    private func settlesOnAir(_ object: CanvasObject, matchOnAirVisibility: Bool) -> Bool {
+    /// Props pass `animatesText` so their words build with their plates, as in the editor.
+    private func settlesOnAir(_ object: CanvasObject, matchOnAirVisibility: Bool, animatesText: Bool = false) -> Bool {
         matchOnAirVisibility && (
-            object.isTextLike
+            (object.isTextLike && !animatesText)
                 || object.hostsLayerBackedMedia
                 || object.kind.isBrowserLike
                 || object.assignedSource?.sourceType == .webPage

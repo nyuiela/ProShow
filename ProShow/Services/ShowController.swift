@@ -2731,11 +2731,8 @@ final class ShowController {
         )
         var propBuildPlayback: [UUID: BuildPlayback] = [:]
         for canvas in activePropCanvases {
-            let propLive = propEncodePlayback(for: canvas, now: now)
-            propBuildPlayback[canvas.id] = BuildAnimationEngine.broadcastPlayback(
-                from: propLive,
-                canvasObjects: canvas.objects
-            )
+            // Props play their authored build in and out on air, same as the editor.
+            propBuildPlayback[canvas.id] = propEncodePlayback(for: canvas, now: now)
         }
         #if os(macOS)
         let marketStreamItems = MarketDataStreamEngine.shared.items
@@ -2860,10 +2857,7 @@ final class ShowController {
         }
         var propPlayback: [UUID: BuildPlayback] = [:]
         for canvas in props {
-            propPlayback[canvas.id] = BuildAnimationEngine.broadcastPlayback(
-                from: propEncodePlayback(for: canvas, now: now),
-                canvasObjects: canvas.objects
-            )
+            propPlayback[canvas.id] = propEncodePlayback(for: canvas, now: now)
         }
         return PhoneFrameWork(
             objects: objects,
@@ -3123,11 +3117,8 @@ final class ShowController {
             && !(pendingProgramOutput?.objectLivePixels.isEmpty ?? true)
         var propBuildPlayback: [UUID: BuildPlayback] = [:]
         for canvas in activePropCanvases {
-            let propLive = propEncodePlayback(for: canvas, now: now)
-            propBuildPlayback[canvas.id] = BuildAnimationEngine.broadcastPlayback(
-                from: propLive,
-                canvasObjects: canvas.objects
-            )
+            // Props play their authored build in and out on air, same as the editor.
+            propBuildPlayback[canvas.id] = propEncodePlayback(for: canvas, now: now)
         }
         let objectLivePixels = programObjectLivePixelsForEncode(
             stack: stack,

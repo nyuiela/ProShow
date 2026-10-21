@@ -160,7 +160,7 @@ enum PropCanvasLayout {
                 return o
             }
         }
-        return objects.map { object in
+        func fitOne(_ object: CanvasObject) -> CanvasObject {
             var o = object
             let t = object.transform
             let x = t.x, y = t.y, w = t.width, h = t.height
@@ -212,6 +212,52 @@ enum PropCanvasLayout {
             o.typography.fontSize = object.typography.fontSize * sizeScale
             return o
         }
+        // Overlapping elements (a card and its avatar and text, a stamp plate and its word) move as one group
+        // with one scale, so their spacing holds and nothing slides onto a neighbour.
+        let groupable = objects.map { object -> Bool in
+            let t = object.transform
+            let fullFrame = t.width >= src.width * 0.9 && t.height >= src.height * 0.9
+            let anchor = object.propAnchor ?? .topLeft
+            return !fullFrame && anchor != .stretchAcross && anchor != .stretchDown
+        }
+        var parent = Array(objects.indices)
+        func root(_ i: Int) -> Int { var i = i; while parent[i] != i { parent[i] = parent[parent[i]]; i = parent[i] }; return i }
+        let pad = src.width * 0.005
+        for i in objects.indices where groupable[i] {
+            let a = objects[i].transform
+            let ra = CGRect(x: a.x, y: a.y, width: a.width, height: a.height).insetBy(dx: -pad, dy: -pad)
+            for j in objects.indices where j > i && groupable[j] {
+                let b = objects[j].transform
+                if ra.intersects(CGRect(x: b.x, y: b.y, width: b.width, height: b.height)) { parent[root(j)] = root(i) }
+            }
+        }
+        var groups: [Int: [Int]] = [:]
+        for i in objects.indices where groupable[i] { groups[root(i), default: []].append(i) }
+        var out = objects.map(fitOne)
+        for members in groups.values where members.count > 1 {
+            let rects = members.map { i -> CGRect in
+                let t = objects[i].transform
+                return CGRect(x: t.x, y: t.y, width: t.width, height: t.height)
+            }
+            let box = rects.dropFirst().reduce(rects[0]) { $0.union($1) }
+            let lead = members.max { objects[$0].transform.width * objects[$0].transform.height < objects[$1].transform.width * objects[$1].transform.height }!
+            var proxy = objects[lead]
+            proxy.transform.x = box.minX; proxy.transform.y = box.minY
+            proxy.transform.width = box.width; proxy.transform.height = box.height
+            let fitted = fitOne(proxy).transform
+            let k = fitted.width / max(1, box.width)
+            for i in members {
+                var o = objects[i]
+                let t = o.transform
+                o.transform.x = fitted.x + (t.x - box.minX) * k
+                o.transform.y = fitted.y + (t.y - box.minY) * k
+                o.transform.width = t.width * k
+                o.transform.height = t.height * k
+                o.typography.fontSize = objects[i].typography.fontSize * k
+                out[i] = o
+            }
+        }
+        return out
     }
 
     /// Closest anchor for an element, for templates and the agent when none is given.
