@@ -494,6 +494,40 @@ struct YouTubeChatIngestTests {
     }
 
     @Test @MainActor
+    func talkButton_tapTogglesAndHoldIsMomentary() {
+        let model = TalkButtonModel()
+        var active = false
+        var calls: [String] = []
+        let start = { active = true; calls.append("start") }
+        let stop = { active = false; calls.append("stop") }
+        let t = Date()
+        // Tap: starts and stays on.
+        model.press(isActive: active, at: t, start: start)
+        #expect(model.isPressed)
+        model.release(at: t.addingTimeInterval(0.1), stop: stop)
+        #expect(active && !model.isPressed)
+        // Tap while on: off.
+        model.press(isActive: active, at: t, start: start)
+        model.release(at: t.addingTimeInterval(0.1), stop: stop)
+        #expect(!active)
+        // Hold: on while held, off on release.
+        model.press(isActive: active, at: t, start: start)
+        #expect(active)
+        model.release(at: t.addingTimeInterval(1.2), stop: stop)
+        #expect(!active)
+        // Repeated press events while held start only once; stray release does nothing.
+        model.press(isActive: active, at: t, start: start)
+        model.press(isActive: active, at: t, start: start)
+        model.release(at: t.addingTimeInterval(2), stop: stop)
+        model.release(at: t.addingTimeInterval(3), stop: stop)
+        #expect(calls == ["start", "stop", "start", "stop", "start", "stop"])
+        model.toggle(isActive: false, start: start, stop: stop)
+        #expect(active)
+        model.toggle(isActive: true, start: start, stop: stop)
+        #expect(!active)
+    }
+
+    @Test @MainActor
     func inbox_hideAndBlockAuthor() throws {
         let manager = LiveChatStreamManager(chatEngine: LiveChatEngine())
         manager.setSourceEnabled(.youtube, enabled: true)

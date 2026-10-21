@@ -126,7 +126,10 @@ final class ShowController {
     var chatStream: LiveChatStreamManager?
     var chatIngest: ChatIngestHub?
     /// Live chat shown in its own window (set by that window's appear/disappear).
-    var isChatDetached = false
+    var isChatDetached: Bool {
+        get { LiveChatWindowState.shared.isDetached }
+        set { LiveChatWindowState.shared.isDetached = newValue }
+    }
     var virtualCameraOutput: VirtualCameraOutputService?
     let backstageSignaling = BackstageSignalingEngine()
     let guestWebRTCIngest = BackstageWebRTCIngestEngine()
@@ -3548,6 +3551,23 @@ final class ShowController {
             masterLayers = layers
             reconcileAudioCaptureGraph()
             return ["ok": removed > 0, "removed": removed]
+        case "talk_ui":
+            // Test hook: drives the Talk button model exactly as the pointer does.
+            // press, release (held after hold_ms), or tap.
+            let model = TalkButtonModel.shared
+            let start = { _ = self.startTalkback() }
+            let stop = { self.stopTalkback() }
+            switch args["op"] ?? "" {
+            case "press": model.press(isActive: OnAirAudioControls.shared.talkActive, start: start)
+            case "release": model.release(stop: stop)
+            case "tap":
+                let t = Date()
+                model.press(isActive: OnAirAudioControls.shared.talkActive, at: t, start: start)
+                model.release(at: t.addingTimeInterval(0.1), stop: stop)
+            default: break
+            }
+            return ["ok": true, "active": OnAirAudioControls.shared.talkActive, "pressed": model.isPressed,
+                    "packets": Int(OnAirAudioControls.shared.talkPacketsSent)]
         case "chat_ui":
             // Test hook for screenshots. Sets the reply draft and target, opens or closes
             // the chat window and the More popover. Never sends a message.
@@ -3577,13 +3597,25 @@ final class ShowController {
                   let screen = window.screen ?? NSScreen.main
             else { return ["ok": false, "error": "no_window"] }
             let margin = CGFloat(Double(args["margin"] ?? "") ?? 160)
-            let f = window.frame.insetBy(dx: -margin, dy: -margin).intersection(screen.frame)
-            let rect = CGRect(x: f.minX, y: screen.frame.maxY - f.maxY, width: f.width, height: f.height)
+            // target=chat: the detached chat panel. It is excluded from capture, so it is
+            // made capturable for this one shot and restored right after.
+            let chatPanel = args["target"] == "chat"
+                ? NSApp.windows.first(where: { $0.identifier?.rawValue == "proshow-live-chat" && $0.isVisible }) : nil
+            if args["target"] == "chat", chatPanel == nil { return ["ok": false, "error": "no_chat_window"] }
+            let base = chatPanel?.frame ?? window.frame
+            let shotScreen = chatPanel?.screen ?? screen
+            let f = base.insetBy(dx: -margin, dy: -margin).intersection(shotScreen.frame)
+            let primaryTop = NSScreen.screens.first?.frame.maxY ?? screen.frame.maxY
+            let rect = CGRect(x: f.minX, y: primaryTop - f.maxY, width: f.width, height: f.height)
             let path = args["path"] ?? NSTemporaryDirectory() + "proshow-screen.png"
             try? FileManager.default.removeItem(atPath: path)
             guard #available(macOS 15.2, *) else { return ["ok": false, "error": "needs_macos_15_2"] }
+            chatPanel?.sharingType = .readOnly
             Task {
-                guard let image = try? await SCScreenshotManager.captureImage(in: rect) else { return }
+                try? await Task.sleep(nanoseconds: 150_000_000)
+                let image = try? await SCScreenshotManager.captureImage(in: rect)
+                chatPanel?.sharingType = .none
+                guard let image else { return }
                 let rep = NSBitmapImageRep(cgImage: image)
                 try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
             }

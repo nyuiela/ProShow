@@ -417,15 +417,6 @@ struct ProShowApp: App {
                 .onAppear { session.controller.tickProgram() }
         }
         .defaultSize(width: 405, height: 720)
-        Window("Live Chat", id: ProShowSceneID.chat) {
-            LiveChatWindowView(controller: session.controller)
-                .frame(minWidth: 320, minHeight: 360)
-                .background(ProShowCapturePrivacyInstaller())
-                .background(LiveChatWindowFrameAutosave())
-                .onAppear { session.controller.isChatDetached = true }
-                .onDisappear { session.controller.isChatDetached = false }
-        }
-        .defaultSize(width: 380, height: 640)
         Settings {
             SettingsWindowView(controller: session.controller, store: session.controller.deviceSettings)
         }
@@ -531,7 +522,6 @@ enum ProShowSceneID {
     static let stream = "proshow-stream"
     static let phone = "proshow-phone"
     static let multiviewer = "proshow-multiviewer"
-    static let chat = "proshow-live-chat"
 }
 
 extension Notification.Name {
@@ -614,13 +604,14 @@ struct RootView: View {
             presentPhoneWindow()
         }
         .onReceive(NotificationCenter.default.publisher(for: .proShowOpenChatWindow)) { _ in
-            openWindow(id: ProShowSceneID.chat)
-            DispatchQueue.main.async {
-                NSApp.windows.first(where: { $0.title == "Live Chat" })?.makeKeyAndOrderFront(nil)
-            }
+            LiveChatGlassController.shared.attach(controller)
+            LiveChatGlassController.shared.open()
         }
         .onReceive(NotificationCenter.default.publisher(for: .proShowCloseChatWindow)) { _ in
-            dismissWindow(id: ProShowSceneID.chat)
+            LiveChatGlassController.shared.close()
+        }
+        .onChange(of: ObjectIdentifier(controller)) { _, _ in
+            LiveChatGlassController.shared.attach(controller)
         }
         .onReceive(NotificationCenter.default.publisher(for: .proShowOpenMultiViewerWindow)) { _ in
             presentMultiViewer(forceOpen: false)
@@ -806,22 +797,5 @@ final class ProShowAppDelegate: NSObject, NSApplicationDelegate {
         }
         sessionProvider?()?.flushToDiskOnQuit()
     }
-}
-#endif
-
-#if os(macOS)
-/// Remembers the detached chat window frame across launches (any display).
-struct LiveChatWindowFrameAutosave: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView(frame: .zero)
-        DispatchQueue.main.async {
-            guard let window = view.window, window.frameAutosaveName != "ProShowLiveChatWindow" else { return }
-            window.setFrameUsingName("ProShowLiveChatWindow")
-            window.setFrameAutosaveName("ProShowLiveChatWindow")
-        }
-        return view
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {}
 }
 #endif

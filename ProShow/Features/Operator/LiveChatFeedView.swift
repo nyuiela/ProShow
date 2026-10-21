@@ -8,6 +8,14 @@ extension Notification.Name {
     static let proShowCloseChatWindow = Notification.Name("proshow.close-chat-window")
 }
 
+/// Whether the chat window is open. App level so it survives project switches,
+/// which rebuild the ShowController while the window stays open.
+@MainActor @Observable
+final class LiveChatWindowState {
+    static let shared = LiveChatWindowState()
+    var isDetached = false
+}
+
 /// Live chat feed, moderation and reply box. Used in the Backstage panel and in
 /// the detached chat window. Read only unless the operator presses Send or Return.
 struct LiveChatFeedView: View {
@@ -59,14 +67,28 @@ struct LiveChatFeedView: View {
 
     // MARK: Header
 
+    @ViewBuilder
     private var header: some View {
-        HStack(spacing: 6) {
+        let row = HStack(spacing: 6) {
+            #if os(macOS)
+            if style == .window { LiveChatWindowTrafficLights() }
+            #endif
             DeskSectionTitle(title: "Live chat stream")
             detachButton
             if let chatStream {
                 moreButton(chatStream)
             }
+            if style == .window { Spacer(minLength: 0) }
         }
+        #if os(macOS)
+        if style == .window {
+            row.background { PromptWindowDragHandle { LiveChatGlassController.shared.saveFrame() } }
+        } else {
+            row
+        }
+        #else
+        row
+        #endif
     }
 
     private var detachButton: some View {
@@ -332,15 +354,176 @@ struct ChatReplyComposer: View {
     }
 }
 
-/// Detached chat window body.
-struct LiveChatWindowView: View {
-    @Bindable var controller: ShowController
-    @Environment(\.colorScheme) private var scheme
+#if os(macOS)
+/// Key-capable so the reply box can type. Same glass and chrome as the studio panel.
+final class LiveChatGlassPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+}
 
-    var body: some View {
-        LiveChatFeedView(controller: controller, style: .window)
-            .padding(12)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(ShowSidebarPalette.selection(scheme))
+/// Detached live chat. Liquid Glass panel, same rules as the studio window:
+/// borderless, clear, floating, excluded from capture. Frame is remembered per
+/// display and restored on the screen it was left on.
+@MainActor
+@Observable
+final class LiveChatGlassController: NSObject, NSWindowDelegate {
+    static let shared = LiveChatGlassController()
+    static let windowTitle = "Live Chat"
+    static let frameKey = "proshow.liveChat.windowFrame"
+    static let minSize = NSSize(width: 320, height: 360)
+
+    weak var controller: ShowController?
+    private(set) var isOpen = false
+    @ObservationIgnored private var panel: NSPanel?
+
+    var panelFrame: NSRect? { panel?.isVisible == true ? panel?.frame : nil }
+
+    func attach(_ controller: ShowController) { self.controller = controller }
+
+    func open() {
+        ensurePanel()
+        guard let panel else { return }
+        if panel.isMiniaturized { panel.deminiaturize(nil) }
+        if !panel.isVisible {
+            panel.setFrame(Self.resolvedFrame(remembered: Self.rememberedFrame()), display: true)
+        }
+        panel.makeKeyAndOrderFront(nil)
+        FloatingPanelTransparency.clearChain(panel)
+        NSApp.activate(ignoringOtherApps: true)
+        isOpen = true
+        LiveChatWindowState.shared.isDetached = true
+    }
+
+    func close() {
+        saveFrame()
+        panel?.orderOut(nil)
+        isOpen = false
+        LiveChatWindowState.shared.isDetached = false
+    }
+
+    func miniaturizeWindow() {
+        guard let panel else { return }
+        panel.styleMask.insert(.miniaturizable)
+        panel.miniaturize(nil)
+    }
+
+    func saveFrame() {
+        guard let panel, panel.isVisible, !panel.isMiniaturized else { return }
+        UserDefaults.standard.set(NSStringFromRect(panel.frame), forKey: Self.frameKey)
+    }
+
+    static func rememberedFrame() -> NSRect? {
+        guard let raw = UserDefaults.standard.string(forKey: frameKey) else { return nil }
+        let rect = NSRectFromString(raw)
+        return rect.width >= minSize.width && rect.height >= minSize.height ? rect : nil
+    }
+
+    /// Remembered frame on whichever display still shows it, else beside the main window.
+    static func resolvedFrame(remembered: NSRect?) -> NSRect {
+        if let remembered,
+           let screen = NSScreen.screens.max(by: {
+               $0.visibleFrame.intersection(remembered).width * $0.visibleFrame.intersection(remembered).height
+                   < $1.visibleFrame.intersection(remembered).width * $1.visibleFrame.intersection(remembered).height
+           }),
+           screen.visibleFrame.intersects(remembered) {
+            let visible = screen.visibleFrame
+            var frame = remembered
+            frame.size.width = min(frame.width, visible.width)
+            frame.size.height = min(frame.height, visible.height)
+            frame.origin.x = min(max(frame.origin.x, visible.minX), visible.maxX - frame.width)
+            frame.origin.y = min(max(frame.origin.y, visible.minY), visible.maxY - frame.height)
+            return frame
+        }
+        let screen = NSApp.mainWindow?.screen ?? NSScreen.main ?? NSScreen.screens.first
+        let visible = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let size = NSSize(width: 380, height: min(640, visible.height - 40))
+        return NSRect(x: visible.maxX - size.width - 24, y: visible.midY - size.height / 2, width: size.width, height: size.height)
+    }
+
+    func windowDidMove(_ notification: Notification) { saveFrame() }
+    func windowDidResize(_ notification: Notification) { saveFrame() }
+    func windowWillClose(_ notification: Notification) {
+        isOpen = false
+        LiveChatWindowState.shared.isDetached = false
+    }
+
+    private func ensurePanel() {
+        guard panel == nil else { return }
+        let hosting = NSHostingController(rootView: LiveChatGlassRoot())
+        let panel = LiveChatGlassPanel(
+            contentRect: NSRect(origin: .zero, size: NSSize(width: 380, height: 640)),
+            styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        panel.contentViewController = hosting
+        panel.title = Self.windowTitle
+        panel.identifier = NSUserInterfaceItemIdentifier("proshow-live-chat")
+        panel.isFloatingPanel = true
+        panel.level = .floating
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.sharingType = .none
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = false
+        panel.hidesOnDeactivate = false
+        panel.isMovable = false
+        panel.isMovableByWindowBackground = false
+        panel.titleVisibility = .hidden
+        panel.titlebarAppearsTransparent = true
+        panel.isReleasedWhenClosed = false
+        panel.delegate = self
+        panel.minSize = Self.minSize
+        panel.maxSize = NSSize(width: 2000, height: 2400)
+        panel.standardWindowButton(.closeButton)?.isHidden = true
+        panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        panel.standardWindowButton(.zoomButton)?.isHidden = true
+        hosting.view.autoresizingMask = [.width, .height]
+        FloatingPanelTransparency.apply(to: panel, hosting: hosting)
+        if let hostingView = hosting.view as? NSHostingView<LiveChatGlassRoot> {
+            hostingView.safeAreaRegions = []
+        }
+        self.panel = panel
     }
 }
+
+struct LiveChatWindowTrafficLights: View {
+    var body: some View {
+        HStack(spacing: 6) {
+            StudioTrafficLight(color: Color(red: 1, green: 0.37, blue: 0.34), glyph: "xmark", label: "Reattach chat") {
+                LiveChatGlassController.shared.close()
+            }
+            StudioTrafficLight(color: Color(red: 1, green: 0.74, blue: 0.18), glyph: "minus", label: "Minimize chat window") {
+                LiveChatGlassController.shared.miniaturizeWindow()
+            }
+        }
+        .padding(.trailing, 2)
+        .focusEffectDisabled()
+    }
+}
+
+private struct LiveChatGlassRoot: View {
+    @Bindable private var chrome = LiveChatGlassController.shared
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    var body: some View {
+        Group {
+            if let controller = chrome.controller {
+                LiveChatFeedView(controller: controller, style: .window)
+                    .padding(.horizontal, 12)
+                    .padding(.top, 8)
+                    .padding(.bottom, 12)
+            } else {
+                Text("No project open")
+                    .font(DeskType.body)
+                    .foregroundStyle(RundownChrome.mutedLabel)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .ignoresSafeArea()
+        .padding(6)
+        .promptGlass(cornerRadius: 28, solid: reduceTransparency)
+        .overlay { StudioGlassResizeRim() }
+    }
+}
+#endif

@@ -476,7 +476,7 @@ private struct StudioWindowTrafficLights: View {
     }
 }
 
-private struct StudioTrafficLight: View {
+struct StudioTrafficLight: View {
     let color: Color
     let glyph: String
     let label: String
@@ -902,7 +902,7 @@ private struct StudioSlidesTile: View {
     }
 }
 
-private struct StudioGlassResizeRim: View {
+struct StudioGlassResizeRim: View {
     var body: some View {
         ZStack {
             VStack(spacing: 0) {
@@ -927,11 +927,11 @@ private struct StudioGlassResizeRim: View {
     }
 }
 
-private enum StudioGlassResizeEdge {
+enum StudioGlassResizeEdge {
     case left, right, bottom, bottomLeft, bottomRight
 }
 
-private struct StudioGlassResizeHandle: NSViewRepresentable {
+struct StudioGlassResizeHandle: NSViewRepresentable {
     var edge: StudioGlassResizeEdge
 
     func makeNSView(context: Context) -> StudioGlassResizeView {
@@ -945,7 +945,7 @@ private struct StudioGlassResizeHandle: NSViewRepresentable {
     }
 }
 
-private final class StudioGlassResizeView: NSView {
+final class StudioGlassResizeView: NSView {
     var edge: StudioGlassResizeEdge = .bottomRight
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
