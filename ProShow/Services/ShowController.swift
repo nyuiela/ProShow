@@ -2709,6 +2709,8 @@ final class ShowController {
         let deliverHeight = contract.height
         let streamLive = outputMode.isLive
         let activePropCanvases = compositor.propCanvases.filter { stack.activeProps.contains($0.name) }
+        let streamReusesPrior = programOutputInFlight && (streaming.isLive || isoRecorder.isRecording)
+            && !(pendingProgramOutput?.objectLivePixels.isEmpty ?? true)
         let objectLivePixels = programObjectLivePixelsForEncode(
             stack: stack,
             programVideo: video,
@@ -2763,7 +2765,16 @@ final class ShowController {
             audienceSurfaceBuffer: nil,
             outputMode: outputMode,
             renderContract: contract,
-            frameRevision: snapshot.revision
+            frameRevision: snapshot.revision,
+            phone: makePhoneFrameWork(
+                stack: stack,
+                video: video,
+                now: now,
+                slideLivePlayback: slideLivePlayback,
+                streamPropCanvases: activePropCanvases,
+                prior: pendingProgramOutput?.phone,
+                reusePriorPixels: streamReusesPrior
+            )
         )
         drainProgramOutputIfNeeded()
         #endif
@@ -2798,6 +2809,76 @@ final class ShowController {
         var outputMode: ProgramOutputMode
         var renderContract: ProgramRenderContract
         var frameRevision: UInt64
+        /// Phone board for the same frame: same clock, same captured frames as the Stream render.
+        var phone: PhoneFrameWork? = nil
+    }
+
+    /// Everything the Phone render needs, taken on the main actor beside the Stream inputs.
+    private struct PhoneFrameWork {
+        var objects: [CanvasObject]
+        var canvasWidth: Double
+        var canvasHeight: Double
+        var backgroundEnabled: Bool
+        var backgroundHex: String
+        var props: [PropCanvas]
+        var pixels: [UUID: CVPixelBuffer]
+        var buildPlayback: BuildPlayback
+        var propBuildPlayback: [UUID: BuildPlayback]
+    }
+
+    /// Same drawing inputs as the Stream frame, for the Phone board: placeholders and image
+    /// bindings resolved like the editor preview, live tiles from the frames Stream just took.
+    private func makePhoneFrameWork(
+        stack: RenderStack,
+        video: CVPixelBuffer?,
+        now: Date,
+        slideLivePlayback: BuildPlayback,
+        streamPropCanvases: [PropCanvas],
+        prior: PhoneFrameWork?,
+        reusePriorPixels: Bool
+    ) -> PhoneFrameWork? {
+        guard let board = streaming.phoneEncodeBoard() else { return nil }
+        let objects = resolvedCanvasObjects(board.objects)
+        let props = PhonePropCanvasStore.shared.get().filter { canvas in
+            streamPropCanvases.contains { $0.id == canvas.id } || PhonePropCanvasStore.shared.isPhoneOnly(canvas.id)
+        }
+        let pixels: [UUID: CVPixelBuffer]
+        if reusePriorPixels, let prior, !prior.pixels.isEmpty {
+            pixels = prior.pixels
+        } else {
+            var probe = stack
+            probe.slideCanvas = objects
+            pixels = buildProgramObjectLivePixels(stack: probe, programVideo: video, propCanvases: props)
+        }
+        var propPlayback: [UUID: BuildPlayback] = [:]
+        for canvas in props {
+            propPlayback[canvas.id] = BuildAnimationEngine.broadcastPlayback(
+                from: propEncodePlayback(for: canvas, now: now),
+                canvasObjects: canvas.objects
+            )
+        }
+        return PhoneFrameWork(
+            objects: objects,
+            canvasWidth: board.width,
+            canvasHeight: board.height,
+            backgroundEnabled: board.backgroundEnabled,
+            backgroundHex: board.backgroundHex,
+            props: props,
+            pixels: pixels,
+            buildPlayback: BuildAnimationEngine.broadcastPlayback(from: slideLivePlayback, canvasObjects: objects),
+            propBuildPlayback: propPlayback
+        )
+    }
+
+    /// One copy per captured frame, shared by the Stream and Phone canvases of the same frame.
+    private var liveSnapshotMemo: [ObjectIdentifier: (source: CVPixelBuffer, snapshot: CVPixelBuffer)] = [:]
+
+    private func liveSnapshot(_ buffer: CVPixelBuffer) -> CVPixelBuffer {
+        let key = ObjectIdentifier(buffer)
+        if let hit = liveSnapshotMemo[key], hit.source === buffer { return hit.snapshot }
+        let snap = ProgramOutputComposer.snapshot(buffer)
+        liveSnapshotMemo[key] = (buffer, snap)
+        return snap
     }
 
     private func programObjectLivePixelsForEncode(
@@ -2811,6 +2892,7 @@ final class ShowController {
             return prior
         }
         if inFlight, let prior = pendingProgramOutput?.objectLivePixels, !prior.isEmpty {
+            liveSnapshotMemo.removeAll(keepingCapacity: true)
             return patchProgramObjectLivePixels(
                 prior,
                 stack: stack,
@@ -2818,6 +2900,7 @@ final class ShowController {
                 propCanvases: propCanvases
             )
         }
+        liveSnapshotMemo.removeAll(keepingCapacity: true)
         return buildProgramObjectLivePixels(
             stack: stack,
             programVideo: programVideo,
@@ -2848,7 +2931,7 @@ final class ShowController {
                     stack: stack,
                     forBroadcast: true
                 ) {
-                    pixels[object.id] = ProgramOutputComposer.snapshot(buffer)
+                    pixels[object.id] = liveSnapshot(buffer)
                 }
             }
         }
@@ -2881,7 +2964,7 @@ final class ShowController {
                     stack: stack,
                     forBroadcast: true
                 ) {
-                    pixels[object.id] = ProgramOutputComposer.snapshot(buffer)
+                    pixels[object.id] = liveSnapshot(buffer)
                 }
             }
         }
@@ -3023,10 +3106,13 @@ final class ShowController {
         let contract = currentProgramRenderContract()
         let activePropCanvases = compositor.propCanvases.filter { stack.activeProps.contains($0.name) }
         let buildClock = liveBuildClock()
+        let slideLivePlayback = buildClock.playback(now: now)
         let slideEncodePlayback = BuildAnimationEngine.broadcastPlayback(
-            from: buildClock.playback(now: now),
+            from: slideLivePlayback,
             canvasObjects: stack.slideCanvas
         )
+        let streamReusesPrior = (streaming.isLive || isoRecorder.isRecording)
+            && !(pendingProgramOutput?.objectLivePixels.isEmpty ?? true)
         var propBuildPlayback: [UUID: BuildPlayback] = [:]
         for canvas in activePropCanvases {
             let propLive = propEncodePlayback(for: canvas, now: now)
@@ -3058,6 +3144,15 @@ final class ShowController {
             existing.presentationTime = now.timeIntervalSinceReferenceDate
             existing.hostTime = CMClockGetTime(CMClockGetHostTimeClock())
             existing.frameRevision = snapshot.revision
+            existing.phone = makePhoneFrameWork(
+                stack: stack,
+                video: video,
+                now: now,
+                slideLivePlayback: slideLivePlayback,
+                streamPropCanvases: activePropCanvases,
+                prior: existing.phone,
+                reusePriorPixels: streamReusesPrior
+            )
             pendingProgramOutput = existing
             return
         }
@@ -3095,7 +3190,16 @@ final class ShowController {
             audienceSurfaceBuffer: nil,
             outputMode: outputMode,
             renderContract: contract,
-            frameRevision: snapshot.revision
+            frameRevision: snapshot.revision,
+            phone: makePhoneFrameWork(
+                stack: stack,
+                video: video,
+                now: now,
+                slideLivePlayback: slideLivePlayback,
+                streamPropCanvases: activePropCanvases,
+                prior: nil,
+                reusePriorPixels: false
+            )
         )
     }
     #endif
@@ -3127,19 +3231,6 @@ final class ShowController {
         let store = compositor.programOutput
         let propCanvases = work.propCanvases
         let objectLivePixels = work.objectLivePixels
-        let phoneBoard = streaming.phoneEncodeBoard()
-        let phonePixels: [UUID: CVPixelBuffer]
-        if let phoneBoard {
-            var probe = work.stack
-            probe.slideCanvas = phoneBoard.objects
-            phonePixels = buildProgramObjectLivePixels(
-                stack: probe,
-                programVideo: work.video,
-                propCanvases: []
-            )
-        } else {
-            phonePixels = [:]
-        }
         streaming.markLastEncodeSource(.programComposite)
         let suppressStreamFastPath = slideLeaveStartedAt != nil || liveBuildStartedAt != nil
         ProShowQueues.programCompositeQueue.async { [weak self] in
@@ -3160,6 +3251,7 @@ final class ShowController {
                 suppressFastPath: suppressStreamFastPath
             )
             let rendered: (buffer: CVPixelBuffer, covered: [Int])?
+            let streamStart = CACurrentMediaTime()
             if useVideoOnlyFastPath, videoOwned != nil {
                 rendered = ProgramOutputComposer.shared.renderVideoLayerProgramFrame(
                     stack: work.stack,
@@ -3207,6 +3299,7 @@ final class ShowController {
                 return
             }
             let delivered = rendered.buffer
+            CompositeRenderTiming.note("stream", ms: (CACurrentMediaTime() - streamStart) * 1000)
             store.set(delivered, coveredLayers: rendered.covered)
             if work.streamLive || work.captureProgram {
                 LastPublishedStreamFrame.remember(delivered)
@@ -3226,25 +3319,32 @@ final class ShowController {
                 renderContract: work.renderContract,
                 frameRevision: work.frameRevision
             ))
-            if let phoneBoard, let phoneFrame = ProgramOutputComposer.shared.renderSlideBoard(
-                objects: phoneBoard.objects,
-                canvasWidth: phoneBoard.width,
-                canvasHeight: phoneBoard.height,
-                backgroundEnabled: phoneBoard.backgroundEnabled,
-                backgroundHex: phoneBoard.backgroundHex,
+            // Phone board: the same composer path as Stream, on the same frame clock and source frames.
+            let phoneStart = CACurrentMediaTime()
+            if let phone = work.phone, let phoneFrame = ProgramOutputComposer.shared.renderSlideBoard(
+                objects: phone.objects,
+                canvasWidth: phone.canvasWidth,
+                canvasHeight: phone.canvasHeight,
+                backgroundEnabled: phone.backgroundEnabled,
+                backgroundHex: phone.backgroundHex,
                 width: PhoneEncodeTemplate.width,
                 height: PhoneEncodeTemplate.height,
                 textContext: work.textContext,
-                objectLivePixels: phonePixels,
-                buildPlayback: work.buildPlayback,
+                objectLivePixels: phone.pixels,
+                buildPlayback: phone.buildPlayback,
                 // Same phases as the Stream render. Without this, Build Out ran right after Build In
                 // and the Phone design image and camera frame dissolved away on air.
                 buildPhaseFilter: work.buildPhaseFilter,
                 renderNow: work.renderNow,
                 marketStreamItems: work.marketStreamItems,
                 tickerColorConfig: work.tickerColorConfig,
-                propCanvases: PhonePropCanvasStore.shared.get().filter { canvas in work.propCanvases.contains { $0.id == canvas.id } || PhonePropCanvasStore.shared.isPhoneOnly(canvas.id) }
+                propCanvases: phone.props,
+                propBuildPlayback: phone.propBuildPlayback,
+                media: mediaOwned,
+                programMedia: work.stack.media,
+                chatOverlay: work.stack.chatOverlay
             ) {
+                CompositeRenderTiming.note("phone", ms: (CACurrentMediaTime() - phoneStart) * 1000)
                 PhoneComposedFrame.shared.store(phoneFrame)
             }
         }
@@ -3698,18 +3798,22 @@ final class ShowController {
                     "anchors": prop.elements.map { $0.propAnchor?.rawValue ?? "nil" }.joined(separator: ",")]
         case "stream_local_test":
             // QA only: Stream + Phone lanes to localhost RTMP listeners. Accounts live in memory and are never saved.
-            guard let su = args["stream"], let pu = args["phone"],
-                  [su, pu].allSatisfy({ $0.hasPrefix("rtmp://127.0.0.1:") || $0.hasPrefix("rtmp://localhost:") }),
-                  let sURL = URL(string: su), let pURL = URL(string: pu) else { return ["ok": false, "error": "localhost_rtmp_only"] }
+            // "phone" is optional: without it only the Stream lane runs (single-lane measurements).
+            let pu = args["phone"]
+            guard let su = args["stream"],
+                  ([su] + (pu.map { [$0] } ?? [])).allSatisfy({ $0.hasPrefix("rtmp://127.0.0.1:") || $0.hasPrefix("rtmp://localhost:") }),
+                  let sURL = URL(string: su) else { return ["ok": false, "error": "localhost_rtmp_only"] }
             guard !streaming.isLive else { return ["ok": false, "error": "already_streaming"] }
             let sAcc = StreamAccount(accountName: "QA Local Stream", platform: .customRtmp, rtmpUrl: su, targetBitrateKbps: 4000)
-            var pAcc = StreamAccount(accountName: "QA Local Phone", platform: .customRtmp, rtmpUrl: pu, targetBitrateKbps: 4000)
-            pAcc.screenId = DestinationScreenKind.phone.rawValue
-            let ingests = [
-                ResolvedIngest(accountID: sAcc.id, name: sAcc.accountName, platform: .customRtmp, url: sURL, streamKey: ""),
-                ResolvedIngest(accountID: pAcc.id, name: pAcc.accountName, platform: .customRtmp, url: pURL, streamKey: ""),
-            ]
-            streaming.configureOutputs(ingests, accounts: [sAcc, pAcc])
+            var ingests = [ResolvedIngest(accountID: sAcc.id, name: sAcc.accountName, platform: .customRtmp, url: sURL, streamKey: "")]
+            var accounts = [sAcc]
+            if let pu, let pURL = URL(string: pu) {
+                var pAcc = StreamAccount(accountName: "QA Local Phone", platform: .customRtmp, rtmpUrl: pu, targetBitrateKbps: 4000)
+                pAcc.screenId = DestinationScreenKind.phone.rawValue
+                ingests.append(ResolvedIngest(accountID: pAcc.id, name: pAcc.accountName, platform: .customRtmp, url: pURL, streamKey: ""))
+                accounts.append(pAcc)
+            }
+            streaming.configureOutputs(ingests, accounts: accounts)
             if streaming.transport is MockStreamTransport == false {
                 streaming.transport = RTMPClient.fanoutConfigs(from: streaming.config).count > 1 ? MultiRTMPTransport() : RTMPStreamTransport()
             }
@@ -3722,7 +3826,7 @@ final class ShowController {
             return ["ok": true]
         case "stream_info":
             return ["ok": true, "state": streaming.state.rawValue, "phoneError": streaming.phoneLaneError ?? "", "lastError": streaming.lastError ?? "",
-                    "phone": streaming.phoneLaneDiagnostics]
+                    "phone": streaming.phoneLaneDiagnostics, "composite": CompositeRenderTiming.diagnostics]
         case "timer":
             guard let timer = inspector.timers.first(where: { $0.name == args["name"] }) else { return ["ok": false, "error": "no_timer"] }
             switch args["op"] {

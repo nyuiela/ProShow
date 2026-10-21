@@ -156,10 +156,21 @@ enum BuildAnimationEngine {
         return state
     }
 
+    /// Same order as comparing `uuidString`s (uppercase hex), without building two strings per
+    /// comparison. This sort runs for every object on every program frame.
+    static func uuidPrecedes(_ lhs: UUID, _ rhs: UUID) -> Bool {
+        withUnsafeBytes(of: lhs.uuid) { l in
+            withUnsafeBytes(of: rhs.uuid) { r in
+                for i in 0..<16 where l[i] != r[i] { return l[i] < r[i] }
+                return false
+            }
+        }
+    }
+
     static func startTimes(for steps: [ElementBuildStep], playback: BuildPlayback) -> [UUID: Double] {
         let ordered = steps.sorted { lhs, rhs in
             if lhs.sequenceOrder != rhs.sequenceOrder { return lhs.sequenceOrder < rhs.sequenceOrder }
-            return lhs.id.uuidString < rhs.id.uuidString
+            return uuidPrecedes(lhs.id, rhs.id)
         }
         var starts: [UUID: Double] = [:]
         var previousStart: Double?

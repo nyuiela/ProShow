@@ -17,9 +17,26 @@ final class DecodedImageCache: @unchecked Sendable {
         cache.countLimit = 400
     }
 
+    /// The program composite asks for every design image on every frame. A file stat per call
+    /// was a measurable share of the composite, so a cached image is re-checked at most once a second.
+    private let checkLock = NSLock()
+    private var checkedAt: [NSString: TimeInterval] = [:]
+    private static let recheckInterval: TimeInterval = 1
+
     func image(atPath path: String, maxLongSide: Int?) -> CGImage? {
         let key = "\(path)#\(maxLongSide ?? 0)" as NSString
+        let now = ProcessInfo.processInfo.systemUptime
+        checkLock.lock()
+        let lastCheck = checkedAt[key]
+        checkLock.unlock()
+        if let lastCheck, now - lastCheck < Self.recheckInterval, let box = cache.object(forKey: key) {
+            return box.image
+        }
         let stamp = (try? FileManager.default.attributesOfItem(atPath: path)[.modificationDate]) as? Date
+        checkLock.lock()
+        if checkedAt.count > 2000 { checkedAt.removeAll() }
+        checkedAt[key] = now
+        checkLock.unlock()
         if let box = cache.object(forKey: key), box.stamp == stamp { return box.image }
         let url = URL(fileURLWithPath: path) as CFURL
         guard let source = CGImageSourceCreateWithURL(url, [kCGImageSourceShouldCache: false] as CFDictionary) else { return nil }

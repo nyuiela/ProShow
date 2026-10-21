@@ -132,11 +132,14 @@ final class ProgramOutputComposer: @unchecked Sendable {
     #endif
     #if canImport(CoreVideo)
     /// Static slide pixels. Rebuilt when the slide changes, then blended over the camera each frame.
-    private var slideMidPlate: CVPixelBuffer?
-    private var slideOverPlate: CVPixelBuffer?
-    private var slidePlateSignature: Int?
-    private var slidePlateWidth = 0
-    private var slidePlateHeight = 0
+    /// Static slide layers around the live tiles, one cache per output size. Stream and Phone
+    /// render alternately each frame; a single cache made both rebuild every frame.
+    private struct SlidePlates {
+        var mid: CVPixelBuffer?
+        var over: CVPixelBuffer?
+        var signature: Int?
+    }
+    private var slidePlates: [Int: SlidePlates] = [:]
     #endif
     #if canImport(VideoToolbox)
     private var scaleTransfer: VTPixelTransferSession?
@@ -161,9 +164,16 @@ final class ProgramOutputComposer: @unchecked Sendable {
         renderNow: Date,
         marketStreamItems: [MarketTickerItem] = [],
         tickerColorConfig: TickerColorConfig = TickerColorConfig(),
-        propCanvases: [PropCanvas] = []
+        propCanvases: [PropCanvas] = [],
+        propBuildPlayback: [UUID: BuildPlayback] = [:],
+        media: CVPixelBuffer? = nil,
+        programMedia: MediaAction? = nil,
+        chatOverlay: ChatOverlayCard? = nil
     ) -> CVPixelBuffer? {
         var stack = RenderStack.idle
+        // Media slots on the board play the program media. The layer stays cleared: no 16:9 backdrop.
+        stack.media = programMedia
+        stack.chatOverlay = chatOverlay
         stack.screenColorHex = backgroundHex
         stack.slideElements = []
         stack.slideCanvas = objects
@@ -181,7 +191,7 @@ final class ProgramOutputComposer: @unchecked Sendable {
             height: height,
             video: nil,
             pip: nil,
-            media: nil,
+            media: media,
             videoFrame: nil,
             textContext: textContext,
             propCanvases: propCanvases,
@@ -189,6 +199,7 @@ final class ProgramOutputComposer: @unchecked Sendable {
             buildPlayback: buildPlayback,
             buildPhaseFilter: buildPhaseFilter,
             renderNow: renderNow,
+            propBuildPlayback: propBuildPlayback,
             marketStreamItems: marketStreamItems,
             tickerColorConfig: tickerColorConfig,
             matchOnAirVisibility: true
@@ -835,9 +846,24 @@ final class ProgramOutputComposer: @unchecked Sendable {
             hasher.combine(object.transform.width)
             hasher.combine(object.transform.height)
         }
+        // A build in progress (dissolve in or out) changes the plate every frame.
+        for object in below + above where !object.resolvedBuildSteps.isEmpty && !settlesOnAir(object, matchOnAirVisibility: matchOnAirVisibility) {
+            hasher.combine(buildRenderState(
+                object: object,
+                canvasObjects: objects,
+                slideBuildSteps: slideBuildSteps,
+                buildPlayback: buildPlayback,
+                buildPhaseFilter: buildPhaseFilter,
+                renderNow: renderNow,
+                textContext: textContext,
+                tickerColorConfig: tickerColorConfig
+            ))
+        }
         let signature = hasher.finalize()
-        if slidePlateSignature != signature || slidePlateWidth != frameWidth || slidePlateHeight != frameHeight {
-            slideMidPlate = below.isEmpty ? nil : renderObjectPlate(
+        let plateKey = frameWidth &* 100_003 &+ frameHeight
+        var plates = slidePlates[plateKey] ?? SlidePlates()
+        if plates.signature != signature {
+            plates.mid = below.isEmpty ? nil : renderObjectPlate(
                 objects: below,
                 canvasW: canvasW,
                 canvasH: canvasH,
@@ -860,7 +886,7 @@ final class ProgramOutputComposer: @unchecked Sendable {
                 tickerColorConfig: tickerColorConfig,
                 matchOnAirVisibility: matchOnAirVisibility
             )
-            slideOverPlate = above.isEmpty ? nil : renderObjectPlate(
+            plates.over = above.isEmpty ? nil : renderObjectPlate(
                 objects: above,
                 canvasW: canvasW,
                 canvasH: canvasH,
@@ -883,16 +909,16 @@ final class ProgramOutputComposer: @unchecked Sendable {
                 tickerColorConfig: tickerColorConfig,
                 matchOnAirVisibility: matchOnAirVisibility
             )
-            if (below.isEmpty || slideMidPlate != nil), (above.isEmpty || slideOverPlate != nil) {
-                slidePlateSignature = signature
-                slidePlateWidth = frameWidth
-                slidePlateHeight = frameHeight
+            if (below.isEmpty || plates.mid != nil), (above.isEmpty || plates.over != nil) {
+                plates.signature = signature
+                if slidePlates[plateKey] == nil, slidePlates.count >= 4 { slidePlates.removeAll() }
+                slidePlates[plateKey] = plates
             } else {
-                slidePlateSignature = nil
+                slidePlates[plateKey] = nil
                 return false
             }
         }
-        if let mid = slideMidPlate {
+        if let mid = plates.mid {
             blendPlate(mid)
         }
         ctx.saveGState()
@@ -919,7 +945,7 @@ final class ProgramOutputComposer: @unchecked Sendable {
             matchOnAirVisibility: matchOnAirVisibility
         )
         ctx.restoreGState()
-        if let over = slideOverPlate {
+        if let over = plates.over {
             blendPlate(over)
         }
         return true
@@ -1078,12 +1104,7 @@ final class ProgramOutputComposer: @unchecked Sendable {
                 height: height
             )
             let hasBuildTimeline = !object.resolvedBuildSteps.isEmpty
-            let settleOnAir = matchOnAirVisibility && (
-                object.isTextLike
-                    || object.hostsLayerBackedMedia
-                    || object.kind.isBrowserLike
-                    || object.assignedSource?.sourceType == .webPage
-            )
+            let settleOnAir = settlesOnAir(object, matchOnAirVisibility: matchOnAirVisibility)
             var buildState: TransformedRenderState
             if settleOnAir {
                 // Stream/ISO: settled rest. A dissolve or click-build must not blank lyrics, cameras, or screen share.
@@ -1130,7 +1151,7 @@ final class ProgramOutputComposer: @unchecked Sendable {
                 blit(image, into: ctx, rect: rect)
             } else if let still = canvasObjectStillImage(for: object, textContext: textContext) {
                 let mediaStyle = MediaFrameStyle.from(object, scale: layoutScale)
-                blitCanvasImage(still, into: ctx, rect: rect, style: mediaStyle)
+                blitCanvasImage(still, into: ctx, rect: rect, style: mediaStyle, cacheScaled: true)
             } else if object.isTextLike {
                 drawTextBoxChrome(object: object, rect: rect, layoutScale: layoutScale, radius: radius, in: ctx)
             } else if object.fill.type != .none {
@@ -1427,6 +1448,16 @@ final class ProgramOutputComposer: @unchecked Sendable {
     }
     #endif
 
+    /// Stream/ISO: text, cameras, screen share and pages stay at rest during a build.
+    private func settlesOnAir(_ object: CanvasObject, matchOnAirVisibility: Bool) -> Bool {
+        matchOnAirVisibility && (
+            object.isTextLike
+                || object.hostsLayerBackedMedia
+                || object.kind.isBrowserLike
+                || object.assignedSource?.sourceType == .webPage
+        )
+    }
+
     private func shouldBlitLiveVideo(_ object: CanvasObject) -> Bool {
         if object.isUnfilledPlaceholder { return false }
         switch object.assignedSource?.sourceType {
@@ -1640,6 +1671,10 @@ final class ProgramOutputComposer: @unchecked Sendable {
         if gpuScaleFullFrame(buffer, into: ctx, rect: rect, style: style) {
             return
         }
+        if let tile = gpuScaledTile(buffer, into: ctx, rect: rect, style: style),
+           Self.withBorrowedImage(tile, { blitCanvasImage($0, into: ctx, rect: rect, style: style) }) {
+            return
+        }
         if let image = Self.bgraImage(from: buffer) ?? InputPreviewImaging.cgImage(from: buffer) {
             blitCanvasImage(image, into: ctx, rect: rect, style: style)
         }
@@ -1666,6 +1701,105 @@ final class ProgramOutputComposer: @unchecked Sendable {
         #else
         return false
         #endif
+    }
+
+    /// Camera and screen tiles (not full frame) are scaled on the GPU to the tile's device size, so
+    /// Core Graphics only composites about one pixel per pixel. It used to copy and resample the whole
+    /// capture frame on the CPU for every tile, on every canvas.
+    private func gpuScaledTile(_ buffer: CVPixelBuffer, into ctx: CGContext, rect: CGRect, style: MediaFrameStyle) -> CVPixelBuffer? {
+        #if canImport(CoreImage) && canImport(CoreVideo)
+        guard style.scaleMode == .fill || style.scaleMode == .fit else { return nil }
+        let format = CVPixelBufferGetPixelFormatType(buffer)
+        let isBGRA = format == kCVPixelFormatType_32BGRA
+        guard isBGRA
+            || format == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+            || format == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
+        else { return nil }
+        let srcW = CGFloat(CVPixelBufferGetWidth(buffer))
+        let srcH = CGFloat(CVPixelBufferGetHeight(buffer))
+        let device = ctx.convertToDeviceSpace(rect).standardized
+        guard srcW >= 16, srcH >= 16, device.width >= 8, device.height >= 8, rect.width > 0, rect.height > 0 else { return nil }
+        let rectAspect = rect.width / rect.height
+        let srcAspect = srcW / srcH
+        var crop = CGRect(x: 0, y: 0, width: srcW, height: srcH)
+        var outW = device.width
+        var outH = device.height
+        if style.scaleMode == .fill {
+            if srcAspect > rectAspect {
+                crop.size.width = srcH * rectAspect
+                crop.origin.x = (srcW - crop.width) / 2
+            } else {
+                crop.size.height = srcW / rectAspect
+                crop.origin.y = (srcH - crop.height) / 2
+            }
+        } else if srcAspect > rectAspect {
+            outH = device.width / srcAspect
+        } else {
+            outW = device.height * srcAspect
+        }
+        let w = Int(outW.rounded())
+        let h = Int(outH.rounded())
+        guard w >= 2, h >= 2, w <= 8192, h <= 8192 else { return nil }
+        let key = w &* 100_003 &+ h
+        let out: CVPixelBuffer
+        if let pooled = tileBuffers[key] {
+            out = pooled
+        } else {
+            guard let made = makePlateBuffer(width: w, height: h) else { return nil }
+            if tileBuffers.count >= 8 { tileBuffers.removeAll() }
+            tileBuffers[key] = made
+            out = made
+        }
+        // BGRA capture frames were drawn untagged (device RGB). Keep that look: no color matching.
+        let source = isBGRA
+            ? CIImage(cvPixelBuffer: buffer, options: [.colorSpace: NSNull()])
+            : CIImage(cvPixelBuffer: buffer)
+        let scaled = source
+            .cropped(to: crop)
+            .transformed(by: CGAffineTransform(translationX: -crop.minX, y: -crop.minY))
+            .transformed(by: CGAffineTransform(scaleX: CGFloat(w) / crop.width, y: CGFloat(h) / crop.height))
+        let destination = CIRenderDestination(pixelBuffer: out)
+        destination.colorSpace = isBGRA ? nil : CGColorSpace(name: CGColorSpace.sRGB)
+        do {
+            let task = try ciContext.startTask(toRender: scaled, to: destination)
+            _ = try task.waitUntilCompleted()
+        } catch {
+            return nil
+        }
+        return out
+        #else
+        return nil
+        #endif
+    }
+
+    private var tileBuffers: [Int: CVPixelBuffer] = [:]
+
+    /// Draws a BGRA buffer through Core Graphics without copying it. The image only lives inside `body`.
+    private static func withBorrowedImage(_ buffer: CVPixelBuffer, _ body: (CGImage) -> Void) -> Bool {
+        guard CVPixelBufferGetPixelFormatType(buffer) == kCVPixelFormatType_32BGRA,
+              CVPixelBufferLockBaseAddress(buffer, .readOnly) == kCVReturnSuccess else { return false }
+        defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
+        let width = CVPixelBufferGetWidth(buffer)
+        let height = CVPixelBufferGetHeight(buffer)
+        let bytesPerRow = CVPixelBufferGetBytesPerRow(buffer)
+        guard let base = CVPixelBufferGetBaseAddress(buffer),
+              let provider = CGDataProvider(dataInfo: nil, data: base, size: bytesPerRow * height, releaseData: { _, _, _ in }),
+              let image = CGImage(
+                  width: width,
+                  height: height,
+                  bitsPerComponent: 8,
+                  bitsPerPixel: 32,
+                  bytesPerRow: bytesPerRow,
+                  space: CGColorSpaceCreateDeviceRGB(),
+                  bitmapInfo: CGBitmapInfo.byteOrder32Little.union(CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue)),
+                  provider: provider,
+                  decode: nil,
+                  shouldInterpolate: true,
+                  intent: .defaultIntent
+              )
+        else { return false }
+        body(image)
+        return true
     }
 
     /// One VideoToolbox pass scales and converts (420v or BGRA) into the program buffer.
@@ -1728,7 +1862,7 @@ final class ProgramOutputComposer: @unchecked Sendable {
     }
 
     /// Parity with `CanvasObjectShapeLayer` image `.fit` / `.fill` / `.crop`.
-    private func blitCanvasImage(_ image: CGImage, into ctx: CGContext, rect: CGRect, style: MediaFrameStyle) {
+    private func blitCanvasImage(_ image: CGImage, into ctx: CGContext, rect: CGRect, style: MediaFrameStyle, cacheScaled: Bool = false) {
         ctx.saveGState()
         ctx.clip(to: rect)
         ctx.translateBy(x: rect.minX, y: rect.maxY)
@@ -1764,9 +1898,45 @@ final class ProgramOutputComposer: @unchecked Sendable {
         }
 
         ctx.setAlpha(CGFloat(style.opacity))
-        ctx.draw(drawImage, in: dest)
+        if cacheScaled, let scaled = scaledStill(drawImage, deviceSize: ctx.convertToDeviceSpace(dest).standardized.size) {
+            ctx.draw(scaled, in: dest)
+        } else {
+            ctx.draw(drawImage, in: dest)
+        }
         ctx.restoreGState()
     }
+
+    /// Design images (4K backgrounds, logos) were resampled on the CPU every frame. They are scaled
+    /// once per output size and kept, so each frame composites about one pixel per pixel.
+    private func scaledStill(_ image: CGImage, deviceSize: CGSize) -> CGImage? {
+        let w = Int(deviceSize.width.rounded())
+        let h = Int(deviceSize.height.rounded())
+        guard w >= 2, h >= 2, w < image.width - 1 || h < image.height - 1, w <= 8192, h <= 8192 else { return nil }
+        let key = StillScaleKey(image: ObjectIdentifier(image), width: w, height: h)
+        if let hit = stillScaleCache[key], hit.source === image { return hit.scaled }
+        guard let ctx = CGContext(
+            data: nil,
+            width: w,
+            height: h,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.premultipliedFirst.rawValue
+        ) else { return nil }
+        ctx.interpolationQuality = .high
+        ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+        guard let scaled = ctx.makeImage() else { return nil }
+        if stillScaleCache.count >= 48 { stillScaleCache.removeAll() }
+        stillScaleCache[key] = (image, scaled)
+        return scaled
+    }
+
+    private struct StillScaleKey: Hashable {
+        var image: ObjectIdentifier
+        var width: Int
+        var height: Int
+    }
+    private var stillScaleCache: [StillScaleKey: (source: CGImage, scaled: CGImage)] = [:]
 
     private func aspectFill(_ image: CGImage, in rect: CGRect) -> CGRect {
         let imageRatio = CGFloat(image.width) / max(1, CGFloat(image.height))
@@ -2408,4 +2578,34 @@ enum ProgramTransitionCompositor {
         return to
     }
     #endif
+}
+
+/// Composite time per canvas for the QA stream_info action (rolling, last 120 frames).
+enum CompositeRenderTiming {
+    private static let lock = NSLock()
+    private static var samples: [String: [Double]] = [:]
+
+    static func note(_ canvas: String, ms: Double) {
+        lock.lock()
+        var list = samples[canvas] ?? []
+        list.append(ms)
+        if list.count > 120 { list.removeFirst(list.count - 120) }
+        samples[canvas] = list
+        lock.unlock()
+    }
+
+    static var diagnostics: [String: Any] {
+        lock.lock()
+        defer { lock.unlock() }
+        var out: [String: Any] = [:]
+        for (canvas, list) in samples where !list.isEmpty {
+            let sorted = list.sorted()
+            out[canvas] = [
+                "avgMs": (list.reduce(0, +) / Double(list.count) * 10).rounded() / 10,
+                "p95Ms": (sorted[min(sorted.count - 1, Int(Double(sorted.count) * 0.95))] * 10).rounded() / 10,
+                "n": list.count,
+            ]
+        }
+        return out
+    }
 }
