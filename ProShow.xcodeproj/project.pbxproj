@@ -208,6 +208,7 @@
 		A1T000000000000000000014 /* IsoRecorderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000014 /* IsoRecorderTests.swift */; };
 		A1T000000000000000000015 /* LiveChatOverlayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000015 /* LiveChatOverlayTests.swift */; };
 		2BABB7AF45D2559942FEEDA6 /* YouTubeChatIngestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22A34932106B5A07A8C5ECD5 /* YouTubeChatIngestTests.swift */; };
+		DE565729698310CC34CEDE2A /* XChatIngestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A5455AE7C49B323CFE2A830 /* XChatIngestTests.swift */; };
 		A1T000000000000000000016 /* ProjectSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000016 /* ProjectSettingsTests.swift */; };
 		A1T000000000000000000017 /* CanvasEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000017 /* CanvasEngineTests.swift */; };
 		A1T000000000000000000018 /* ActionInspectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000018 /* ActionInspectorTests.swift */; };
@@ -365,6 +366,7 @@
 		A43E7680D3B0C7C448F5F475 /* ShowController+ChatIngest.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2DB8034ED5178F27B6DE62A /* ShowController+ChatIngest.swift */; };
 		ABB503DAE1C9205EED77AF5C /* ChatIngestHub.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09938EA7249F35AB71EBF69F /* ChatIngestHub.swift */; };
 		B434CC88AFED8D3DD5014035 /* YouTubeChatConnector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27544121B6381B6ABC118974 /* YouTubeChatConnector.swift */; };
+		282BD1022248B8E6D688A390 /* XChatConnector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79855F983DA36D148C037F2A /* XChatConnector.swift */; };
 		C7F100000000000000000007 /* MeetingSdkBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F200000000000000000007 /* MeetingSdkBridge.swift */; };
 		C7F100000000000000000008 /* ShowController+Backstage.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F200000000000000000008 /* ShowController+Backstage.swift */; };
 		C7F100000000000000000009 /* BackstageControlPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F200000000000000000009 /* BackstageControlPanelView.swift */; };
@@ -633,6 +635,7 @@
 		A2T000000000000000000014 /* IsoRecorderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IsoRecorderTests.swift; sourceTree = "<group>"; };
 		A2T000000000000000000015 /* LiveChatOverlayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveChatOverlayTests.swift; sourceTree = "<group>"; };
 		22A34932106B5A07A8C5ECD5 /* YouTubeChatIngestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubeChatIngestTests.swift; sourceTree = "<group>"; };
+		2A5455AE7C49B323CFE2A830 /* XChatIngestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XChatIngestTests.swift; sourceTree = "<group>"; };
 		A2T000000000000000000016 /* ProjectSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSettingsTests.swift; sourceTree = "<group>"; };
 		A2T000000000000000000017 /* CanvasEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasEngineTests.swift; sourceTree = "<group>"; };
 		A2T000000000000000000018 /* ActionInspectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionInspectorTests.swift; sourceTree = "<group>"; };
@@ -789,6 +792,7 @@
 		A2DB8034ED5178F27B6DE62A /* ShowController+ChatIngest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ShowController+ChatIngest.swift"; sourceTree = "<group>"; };
 		09938EA7249F35AB71EBF69F /* ChatIngestHub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatIngestHub.swift; sourceTree = "<group>"; };
 		27544121B6381B6ABC118974 /* YouTubeChatConnector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubeChatConnector.swift; sourceTree = "<group>"; };
+		79855F983DA36D148C037F2A /* XChatConnector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XChatConnector.swift; sourceTree = "<group>"; };
 		C7F200000000000000000007 /* MeetingSdkBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingSdkBridge.swift; sourceTree = "<group>"; };
 		C7F200000000000000000008 /* ShowController+Backstage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ShowController+Backstage.swift"; sourceTree = "<group>"; };
 		C7F200000000000000000009 /* BackstageControlPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackstageControlPanelView.swift; sourceTree = "<group>"; };
@@ -1118,6 +1122,7 @@
 				A2DB8034ED5178F27B6DE62A /* ShowController+ChatIngest.swift */,
 				09938EA7249F35AB71EBF69F /* ChatIngestHub.swift */,
 				27544121B6381B6ABC118974 /* YouTubeChatConnector.swift */,
+				79855F983DA36D148C037F2A /* XChatConnector.swift */,
 				C7F200000000000000000007 /* MeetingSdkBridge.swift */,
 				C7F200000000000000000008 /* ShowController+Backstage.swift */,
 				C7F200000000000000000013 /* ShowController+LibraryHierarchy.swift */,
@@ -1345,6 +1350,7 @@
 				A2T000000000000000000014 /* IsoRecorderTests.swift */,
 				A2T000000000000000000015 /* LiveChatOverlayTests.swift */,
 				22A34932106B5A07A8C5ECD5 /* YouTubeChatIngestTests.swift */,
+				2A5455AE7C49B323CFE2A830 /* XChatIngestTests.swift */,
 				C7F20000000000000000000A /* BackstageEngineTests.swift */,
 				C7F200000000000000000012 /* BackstageIntegrationTests.swift */,
 				A2T000000000000000000016 /* ProjectSettingsTests.swift */,
@@ -1690,6 +1696,7 @@
 				A43E7680D3B0C7C448F5F475 /* ShowController+ChatIngest.swift in Sources */,
 				ABB503DAE1C9205EED77AF5C /* ChatIngestHub.swift in Sources */,
 				B434CC88AFED8D3DD5014035 /* YouTubeChatConnector.swift in Sources */,
+				282BD1022248B8E6D688A390 /* XChatConnector.swift in Sources */,
 				C7F100000000000000000007 /* MeetingSdkBridge.swift in Sources */,
 				C7F100000000000000000008 /* ShowController+Backstage.swift in Sources */,
 				C7F100000000000000000013 /* ShowController+LibraryHierarchy.swift in Sources */,
@@ -1895,6 +1902,7 @@
 				A1T000000000000000000014 /* IsoRecorderTests.swift in Sources */,
 				A1T000000000000000000015 /* LiveChatOverlayTests.swift in Sources */,
 				2BABB7AF45D2559942FEEDA6 /* YouTubeChatIngestTests.swift in Sources */,
+				DE565729698310CC34CEDE2A /* XChatIngestTests.swift in Sources */,
 				C7F10000000000000000000A /* BackstageEngineTests.swift in Sources */,
 				C7F100000000000000000012 /* BackstageIntegrationTests.swift in Sources */,
 				A1T000000000000000000016 /* ProjectSettingsTests.swift in Sources */,

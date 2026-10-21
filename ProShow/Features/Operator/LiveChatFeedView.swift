@@ -25,6 +25,7 @@ struct LiveChatFeedView: View {
     var style: Style
 
     @State private var youtubeChatInput = ""
+    @State private var xChatInput = ""
 
     private var chatStream: LiveChatStreamManager? { controller.chatStream }
     private var hub: ChatIngestHub? { controller.chatIngest }
@@ -35,6 +36,9 @@ struct LiveChatFeedView: View {
             header
             if let hub, hubEnabled, hub.youtubeState != .idle {
                 youtubeStatusLine(hub)
+            }
+            if let hub, hubEnabled, let error = hub.xStatusLine {
+                xErrorLine(error)
             }
             if style == .panel, controller.isChatDetached {
                 Text("Open in its own window")
@@ -127,6 +131,7 @@ struct LiveChatFeedView: View {
             VStack(alignment: .leading, spacing: 10) {
                 if let hub, hubEnabled {
                     youtubeChatRow(hub)
+                    xChatRow(hub)
                     Divider()
                 }
                 chatSourceToggles(chatStream)
@@ -150,7 +155,7 @@ struct LiveChatFeedView: View {
 
     private var chatSourcePlatforms: [ChatPlatform] {
         var list: [ChatPlatform] = [.zoom, .googleMeet, .backstage]
-        if hubEnabled { list.insert(.youtube, at: 0) }
+        if hubEnabled { list.insert(contentsOf: [.youtube, .x], at: 0) }
         return list
     }
 
@@ -174,6 +179,48 @@ struct LiveChatFeedView: View {
             }
             youtubeStatusLine(hub)
         }
+    }
+
+    @ViewBuilder
+    private func xChatRow(_ hub: ChatIngestHub) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if hub.xSignedIn || hub.xMock {
+                HStack(spacing: 6) {
+                    TextField("X broadcast link or ID", text: $xChatInput)
+                        .textFieldStyle(.roundedBorder)
+                        .font(DeskType.micro)
+                        .disabled(hub.xState.isActive)
+                    if hub.xState.isActive {
+                        Button("Stop") { hub.stopX() }
+                            .controlSize(.small)
+                            .accessibilityIdentifier("chat.x.stop")
+                    } else {
+                        Button("Connect") {
+                            let input = xChatInput.trimmingCharacters(in: .whitespacesAndNewlines)
+                            hub.connectX(XChatAPI.broadcastID(from: input).map { .broadcast($0) } ?? .auto)
+                        }
+                        .controlSize(.small)
+                        .accessibilityIdentifier("chat.x.connect")
+                    }
+                }
+            } else {
+                Button(hub.xSigningIn ? "Waiting for X" : "Connect X") {
+                    Task { await hub.signInX?() }
+                }
+                .controlSize(.small)
+                .disabled(hub.xSigningIn)
+                .help("Sign in to X to read and reply to your broadcast chat")
+                .accessibilityIdentifier("chat.connectX")
+            }
+            if let error = hub.xStatusLine { xErrorLine(error) }
+        }
+    }
+
+    private func xErrorLine(_ error: String) -> some View {
+        Text("X: \(error)")
+            .font(DeskType.micro)
+            .foregroundStyle(.red.opacity(0.85))
+            .lineLimit(1)
     }
 
     private func youtubeStatusLine(_ hub: ChatIngestHub) -> some View {

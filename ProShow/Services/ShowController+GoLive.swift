@@ -258,6 +258,7 @@ extension ShowController {
             let listingIngests = await prepareXBroadcasts(ingests, metadata: metadata, api: api)
             await transitionYouTubeBroadcasts(listingIngests, api: api)
             startYouTubeChatAfterGoLive(listingIngests)
+            startXChatAfterGoLive(listingIngests)
             await finishXBroadcasts(listingIngests, metadata: metadata, api: api)
         }
         return true

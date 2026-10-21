@@ -85,6 +85,26 @@ struct BroadcastGoLiveTests {
         #expect(status?["privacyStatus"] as? String == "unlisted")
     }
 
+    @Test
+    func loopbackServer_requiresTheFamilyTheRedirectHostNames() {
+        #expect(OAuthLoopbackServer.requiredFamilies(host: "127.0.0.1") == (true, false))
+        #expect(OAuthLoopbackServer.requiredFamilies(host: "[::1]") == (false, true))
+        #expect(OAuthLoopbackServer.requiredFamilies(host: "localhost") == (true, true))
+    }
+
+    @Test @MainActor
+    func xChatAuthorizationURL_requestsBroadcastScopesOnlyWhenAsked() throws {
+        guard StreamAccountManager.shared.hasClientID(for: .twitter) else { return }
+        let redirect = URL(string: StreamOAuthConfiguration.proshowXRedirectURI)!
+        let chat = try StreamAccountManager.shared.authorizationURL(
+            for: .twitter, verifier: "v", redirectURI: redirect, state: "s", scopes: XChatAuth.scopes)
+        let plain = try StreamAccountManager.shared.authorizationURL(for: .twitter, verifier: "v", redirectURI: redirect, state: "s")
+        func scope(_ u: URL) -> String { URLComponents(url: u, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "scope" }?.value ?? "" }
+        #expect(scope(chat) == "tweet.read users.read broadcast.read broadcast.write offline.access")
+        #expect(scope(plain) == StreamOAuthConfiguration.xUserScopes)
+        #expect(!scope(plain).contains("broadcast"))
+    }
+
     @Test @MainActor
     func youtubeAuthorizationURL_usesLoopbackNotCustomScheme() throws {
         let redirect = StreamOAuthConfiguration.loopbackCallback()

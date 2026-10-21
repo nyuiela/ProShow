@@ -35,7 +35,7 @@ Existing code we build on:
 | Platform | Official read API | Method | Auth | Latency | Cost / limits | Effort | Plan |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | YouTube | Yes | `liveChatMessages.streamList` (server push), `liveChatMessages.list` (poll) | OAuth `youtube.readonly` (already granted) | ~1 s push, poll at `pollingIntervalMillis` | 5 units per stream connect, 5 per list call, 10,000 units/day default | Low | Phase 1 |
-| X | Yes | Activity API `broadcast.chat` event (push), `GET /2/broadcasts/{id}/chat` (history) | OAuth 2.0 user token, `broadcast.read` (missing today) | Real time push | Pay per use. Push events not billed at time of writing. Broadcast start/end about $0.005 each, about $0.01 per show. Poll price unpublished, do not poll | Medium | Phase 2 |
+| X | Yes, own broadcasts only | `GET /2/broadcasts/{id}/chat` polling (built, Phase 2). Activity API push needs a public webhook | OAuth 2.0 user token, `broadcast.read` + `broadcast.write` (separate Connect X sign-in) | 10 s while active, 30 s quiet | Pay per use per unique resource per UTC day. No broadcast line on the pricing page; estimated at Posts read $0.005/message, User read $0.010/author | Medium | Phase 2 built |
 | LinkedIn | No live chat API | Comments on the live post via Social Actions Comments API | Partner-only `r_member_social` / Community Management | Poll only | Partner approval | High | Restream bridge or later |
 | Facebook | Yes | Poll `/{live-video-id}/comments`. SSE `streaming-graph.facebook.com` is unreliable | `pages_read_engagement`, `pages_read_user_content`, Meta App Review | 2 to 5 s poll | Graph rate limits | Medium + review | Later, needs Meta App Review |
 | Instagram | Yes (Business/Creator only) | Webhook `live_comments` | Instagram Graph, Meta App Review, public webhook URL | Push | Needs public HTTPS endpoint | High | Later, needs Meta App Review |
@@ -127,13 +127,14 @@ Dedupe key: `"\(platform.rawValue):\(externalID)"`. The inbox keeps a bounded se
 
 - YouTube: we already create the broadcast in `PlatformLiveApiService` and hold `ResolvedIngest.broadcastID`. After the encoder is live, call `liveBroadcasts.list?part=snippet&id=<broadcastID>` and read `snippet.liveChatId`. If we have no broadcast id (manual stream key), fall back to `liveBroadcasts.list?part=snippet&broadcastStatus=active&broadcastType=all` (my active broadcasts) and take the first `liveChatId`. Retry for up to 60 s since the chat can appear a few seconds after transition to live.
 - YouTube manual: operator pastes a watch URL, `youtu.be` link, `/live/<id>` link, or an 11 character video id. We resolve with `videos.list?part=liveStreamingDetails&id=<id>` and read `liveStreamingDetails.activeLiveChatId`. This also works for public streams we do not own (read only).
-- X: use the broadcast id from our `broadcast.start` call (`prepareXBroadcasts`). If missing, `list_broadcasts` for the signed in user and take the one in `running` state. Subscribe to `broadcast.chat` filtered on that id.
+- X (built): after Go Live, if an X destination (or a pscp/periscope RTMP ingest) is armed and Connect X is signed in, use the broadcast id from `prepareXBroadcasts` (`GET /2/broadcasts/{id}`). If it is missing or never turns live, fall back to `GET /2/broadcasts?max_results=5` (the signed in user's broadcasts) and take the first with state `running` (also accepts `live`, `started`; X does not enumerate `state`). Not live: status `Not live on X`, re-check at 60 s backing off to 180 s. Manual: paste an `x.com/i/broadcasts/<id>` link or id in More, or leave it empty for auto.
 
 ### 4.4 Auth
 
 - Tokens stay in `KeychainStreamVault` through `StreamAccountManager.ensureValidAccessToken`. Connectors get a token provider closure, never raw storage.
 - YouTube: current scopes (`youtube`, `youtube.readonly`) already cover chat read. No re-consent.
-- X: add `broadcast.read` and `broadcast.write` to `xUserScopes` in `StreamAccountModel.swift`. Existing tokens do not carry them, so the X account must re-consent once (Kaleel). Until then the X connector reports `failed("Reconnect X for chat")`.
+- X (built): a separate Connect X sign-in in the chat More menu, so the X destination account's working scopes (`tweet.read tweet.write users.read offline.access media.write`) are never changed. OAuth 2.0 PKCE with scopes `tweet.read users.read broadcast.read broadcast.write offline.access` (exact names from the X API v2 OpenAPI spec). Redirect `http://127.0.0.1:55079/`, the ProShow X port already registered on the X app. Tokens go to the keychain under the fixed id `XChatAuth.accountID` (`oauth.access/refresh/expires.<id>`); refresh through `ensureValidAccessToken`. If the X app is not allowed broadcast scopes, X returns `unauthorized_scope` and the menu shows `X app lacks broadcast access`.
+- Loopback hijack guard (same class as the n8n bug): `OAuthLoopbackServer` now requires the bind for the family the redirect host names (127.0.0.1 needs IPv4, `[::1]` IPv6, `localhost` both). If that bind fails because something else holds the port, sign-in stops with `Port 55079 is in use` instead of opening the browser. ProShow binds the specific loopback address, so a Docker `*:port` listener cannot take the callback.
 - 401 handling: force one refresh, then fail with `Sign-in expired`.
 - No client secrets or tokens in the repo, fixtures, or logs.
 
@@ -142,7 +143,7 @@ Dedupe key: `"\(platform.rawValue):\(externalID)"`. The inbox keeps a bounded se
 - Every ingested message lands in the inbox as pending. Only an explicit operator action (Feature) puts it on screen. No auto-feature in any phase.
 - Actions: Feature, Hide (removes from inbox, keeps key so it never comes back), Block author (hides all current and future messages from that `authorID` for this session, optional persist per project later), Star.
 - Word filter: case-insensitive list in device settings. Matching messages are dropped before the inbox (counted, not shown).
-- Upstream removal: YouTube `messageDeletedEvent` and `userBannedEvent`, X `broadcast.chat.remove`. If the removed message is on screen, clear the overlay immediately.
+- Upstream removal: YouTube `messageDeletedEvent` and `userBannedEvent`. X polling has no removal events; X deletes are not mirrored yet (moderate in ProShow with Hide).
 
 ### 4.6 On screen
 
@@ -154,7 +155,12 @@ Dedupe key: `"\(platform.rawValue):\(externalID)"`. The inbox keeps a bounded se
 
 - YouTube: 10,000 units/day default. streamList is 5 units per connect. Measured 2026-10-20: over HTTP the server holds each streamList connection about 10.5 s and then closes it (long poll), so the connector reconnects with the page token about 6 times a minute: about 30 units/min, 1,800 units/hour. That is about 3.9 hours of chat a day inside the 7,000 unit chat budget. Only gRPC keeps one connection open for the whole show (Phase 1b). List polling costs the same 5 units per call. Discovery calls cost 1 unit each.
 - Guard: `YouTubeQuotaLedger` keeps a local per Pacific day estimate (quota resets at midnight Pacific) and the connector stops with `Daily quota budget reached` before it would pass 7,000 units, so Go Live provisioning (same quota) keeps working. `GET /v1/chat/youtube` reports `quota_units_today`, `stream_connects`, `last_hold_s`.
-- X: push only. About $0.01 per show for broadcast start/end. Do not poll `/2/broadcasts/{id}/chat` until the price is published. Budget stays under $0.50/day per account and $1/day combined.
+- X (checked 2026-10-21, docs.x.com/x-api/getting-started/pricing): pay per use, billed per resource returned, deduplicated per resource within a UTC day (X calls dedup a soft guarantee). The page has no broadcast or broadcast chat line. Activity API events are billed now too (for example `chat.received` $0.010) and need a public webhook, so ProShow polls instead.
+  - Estimate used by `XChatSpendLedger`: $0.005 per unique chat message and per broadcast (Posts read rate), $0.010 per unique author with avatars (User read, `expansions=author_id`), $0.015 per reply sent (Post create rate). Kaleel's cap is under $1/day for all agents combined, so X chat gets $0.40 per UTC day (`proshow.liveChat.xDailyCapUSD`). The connector checks the worst case of the next page before each call and stops with `X daily cap reached`, so it never passes the cap by its own count.
+  - Poll rate: 10 s while messages arrive, 30 s after 3 quiet polls, 10 messages per page while active and 3 when quiet. 360 requests per hour at most. Requests are not billed; returned resources are.
+  - One hour of reading at that rate: about $0.25 for a quiet chat (30 messages, 10 people), about $1.60 for a busy one (200 messages, 60 people), so the $0.40 cap covers about 15 minutes of a busy chat. Avatars off (`defaults write com.kaleel.proshow proshow.liveChat.xAvatars -bool NO`) drops busy to $1.00 an hour. No chat: about $0.
+  - Risk: chat reads are newest first with no since id, so every poll re-reads the newest page and relies on X dedup. If dedup missed, the worst case is 120 quiet polls x 3 messages x $0.005 = $1.80 an hour, which the local ledger would not see. Set a spending limit in the X Developer Console as the hard stop.
+  - `GET /v1/chat/x` reports `requests`, `usd_today`, `usd_cap`. The X Developer Console usage page is the truth.
 - The connector keeps a running `quotaUnitsUsed` estimate, shown in the panel tooltip and in `GET /v1/chat/youtube`.
 
 ## 6. Feature flag
@@ -165,7 +171,7 @@ Dedupe key: `"\(platform.rawValue):\(externalID)"`. The inbox keeps a bounded se
 defaults write com.kaleel.proshow proshow.liveChatIngestV1 -bool YES
 ```
 
-Off: no connector code runs, no new UI, Go Live behaves exactly as today. On: YouTube row in the chat panel, auto-connect after Go Live, control route `/v1/chat/youtube`.
+Off: no connector code runs, no new UI, Go Live behaves exactly as today. On: YouTube and X rows in the chat More menu, auto-connect after Go Live, control routes `/v1/chat/youtube` and `/v1/chat/x`.
 
 ## 7. Phases
 
@@ -191,11 +197,27 @@ Acceptance:
 
 ### Phase 2: X
 
-Scope: add `broadcast.read`, `broadcast.write` scopes (re-consent by Kaleel), `XChatConnector` via Activity API subscription to `broadcast.chat` and `broadcast.chat.remove` for the running broadcast id, history backfill once at connect with `/2/broadcasts/{id}/chat` only if the price is confirmed free or trivial.
+Status: built 2026-10-21. Sign-in pending (Kaleel).
 
-Test plan: unit tests with recorded event fixtures; live test on a private test broadcast after re-consent.
+Scope as built:
+- `XChatConnector` (`ProShow/Services/XChatConnector.swift`): actor at utility priority, no shared locks with audio. Discovery (4.3), then polls `GET /2/broadcasts/{id}/chat` with `broadcast_chat_message.fields=id,text,author_name,author_username,created_at_ms,reply_to` and, when avatars are on, `expansions=author_id&user.fields=profile_image_url,username,name`. Newest first from X, delivered oldest first, deduped by message id. Re-checks the broadcast state every 5 min.
+- Mapping: `LiveChatMessage` with id `x:<id>`, `@username`, avatar from the user expansion (initials otherwise), platform `X`, role `owner` for the host. Same inbox and moderation as YouTube: nothing reaches the screen without Display on screen.
+- Errors: 401 refreshes once and retries, then `Sign in to X`. 429 waits for `x-rate-limit-reset` (capped at 15 min), else backs off 5, 10, 20 s up to 120 s. 403 is terminal `X app lacks broadcast access`. 404 or not running goes back to discovery. Ended broadcast stops.
+- Replies: the reply box posts `POST /2/broadcasts/{id}/chat` `{"text", "reply_to"}` only on the operator's Send or Return. Text is flattened and capped at 140 characters (`SendBroadcastChatRequest.text` maxLength). `reply_to` is sent only when the target id is numeric (`^[0-9]{1,19}$`); otherwise the reply starts with `@username`. Needs a running broadcast.
+- UI: chat More menu, X row under YouTube: `Connect X` before sign-in, then a link/ID field with Connect or Stop. Status line shows a terse X error only on failure.
+- Control: `GET /v1/chat/x` state. `POST {"input": "auto" | id | link}`, `{"stop": "1"}`, `{"mock_base": "http://127.0.0.1:<port>/2"}` (loopback only, dummy token, tests). No send route.
 
-Acceptance: messages within 2 s; removals clear inbox and overlay; spend per show under $0.02 in the X usage dashboard.
+Test plan as run:
+- Unit (swift-testing `XChatIngestTests`, also run in `~/snap/lcharness/x`): parse and map, request fields, 140 cap and reply_to rules, link parsing, auto discovery and dedupe, not live backoff (60, 90, 135 s), 401 refresh, 401 twice, 429 reset header, 5xx backoff, quiet slowdown and page size, budget stop before cap, unique spend counting, send with refresh, ended, 403 terminal, hub reply routing.
+- Mock X server `~/snap/lcharness/xmock/xmock.py` (127.0.0.1 only) with faults `401first,429third`: end to end over real HTTP through URLSession, read, refresh, rate limit wait, reply POST. Never posts to a real chat.
+
+Acceptance: messages within about 10 s while active (30 s quiet); spend inside the $0.40 daily cap by the ledger, confirmed in the X usage dashboard after the first real show.
+
+Limits found:
+- Chat endpoints work only on broadcasts owned by the signed in user (`GET /2/broadcasts` returns "the authenticated user's live-video broadcasts"). Other people's broadcasts cannot be read.
+- RTMP ingest: the broadcast object has `source_id` (Media Studio Producer source), so a broadcast fed from ProShow over RTMP should be an owned broadcast. Not yet confirmed on a real show; if it does not show up in `GET /2/broadcasts`, paste the broadcast link in More.
+- Posting needs a running broadcast. Messages max 140 characters.
+- `broadcast.*` scopes may need approval on the X app (the destination sign-in comment says requesting them broke consent). If so, Connect X shows `X app lacks broadcast access` and the X app needs those scopes enabled in the X Developer Console.
 
 ### Phase 3: Moderation and on screen
 
@@ -210,12 +232,12 @@ Acceptance: blocked author never reappears in session; filtered words never reac
 - Twitch and Kick: when an account is added. Twitch EventSub WebSocket needs no public endpoint, so it comes first.
 - TikTok: not viable without a public API. Revisit if TikTok publishes one.
 
-## 8. Replies (research only, not built)
+## 8. Replies (YouTube and X built)
 
 | Platform | Endpoint | Auth | Cost | Notes |
 | --- | --- | --- | --- | --- |
 | YouTube | `liveChatMessages.insert` (`POST /youtube/v3/liveChat/messages`, `snippet.type=textMessageEvent`) | `youtube` or `youtube.force-ssl`. ProShow already requests `youtube`, so no re-consent | 20 units per message | Posts as the signed in channel. `rateLimitExceeded` if sending too fast. Source: https://developers.google.com/youtube/v3/live/docs/liveChatMessages/insert |
-| X | `POST /2/broadcasts/{id}/chat` (send to a live broadcast) | OAuth 2.0 user token with `broadcast.write` (same re-consent as Phase 2) | Pay per use, price not confirmed | Broadcast must be live (400 otherwise). Third party reports a 140 character cap. No MCP tool for it (MCP `send_chat_message` is encrypted X Chat DMs, not broadcast chat). Moderation exists: `DELETE /2/broadcasts/{id}/chat/{message_id}`, mute and unmute |
+| X (built) | `POST /2/broadcasts/{id}/chat` `{"text", "reply_to"}` | OAuth 2.0 user token with `broadcast.write` and `broadcast.read` (Connect X) | Pay per use, no published rate; ledger counts $0.015 per send | Broadcast must be running. 140 character cap (confirmed in the OpenAPI spec). Response `{success, timestamp}`. No MCP tool for it (MCP `send_chat_message` is encrypted X Chat DMs, not broadcast chat). Moderation exists: `DELETE /2/broadcasts/{id}/chat/{message_id}`, mute and unmute |
 | LinkedIn, Facebook, Instagram | Comment replies need partner access or Meta App Review | | | Later |
 
 Rules if built: operator types and confirms every reply, nothing automatic, posts as the signed in account, separate flag `proshow.liveChatReplyV1`.
@@ -224,5 +246,5 @@ Rules if built: operator types and confirms every reply, nothing automatic, post
 
 - streamList over HTTP framing is not documented in detail. The parser accepts JSON array framing and newline framing, and the connector falls back to list polling on any framing failure.
 - YouTube `rateLimitExceeded` if we poll faster than `pollingIntervalMillis`. The connector always waits at least the server interval.
-- X Activity API terms and pricing can change. Re-check pricing before Phase 2 ships.
+- X pricing can change and has no broadcast line today. Re-check the pricing page and the X usage dashboard after the first real show. Keep a Developer Console spending limit as the hard stop.
 - Chat is untrusted input. It is rendered as plain text only; never parsed as markup or links on screen.

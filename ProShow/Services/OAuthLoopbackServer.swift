@@ -23,8 +23,16 @@ final class OAuthLoopbackServer: @unchecked Sendable {
         guard let port = StreamOAuthConfiguration.loopbackPort(in: redirect) else {
             throw StreamOAuthError.invalidCallback
         }
-        let sockets = [Self.listenSocket(ipv6: false, port: port), Self.listenSocket(ipv6: true, port: port)]
-            .compactMap { $0 }
+        let v4 = Self.listenSocket(ipv6: false, port: port)
+        let v6 = Self.listenSocket(ipv6: true, port: port)
+        // The browser connects to the family the redirect host names. If that
+        // bind failed, another listener (Docker, n8n) could receive the code.
+        let need = Self.requiredFamilies(host: redirect.host ?? "")
+        if (need.v4 && v4 == nil) || (need.v6 && v6 == nil) {
+            [v4, v6].compactMap { $0 }.forEach { Darwin.close($0) }
+            throw StreamOAuthError.providerRejected("Port \(port) is in use")
+        }
+        let sockets = [v4, v6].compactMap { $0 }
         guard !sockets.isEmpty else { throw StreamOAuthError.invalidCallback }
         for fd in sockets {
             let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: queue)
@@ -79,6 +87,14 @@ final class OAuthLoopbackServer: @unchecked Sendable {
     }
 
     /// Listening socket bound to the loopback address only, or nil if the bind fails.
+    /// 127.0.0.1 needs IPv4, [::1] needs IPv6, localhost needs both.
+    static func requiredFamilies(host: String) -> (v4: Bool, v6: Bool) {
+        let h = host.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+        if h == "::1" { return (false, true) }
+        if h == "localhost" { return (true, true) }
+        return (true, false)
+    }
+
     static func listenSocket(ipv6: Bool, port: UInt16) -> Int32? {
         let fd = socket(ipv6 ? AF_INET6 : AF_INET, SOCK_STREAM, IPPROTO_TCP)
         guard fd >= 0 else { return nil }

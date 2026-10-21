@@ -3611,13 +3611,15 @@ final class ShowController {
             try? FileManager.default.removeItem(atPath: path)
             guard #available(macOS 15.2, *) else { return ["ok": false, "error": "needs_macos_15_2"] }
             chatPanel?.sharingType = .readOnly
-            Task {
-                try? await Task.sleep(nanoseconds: 150_000_000)
-                let image = try? await SCScreenshotManager.captureImage(in: rect)
-                chatPanel?.sharingType = .none
-                guard let image else { return }
-                let rep = NSBitmapImageRep(cgImage: image)
-                try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                // Completion handler form: ScreenCaptureKit can call back with no image and
+                // no error, which the async form force unwraps and traps on (crash 2026-10-21).
+                SCScreenshotManager.captureImage(in: rect) { image, _ in
+                    DispatchQueue.main.async { chatPanel?.sharingType = .none }
+                    guard let image else { return }
+                    let rep = NSBitmapImageRep(cgImage: image)
+                    try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+                }
             }
             return ["ok": true, "path": path]
         case "menu_watch":
@@ -8367,6 +8369,9 @@ final class ShowController {
         }
         if parts == ["v1", "chat", "youtube"] {
             return handleYouTubeChatControl(method: method, body: body)
+        }
+        if parts == ["v1", "chat", "x"] {
+            return handleXChatControl(method: method, body: body)
         }
         if method == "POST", parts == ["v1", "chat", "overlay"] {
             let parsed = ControlHTTP.jsonObject(body)

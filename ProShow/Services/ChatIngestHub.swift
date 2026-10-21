@@ -19,6 +19,18 @@ final class ChatIngestHub {
     var replyDraft = ""
     var replySending = false
     var replyError: String?
+    var xState: ChatConnectorState = .idle
+    var xTitle: String?
+    var xBroadcastID: String?
+    var xMessageCount = 0
+    var xRequests = 0
+    var xDayUSD = 0.0
+    /// Signed in to the separate X chat login (broadcast scopes).
+    var xSignedIn = false
+    var xUsername: String?
+    var xSigningIn = false
+    var xSignInError: String?
+    private(set) var xAutoStarted = false
     /// More popover open. Lives here so the QA hook can open it for screenshots.
     var moreMenuOpen = false
 
@@ -30,7 +42,13 @@ final class ChatIngestHub {
     @ObservationIgnored var makeConnector: ((@escaping YouTubeChatConnector.TokenProvider, @escaping @Sendable (YouTubeChatUpdate) async -> Void) -> YouTubeChatConnector)?
     /// Clears the on-screen card when its message is removed upstream.
     @ObservationIgnored var clearOverlay: (() -> Void)?
+    @ObservationIgnored var xTokenProvider: XChatConnector.TokenProvider?
+    @ObservationIgnored var makeXConnector: ((@escaping XChatConnector.TokenProvider, @escaping @Sendable (XChatUpdate) async -> Void) -> XChatConnector)?
+    /// Starts the X chat browser sign-in. The operator approves in the browser.
+    @ObservationIgnored var signInX: (() async -> Void)?
     @ObservationIgnored private var youtube: YouTubeChatConnector?
+    @ObservationIgnored private var xConnector: XChatConnector?
+    @ObservationIgnored private var xGeneration = 0
     @ObservationIgnored private var generation = 0
 
     init(stream: LiveChatStreamManager?) {
@@ -76,6 +94,81 @@ final class ChatIngestHub {
         youtubeState = .idle
     }
 
+    @discardableResult
+    func connectX(_ target: XChatConnector.Target, auto: Bool = false) -> Bool {
+        guard isEnabled else { return false }
+        guard let xTokenProvider, xSignedIn || makeXConnector != nil else {
+            xState = .failed(XChatError.unauthorized.reason)
+            return false
+        }
+        stopX()
+        xGeneration += 1
+        let gen = xGeneration
+        xAutoStarted = auto
+        xTitle = nil
+        xBroadcastID = nil
+        xMessageCount = 0
+        stream?.setSourceEnabled(.x, enabled: true)
+        let onUpdate: @Sendable (XChatUpdate) async -> Void = { [weak self] update in
+            await MainActor.run { self?.applyX(update, generation: gen) }
+        }
+        let connector = makeXConnector?(xTokenProvider, onUpdate)
+            ?? XChatConnector(avatars: XChatAuth.avatars, token: xTokenProvider, onUpdate: onUpdate)
+        xConnector = connector
+        xState = .resolving
+        Task { await connector.start(target) }
+        return true
+    }
+
+    /// Tests only: reads from a loopback mock X server with a dummy token, so a
+    /// real token never leaves for it. The caller checks the base is loopback.
+    var xMock = false
+
+    func connectXMock(base: String, target: String?) {
+        let saved = makeXConnector
+        makeXConnector = { _, onUpdate in
+            XChatConnector(base: base, token: { _ in "mock-token" }, dailyCap: 1_000,
+                           charge: { _ in 0 }, isNewKey: { _ in false }, onUpdate: onUpdate)
+        }
+        let savedToken = xTokenProvider
+        if xTokenProvider == nil { xTokenProvider = { _ in "mock-token" } }
+        connectX(target.map { .broadcast($0) } ?? .auto)
+        xMock = true
+        makeXConnector = saved
+        xTokenProvider = savedToken
+    }
+
+    func stopX() {
+        xGeneration += 1
+        if let xConnector {
+            Task { await xConnector.stop() }
+        }
+        xConnector = nil
+        xMock = false
+        xAutoStarted = false
+        xBroadcastID = nil
+        xState = .idle
+    }
+
+    /// Status line text: X shows only a terse error on failure.
+    var xStatusLine: String? {
+        if let xSignInError { return xSignInError }
+        if case .failed(let reason) = xState { return reason }
+        return nil
+    }
+
+    private func applyX(_ update: XChatUpdate, generation gen: Int) {
+        guard gen == xGeneration else { return }
+        if let state = update.state { xState = state }
+        if let id = update.broadcastID { xBroadcastID = id }
+        if let title = update.title { xTitle = title }
+        if let n = update.requests { xRequests = n }
+        if let usd = update.dayUSD { xDayUSD = usd }
+        if let page = update.page {
+            xMessageCount += stream?.ingestBatch(page.messages) ?? 0
+        }
+    }
+
     /// Platform the next reply goes to: the target's platform, else YouTube.
     var replyPlatform: ChatPlatform {
         replyTarget.map { ChatPlatform.from(displayName: $0.platformSource) } ?? .youtube
@@ -87,7 +180,8 @@ final class ChatIngestHub {
         case .youtube:
             return youtube != nil && youtubeState.isActive ? nil : "Connect YouTube chat first"
         case .x:
-            return "Sign in to X"
+            if !xSignedIn && !xMock && makeXConnector == nil { return XChatError.unauthorized.reason }
+            return xConnector != nil && xBroadcastID != nil && xState.isActive ? nil : XChatError.notConnected.reason
         default:
             return "Replies go to YouTube or X"
         }
@@ -101,6 +195,10 @@ final class ChatIngestHub {
     /// Operator action only. Posts the draft to the target platform.
     func sendReply() async {
         guard !replySending else { return }
+        if replyPlatform == .x {
+            await sendXReply()
+            return
+        }
         guard replyBlockedReason == nil, let youtube else {
             replyError = replyBlockedReason
             return
@@ -130,8 +228,39 @@ final class ChatIngestHub {
         }
     }
 
+    private func sendXReply() async {
+        guard replyBlockedReason == nil, let xConnector else {
+            replyError = replyBlockedReason
+            return
+        }
+        guard XChatAPI.replyText(replyDraft) != nil else {
+            replyError = XChatError.emptyMessage.reason
+            return
+        }
+        replySending = true
+        replyError = nil
+        defer { replySending = false }
+        do {
+            var text = replyDraft
+            let replyTo = replyTarget?.externalID.flatMap { XChatAPI.isMessageID($0) ? $0 : nil }
+            // No threadable id: mention the viewer instead.
+            if let target = replyTarget, replyTo == nil, target.senderName.hasPrefix("@"), !text.hasPrefix("@") {
+                text = "\(target.senderName) \(text)"
+            }
+            let posted = try await xConnector.send(text, replyTo: replyTo, as: xUsername)
+            replyDraft = ""
+            replyTarget = nil
+            _ = stream?.ingestBatch([posted])
+        } catch let error as XChatError {
+            replyError = error.reason
+        } catch {
+            replyError = "Send failed"
+        }
+    }
+
     func stopAutoStarted() {
         if youtubeAutoStarted { stopYouTube() }
+        if xAutoStarted { stopX() }
     }
 
     private func apply(_ update: YouTubeChatUpdate, generation gen: Int) {
@@ -170,6 +299,24 @@ final class ChatIngestHub {
             "stream_connects": youtubeConnects,
             "last_hold_s": youtubeLastHoldSeconds.map { (($0 * 10).rounded()) / 10 } ?? 0,
             "auto": youtubeAutoStarted,
+            "x": xStatusJSON(),
+        ]
+    }
+
+    func xStatusJSON() -> [String: Any] {
+        [
+            "signed_in": xSignedIn,
+            "username": xUsername ?? "",
+            "state": xState.label,
+            "active": xState.isActive,
+            "broadcast_id": xBroadcastID ?? "",
+            "title": xTitle ?? "",
+            "messages": xMessageCount,
+            "requests": xRequests,
+            "usd_today": (xDayUSD * 1000).rounded() / 1000,
+            "usd_cap": XChatSpendLedger.dailyCap,
+            "auto": xAutoStarted,
+            "error": xStatusLine ?? "",
         ]
     }
 }
