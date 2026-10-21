@@ -41,7 +41,8 @@ struct ProgramAudioGatePolicy: Equatable, Sendable {
 enum AudioMatrixReconciler {
     static func reconcile(controller: ShowController) {
         let audioKeys = requiredAudioLaneKeys(controller: controller)
-        let videoKeys = requiredVideoLaneKeys(controller: controller)
+        // Video only: slide windows keep their capture; their audio stays off the keep-list (muted as before).
+        let videoKeys = requiredVideoLaneKeys(controller: controller).union(controller.liveSlideWindowCaptureKeys())
         let keepCaptureGraph = controller.streaming.isLive || controller.isoRecorder.isRecording
         controller.videoInputs.ingest.reconcileCapture(
             audioLaneKeys: audioKeys,

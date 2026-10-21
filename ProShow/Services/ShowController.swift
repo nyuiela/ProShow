@@ -3739,6 +3739,29 @@ final class ShowController {
                   let layer = prop.elements.first(where: { $0.name == args["layer"] }) else { return ["ok": false, "error": "no_layer"] }
             let ok = setPropImageBinding(propID: prop.id, layerID: layer.id, binding: args["binding"])
             return ["ok": ok, "binding": args["binding"] ?? ""]
+        case "capture_diag":
+            // Read-only: capture lanes, starts, program input, live layer shots, placeholder failover.
+            let now = Date()
+            let stack = compositor.stack
+            return [
+                "ok": true,
+                "hardware_starts": videoInputs.ingest.hardwareStartCount,
+                "gate_mic": programAudioGates().microphone,
+                "gate_desktop": programAudioGates().desktop,
+                "screen": videoInputs.ingest.screenCaptureDiagnostics(),
+                "lanes": videoInputs.ingest.liveCaptureLaneKeys().sorted(),
+                "active_primary": videoInputs.activePrimaryID?.uuidString ?? "",
+                "program_input": stack.videoInput.map { "\($0.label) \($0.endpoint ?? "")" } ?? "",
+                "pip_input": stack.pipInput.map { "\($0.label) \($0.endpoint ?? "")" } ?? "",
+                "layers": masterLayers.map { layer -> String in
+                    let live = layer.liveShotID.flatMap { id in layer.shots.first { $0.id == id } }
+                    return "\(layer.index):\(live.map { "\($0.name) \($0.source.connectionString ?? "")" } ?? "-")"
+                },
+                "failover": placeholderMatrix.placeholders.filter { placeholderMatrix.usingFailover.contains($0.id) }.map(\.letter),
+                "frame_age": Dictionary(uniqueKeysWithValues: placeholderMatrix.placeholders.compactMap { p in
+                    placeholderMatrix.lastFrameAt[p.id].map { (p.letter, String(format: "%.1f", now.timeIntervalSince($0))) }
+                }),
+            ]
         case "prop_toggle":
             guard let prop = inspector.props.first(where: { $0.name == args["name"] }) else { return ["ok": false, "error": "no_prop"] }
             _ = toggleInspectorProp(id: prop.id)
@@ -3856,9 +3879,52 @@ final class ShowController {
            let source = preferredProgramCameraSource() {
             items = [discoveredLiveInput(from: source)]
         }
-        for item in items {
-            _ = ensureLiveInputOnMainLayer(item)
+        // The main layer holds one live shot. Taking every input live made the last one win and the
+        // reconciler then tore the others down (camera + screen slide: the screen restarted on every take).
+        // Keep the same winner (the last input); the others only get capture started for their slide windows.
+        for (offset, item) in items.enumerated() {
+            if offset == items.count - 1 {
+                _ = ensureLiveInputOnMainLayer(item)
+            } else {
+                startSlideWindowCapture(item)
+            }
         }
+    }
+
+    /// Capture for a live input drawn in a slide window but not the main layer's live shot.
+    /// Starts video capture only. Touches no audio gate; the reconciler keeps the lane for video only.
+    private func startSlideWindowCapture(_ item: DiscoveredSourceItem) {
+        guard item.sourceType.needsMainLayerShot, masterLayers.indices.contains(0) else { return }
+        _ = upsertLiveShot(item, layerIndex: 0, goLive: false)
+        switch item.sourceType {
+        case .systemCamera, .ndiSource, .systemDisplay, .systemWindow:
+            let id = HardwareSourceIdentity.uuid(for: item.connectionString ?? item.id)
+            guard let source = videoInputs.source(id: id),
+                  !videoInputs.isRunning(endpoint: source.endpoint, sourceID: source.id.uuidString)
+            else { return }
+            _ = videoInputs.ingest.start(source)
+        default:
+            break
+        }
+    }
+
+    /// Capture lanes the live slide draws in its windows (video keep-list for the reconciler).
+    func liveSlideWindowCaptureKeys() -> Set<String> {
+        guard let id = liveSlideID, let slide = show.slide(id: id) else { return [] }
+        var keys = Set<String>()
+        for item in liveInputItems(on: slide) {
+            switch item.sourceType {
+            case .systemCamera, .ndiSource, .systemDisplay, .systemWindow:
+                let endpoint = item.connectionString?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                if !endpoint.isEmpty {
+                    keys.insert(endpoint)
+                }
+                keys.insert(HardwareSourceIdentity.uuid(for: endpoint.isEmpty ? item.id : endpoint).uuidString)
+            default:
+                break
+            }
+        }
+        return keys
     }
 
     /// Thumbnails and rundown previews — start capture without taking a new program cue.

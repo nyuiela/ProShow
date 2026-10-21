@@ -210,6 +210,8 @@ final class LiveInputLane {
     var screenCaptureAcceptStops = false
     var screenCaptureArmedAt: Date?
     var lastScreenFrameAt: Date?
+    var screenFramesPublished: UInt64 = 0
+    var screenIdleFrames: UInt64 = 0
     var hasLiveScreenStream: Bool {
         stream != nil && !screenCaptureStopped
     }
@@ -329,7 +331,9 @@ final class VideoIngestEngine {
     #endif
     /// Written from the capture queue, drained on main: always accessed under `lanePublishLock`.
     @ObservationIgnored nonisolated(unsafe) private var lanePublishCoalesced = false
-    @ObservationIgnored nonisolated(unsafe) private var pendingLanePublish: (@MainActor () -> Void)?
+    /// One slot per lane: a 30 fps camera must not overwrite the screen's pending frame.
+    @ObservationIgnored nonisolated(unsafe) private var pendingLanePublishes: [ObjectIdentifier: @MainActor () -> Void] = [:]
+    @ObservationIgnored nonisolated(unsafe) private var lanePublishInterval: Double = 1.0 / 30.0
     @ObservationIgnored private nonisolated let lanePublishLock = NSLock()
     /// Invoked on `videoIngestQueue` — must not hop through MainActor (live stream latency).
     @ObservationIgnored nonisolated(unsafe) var onCaptureAudio: ((AudioChannelRole, [Float], Double, String) -> Void)?
@@ -340,6 +344,9 @@ final class VideoIngestEngine {
         outputWidth = picture.width
         outputHeight = picture.height
         outputFPS = fps
+        lanePublishLock.lock()
+        lanePublishInterval = 1.0 / Double(min(max(fps, 10), 60))
+        lanePublishLock.unlock()
         self.captureAboveOutput = captureAboveOutput
         reapplyCapturePresets()
     }
@@ -678,6 +685,27 @@ final class VideoIngestEngine {
                 teardownLane(lane)
             }
         }
+    }
+
+    /// Read-only screen capture counters (QA capture_diag).
+    func screenCaptureDiagnostics() -> [[String: Any]] {
+        #if canImport(ScreenCaptureKit)
+        let now = Date()
+        var seen = Set<ObjectIdentifier>()
+        return lanes.values.compactMap { lane -> [String: Any]? in
+            guard lane.kind == .screenShare, lane.isLive, seen.insert(ObjectIdentifier(lane)).inserted else { return nil }
+            return [
+                "endpoint": lane.endpoint,
+                "generation": lane.screenCaptureGeneration,
+                "frames": lane.screenFramesPublished,
+                "idle": lane.screenIdleFrames,
+                "since_frame_s": lane.lastScreenFrameAt.map { now.timeIntervalSince($0) } ?? -1,
+                "stream": lane.stream != nil,
+            ]
+        }
+        #else
+        return []
+        #endif
     }
 
     func liveCaptureLaneKeys() -> [String] {
@@ -1158,22 +1186,24 @@ final class VideoIngestEngine {
     /// a lock and taken out on main before it runs, so the capture thread can't release it mid-call. Before this,
     /// the closure var was raced across threads and the 100 ms throttle made a use-after-free likely (EXC_BAD_ACCESS
     /// in CVPixelBufferGetIOSurface).
-    nonisolated private func scheduleLanePublish(_ publish: @escaping @MainActor () -> Void) {
+    nonisolated private func scheduleLanePublish(key: ObjectIdentifier, _ publish: @escaping @MainActor () -> Void) {
         lanePublishLock.lock()
-        pendingLanePublish = publish
+        pendingLanePublishes[key] = publish
         let alreadyScheduled = lanePublishCoalesced
         lanePublishCoalesced = true
+        let interval = lanePublishInterval
         lanePublishLock.unlock()
         guard !alreadyScheduled else { return }
-        // Perf: lane state drives SwiftUI; cap UI publishes at ~10 Hz.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+        // Coalesce to the show frame interval, keeping the newest frame of every lane.
+        // Frame fields are @ObservationIgnored, so this does not drive SwiftUI per frame.
+        DispatchQueue.main.asyncAfter(deadline: .now() + interval) { [weak self] in
             guard let self else { return }
             self.lanePublishLock.lock()
-            let next = self.pendingLanePublish
-            self.pendingLanePublish = nil
+            let next = Array(self.pendingLanePublishes.values)
+            self.pendingLanePublishes.removeAll(keepingCapacity: true)
             self.lanePublishCoalesced = false
             self.lanePublishLock.unlock()
-            MainActor.assumeIsolated { next?() }
+            MainActor.assumeIsolated { next.forEach { $0() } }
         }
     }
 
@@ -1216,6 +1246,7 @@ final class VideoIngestEngine {
         if backend == "screenCaptureKit" {
             lane.lastScreenFrameAt = Date()
             lane.screenCaptureStopped = false
+            lane.screenFramesPublished &+= 1
         }
         #endif
         if activeSourceID == source.id || activeSourceID == nil {
@@ -1324,8 +1355,9 @@ final class VideoIngestEngine {
             let output = AVCaptureVideoDataOutput()
             LowLatencyIngestPipeline.shared.configure(output)
             let relay = lane.cameraRelay
+            let publishKey = ObjectIdentifier(lane)
             relay.onFrame = { [weak self, weak lane] width, height, sample, pixel in
-                self?.scheduleLanePublish {
+                self?.scheduleLanePublish(key: publishKey) {
                     guard let lane else { return }
                     self?.publishLaneFrame(
                         source: source,
@@ -1367,8 +1399,9 @@ final class VideoIngestEngine {
     /// Reattach the sample callback on the process-wide camera session. Does not call `startRunning`.
     private func bindCameraRelay(source: StudioVideoSource, lane: LiveInputLane, session: AVCaptureSession) {
         let relay = lane.cameraRelay
+        let publishKey = ObjectIdentifier(lane)
         relay.onFrame = { [weak self, weak lane] width, height, sample, pixel in
-            self?.scheduleLanePublish {
+            self?.scheduleLanePublish(key: publishKey) {
                 guard let lane else { return }
                 self?.publishLaneFrame(
                     source: source,
@@ -1526,8 +1559,9 @@ final class VideoIngestEngine {
         let preset = screenCapturePreset()
         let index = Self.displayIndex(from: source.endpoint)
         let relay = lane.screenRelay
+        let publishKey = ObjectIdentifier(lane)
         relay.onFrame = { [weak self, weak lane] width, height, sample, pixel in
-            self?.scheduleLanePublish {
+            self?.scheduleLanePublish(key: publishKey) {
                 guard let lane else { return }
                 guard lane.screenCaptureGeneration == generation, !lane.screenCaptureStopped else { return }
                 self?.publishLaneFrame(
@@ -1540,6 +1574,18 @@ final class VideoIngestEngine {
                     backend: "screenCaptureKit",
                     kind: .screenShare
                 )
+            }
+        }
+        let idleKey = ObjectIdentifier(relay)
+        relay.onIdle = { [weak self, weak lane] in
+            self?.scheduleLanePublish(key: idleKey) {
+                guard let lane, lane.screenCaptureGeneration == generation, !lane.screenCaptureStopped else { return }
+                // ScreenCaptureKit sends idle frames while the screen is unchanged: the stream is healthy.
+                lane.lastScreenFrameAt = Date()
+                lane.screenIdleFrames &+= 1
+                let sourceKey = source.id.uuidString
+                InputFailoverEngine.shared.noteFrame(sourceKey: sourceKey)
+                self?.notifyPlaceholderSignal(sourceKey: sourceKey)
             }
         }
         relay.onStopped = { [weak self, weak lane] stopped in
@@ -2064,16 +2110,20 @@ final class ScreenSampleRelay: NSObject, SCStreamOutput, SCStreamDelegate, @unch
     var onAudioPeak: ((Double) -> Void)?
     var onAudioPCM: (([Float], Double) -> Void)?
     var onStopped: ((SCStream) -> Void)?
+    var onIdle: (() -> Void)?
 
     func stream(_ stream: SCStream, didStopWithError error: Error) {
         onStopped?(stream)
     }
 
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
-        if type == .screen,
-           ScreenCaptureRouting.isCompleteFrame(sampleBuffer),
-           let pixel = CMSampleBufferGetImageBuffer(sampleBuffer) {
-            onFrame?(CVPixelBufferGetWidth(pixel), CVPixelBufferGetHeight(pixel), VideoSampleDecoder.sample(from: pixel), pixel)
+        if type == .screen {
+            if ScreenCaptureRouting.isCompleteFrame(sampleBuffer),
+               let pixel = CMSampleBufferGetImageBuffer(sampleBuffer) {
+                onFrame?(CVPixelBufferGetWidth(pixel), CVPixelBufferGetHeight(pixel), VideoSampleDecoder.sample(from: pixel), pixel)
+            } else if ScreenCaptureRouting.isIdleFrame(sampleBuffer) {
+                onIdle?()
+            }
         }
         if type == .audio {
             onAudioPeak?(VideoSampleDecoder.audioPeak(from: sampleBuffer))
