@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.2 build 10 (2026-10-21)
+
+- Previews show each well's own source, the same as the stream. The editor, slide thumbnails, the right pane (Preview, Live and Phone view) and the ProShow Phone window resolve every well's placeholder or device first. Before, one input per slide was painted into every well, so a camera window could show the screen share.
+- Camera windows in previews show the live camera. Camera frames arrive as YUV and are converted to BGRA for preview views only. Before, they showed black in the editor, the Phone board and the idle Encoded program window.
+- Stream and Phone output, audio and the mixer are unchanged.
+
 ## 0.5.2 build 9 (2026-10-21)
 
 - Settings > About ("Installed") shows the running app's version and build, read from the bundle at launch, for example "ProShow 0.5.2 (9)". Before, it showed the project file format version (1.0.0).
