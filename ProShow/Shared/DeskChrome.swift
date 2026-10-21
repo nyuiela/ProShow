@@ -11,6 +11,7 @@ import AppKit
 import QuartzCore
 import IOSurface
 import Metal
+import CoreImage
 #else
 import UIKit
 #endif
@@ -1684,7 +1685,12 @@ private struct LivePixelRepresentable: NSViewRepresentable {
                 sourceID: sourceID,
                 deliverOnCaptureQueue: true
             ) { [weak self] buffer in
-                guard let self, let view = self.view else { return }
+                guard let self else { return }
+                if PreviewBGRAConverter.needsConversion(buffer) {
+                    self.presentConverted(buffer)
+                    return
+                }
+                guard let view = self.view else { return }
                 #if canImport(CoreVideo)
                 if let layer = view.layer {
                     LowLatencyIngestPipeline.shared.presentIOSurface(buffer, on: layer)
@@ -1707,13 +1713,103 @@ private struct LivePixelRepresentable: NSViewRepresentable {
             token = nil
         }
 
+        private let convertLock = NSLock()
+        private var converting = false
+
+        /// Camera lanes arrive as 420v; a layer shows that IOSurface black. Convert off the capture
+        /// path, one frame in flight per well (late frames drop), then present on main.
+        fileprivate func presentConverted(_ buffer: CVPixelBuffer) {
+            convertLock.lock()
+            if converting {
+                convertLock.unlock()
+                return
+            }
+            converting = true
+            convertLock.unlock()
+            let box = PreviewPixelBox(buffer: buffer)
+            PreviewBGRAConverter.shared.queue.async { [weak self] in
+                let out = PreviewBGRAConverter.shared.bgra(box.buffer).map(PreviewPixelBox.init(buffer:))
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    self.convertLock.lock()
+                    self.converting = false
+                    self.convertLock.unlock()
+                    guard self.token != nil, let out, let layer = self.view?.layer else { return }
+                    LowLatencyIngestPipeline.shared.presentIOSurface(out.buffer, on: layer)
+                }
+            }
+        }
+
         deinit { unbind() }
+    }
+}
+
+private struct PreviewPixelBox: @unchecked Sendable {
+    let buffer: CVPixelBuffer
+}
+
+/// Preview-only BGRA copy of YUV capture frames. Never used by the encode or program output.
+final class PreviewBGRAConverter: @unchecked Sendable {
+    static let shared = PreviewBGRAConverter()
+    let queue = DispatchQueue(label: "proshow.preview.bgra", qos: .userInitiated)
+    private let context = CIContext(options: [.useSoftwareRenderer: false, .cacheIntermediates: false])
+    private let lock = NSLock()
+    private var pool: CVPixelBufferPool?
+    private var poolWidth = 0
+    private var poolHeight = 0
+    private var lastSource: CVPixelBuffer?
+    private var lastOutput: CVPixelBuffer?
+
+    static func needsConversion(_ buffer: CVPixelBuffer) -> Bool {
+        switch CVPixelBufferGetPixelFormatType(buffer) {
+        case kCVPixelFormatType_32BGRA, kCVPixelFormatType_32ARGB, kCVPixelFormatType_64RGBAHalf:
+            return false
+        default:
+            return true
+        }
+    }
+
+    /// Same source buffer in, same BGRA buffer out, so several wells on one camera convert once.
+    func bgra(_ buffer: CVPixelBuffer) -> CVPixelBuffer? {
+        lock.lock()
+        defer { lock.unlock() }
+        if let lastSource, lastSource === buffer, let lastOutput { return lastOutput }
+        let width = CVPixelBufferGetWidth(buffer)
+        let height = CVPixelBufferGetHeight(buffer)
+        guard width > 0, height > 0 else { return nil }
+        if pool == nil || poolWidth != width || poolHeight != height {
+            let attrs: [String: Any] = [
+                kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA),
+                kCVPixelBufferWidthKey as String: width,
+                kCVPixelBufferHeightKey as String: height,
+                kCVPixelBufferIOSurfacePropertiesKey as String: [:] as [String: Any],
+            ]
+            var created: CVPixelBufferPool?
+            CVPixelBufferPoolCreate(nil, [kCVPixelBufferPoolMinimumBufferCountKey as String: 4] as CFDictionary, attrs as CFDictionary, &created)
+            pool = created
+            poolWidth = width
+            poolHeight = height
+        }
+        guard let pool else { return nil }
+        var out: CVPixelBuffer?
+        guard CVPixelBufferPoolCreatePixelBuffer(nil, pool, &out) == kCVReturnSuccess, let out else { return nil }
+        context.render(CIImage(cvPixelBuffer: buffer), to: out)
+        lastSource = buffer
+        lastOutput = out
+        return out
     }
 }
 
 final class PixelBufferHostView: ProShowLayerHostView {
     func setPixelBuffer(_ buffer: CVPixelBuffer?, style: MediaFrameStyle = .plain) {
         wantsLayer = true
+        if let source = buffer, PreviewBGRAConverter.needsConversion(source),
+           let converted = PreviewBGRAConverter.shared.bgra(source),
+           let surface = CVPixelBufferGetIOSurface(converted)?.takeUnretainedValue() {
+            layer?.contents = surface
+            DeskLiveLayer.applyFrameStyle(self, style: style)
+            return
+        }
         if let buffer, let surface = CVPixelBufferGetIOSurface(buffer)?.takeUnretainedValue() {
             layer?.contents = surface
         } else if let buffer, let image = InputPreviewImaging.cgImage(from: buffer) {
