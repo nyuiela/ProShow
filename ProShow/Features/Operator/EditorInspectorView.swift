@@ -275,6 +275,20 @@ struct EditorInspectorView: View {
                             .controlSize(.small)
                         Spacer(minLength: 0)
                     }
+                    PropertyRow("Live source") {
+                        Picker("", selection: Binding(
+                            get: { editor.selectedObjects.first?.imageBinding ?? "" },
+                            set: { value in editor.mutateSelectedObjects { $0.imageBinding = value.isEmpty ? nil : value } }
+                        )) {
+                            Text("This image").tag("")
+                            Text("Chat avatar").tag("chat.avatar")
+                        }
+                        .labelsHidden()
+                        .controlSize(.small)
+                        .frame(width: 140)
+                        .help("Chat avatar: while a chat message is on screen, show the sender's picture here. This image is used when there is none.")
+                        .accessibilityLabel("Image live source")
+                    }
                 }
 
                 ScrubbableComboInput(

@@ -649,6 +649,9 @@ struct CanvasObject: Identifiable, Hashable, Codable, Sendable {
     var themeSlotOrder: Int? = nil
     /// Prop layout anchor for other aspect ratios. Nil reads as top left, so older props keep their place.
     var propAnchor: PropAnchor? = nil
+    /// Live source for an image layer, such as `chat.avatar`. While that value has a fetched image
+    /// the layer shows it; otherwise the layer's own image. Nil keeps the layer's own image.
+    var imageBinding: String? = nil
 
     var resolvedCountdownStartOn: CountdownBuildLink { countdownStartOn ?? .none }
     var resolvedCountdownResetOn: CountdownBuildLink { countdownResetOn ?? .none }

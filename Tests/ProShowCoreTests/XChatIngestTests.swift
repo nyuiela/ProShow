@@ -1,5 +1,7 @@
 #if canImport(ProShowCore)
 @testable import ProShowCore
+#else
+@testable import ProShow
 #endif
 import Foundation
 import Testing

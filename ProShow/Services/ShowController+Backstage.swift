@@ -199,11 +199,27 @@ extension ShowController {
         featuredChatFields = Self.chatTemplateFields(for: message)
         chatTemplateShownID = prop.id
         if prop.isActive {
+            // Re-resolve so a bound avatar layer swaps (or falls back) with the text.
+            syncActivePropsToCompositor()
             tickProgram()
         } else {
             _ = toggleInspectorProp(id: prop.id, at: date)
         }
+        fetchChatAvatarIfBound(prop)
         return true
+    }
+
+    /// Fetches the featured avatar when the template has a layer bound to it, then re-resolves.
+    private func fetchChatAvatarIfBound(_ prop: ProShowProp) {
+        let url = featuredChatFields["chat.avatar"] ?? ""
+        guard !url.isEmpty else { return }
+        let objects = prop.elements + (prop.phoneElements ?? [])
+        guard objects.contains(where: { $0.imageBinding == "chat.avatar" }) else { return }
+        ChatAvatarFileCache.shared.prefetch(url) { [weak self] path in
+            guard let self, path != nil, self.featuredChatFields["chat.avatar"] == url else { return }
+            self.syncActivePropsToCompositor()
+            self.tickProgram()
+        }
     }
 
     /// Hides the template prop through its exit animation, then drops the chat values.
@@ -231,7 +247,40 @@ extension ShowController {
     private func clearFeaturedChatFields() {
         guard !featuredChatFields.isEmpty else { return }
         featuredChatFields = [:]
+        syncActivePropsToCompositor()
         tickProgram()
+    }
+
+    /// Binds (or unbinds) an image layer of a prop to a live chat value. Saves the project.
+    @discardableResult
+    func setPropImageBinding(propID: UUID, layerID: UUID, binding: String?) -> Bool {
+        guard let p = inspector.props.firstIndex(where: { $0.id == propID }) else { return false }
+        let value = binding?.trimmingCharacters(in: .whitespacesAndNewlines)
+        var found = false
+        for i in inspector.props[p].elements.indices where inspector.props[p].elements[i].id == layerID {
+            inspector.props[p].elements[i].imageBinding = (value?.isEmpty ?? true) ? nil : value
+            found = true
+        }
+        guard found else { return false }
+        if var phone = inspector.props[p].phoneElements {
+            for i in phone.indices where phone[i].id == layerID {
+                phone[i].imageBinding = (value?.isEmpty ?? true) ? nil : value
+            }
+            inspector.props[p].phoneElements = phone
+        }
+        if editors.kind == .props, let d = editors.documents.firstIndex(where: { $0.id == propID }) {
+            for o in editors.documents[d].objects.indices where editors.documents[d].objects[o].id == layerID {
+                editors.documents[d].objects[o].imageBinding = (value?.isEmpty ?? true) ? nil : value
+            }
+            for b in editors.documents[d].boards.indices {
+                for o in editors.documents[d].boards[b].objects.indices where editors.documents[d].boards[b].objects[o].id == layerID {
+                    editors.documents[d].boards[b].objects[o].imageBinding = (value?.isEmpty ?? true) ? nil : value
+                }
+            }
+        }
+        syncActivePropsToCompositor()
+        persistStudio()
+        return true
     }
 
     /// Same calls as the chat panel's Display on screen and Dismiss.
@@ -258,6 +307,8 @@ extension ShowController {
             "card": compositor.stack.chatOverlay != nil,
             "featured": chatStream.activeOverlay?.id ?? NSNull(),
             "fields": featuredChatFields,
+            "avatar_cached": featuredChatFields["chat.avatar"].flatMap { ChatAvatarFileCache.shared.localPath(for: $0) } != nil,
+            "avatar_layers": (template?.elements ?? []).filter { $0.imageBinding == "chat.avatar" }.map(\.name),
             "inbox": chatStream.inbox.prefix(5).map { ["id": $0.id, "name": $0.senderName, "platform": $0.platformSource] },
         ]))
     }

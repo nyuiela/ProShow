@@ -1730,6 +1730,26 @@ private struct PropActionPane: View {
             }
         }
         .help("Live chat Display on screen fills this prop's chat.name, chat.message, chat.platform and chat.avatar and shows it.")
+        if controller.chatTemplateProp?.id == prop.id {
+            let images = prop.elements.filter { $0.kind == .image || $0.fill.type == .image }
+            Menu("Chat Avatar Layer") {
+                Button {
+                    for layer in images where layer.imageBinding == "chat.avatar" {
+                        controller.setPropImageBinding(propID: prop.id, layerID: layer.id, binding: nil)
+                    }
+                } label: {
+                    if images.contains(where: { $0.imageBinding == "chat.avatar" }) { Text("None") } else { Label("None", systemImage: "checkmark") }
+                }
+                ForEach(images) { layer in
+                    Button {
+                        controller.setPropImageBinding(propID: prop.id, layerID: layer.id, binding: layer.imageBinding == "chat.avatar" ? nil : "chat.avatar")
+                    } label: {
+                        if layer.imageBinding == "chat.avatar" { Label(layer.name, systemImage: "checkmark") } else { Text(layer.name) }
+                    }
+                }
+            }
+            .disabled(images.isEmpty)
+        }
         Menu("Auto Clear") {
             Button("Never") { inspector.setPropAutoClear(id: prop.id, mode: .never); controller.persistStudio() }
             Button("On Next Slide") { inspector.setPropAutoClear(id: prop.id, mode: .onNextSlide); controller.persistStudio() }

@@ -68,9 +68,11 @@ enum LiveChatIngestService {
         let name = (authorDetails?["displayName"] as? String) ?? (object["author"] as? String) ?? "YouTube"
         let text = (snippet?["displayMessage"] as? String) ?? (object["text"] as? String)
         guard let text, !text.isEmpty else { return nil }
+        let avatar = (authorDetails?["profileImageUrl"] as? String) ?? (object["avatar"] as? String)
         return LiveChatMessage(
             id: (object["id"] as? String) ?? UUID().uuidString,
             senderName: name,
+            senderAvatarUrl: avatar,
             platformSource: "YouTube",
             messageText: text
         )

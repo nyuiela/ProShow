@@ -1298,13 +1298,25 @@ final class ShowController {
 
     func resolvedCanvasObjects(_ objects: [CanvasObject]) -> [CanvasObject] {
         objects.map { object in
-            guard let letter = object.assignedPlaceholderLetter,
-                  let mapped = resolvedAssignedSource(forPlaceholder: letter)
-            else { return object }
             var next = object
-            next.applyAssignedSource(mapped)
+            if let letter = object.assignedPlaceholderLetter,
+               let mapped = resolvedAssignedSource(forPlaceholder: letter) {
+                next.applyAssignedSource(mapped)
+            }
+            applyImageBinding(&next)
             return next
         }
+    }
+
+    /// Image layers bound to a chat value show its fetched image. Never fetches here (render path).
+    private func applyImageBinding(_ object: inout CanvasObject) {
+        guard let key = object.imageBinding?.trimmingCharacters(in: .whitespacesAndNewlines), !key.isEmpty,
+              object.kind == .image || object.fill.type == .image,
+              let value = featuredChatFields[key], !value.isEmpty,
+              let path = ChatAvatarFileCache.shared.localPath(for: value)
+        else { return }
+        object.fill.type = .image
+        object.fill.imageURI = path
     }
 
     func advance() {
@@ -3721,6 +3733,12 @@ final class ShowController {
             }
             evaluateProgramClockState()
             return ["ok": true]
+        case "prop_image_binding":
+            // Test hook: same call as the prop menu's Chat Avatar Layer. Saves the open project.
+            guard let prop = inspector.props.first(where: { $0.name == args["name"] }),
+                  let layer = prop.elements.first(where: { $0.name == args["layer"] }) else { return ["ok": false, "error": "no_layer"] }
+            let ok = setPropImageBinding(propID: prop.id, layerID: layer.id, binding: args["binding"])
+            return ["ok": ok, "binding": args["binding"] ?? ""]
         case "prop_toggle":
             guard let prop = inspector.props.first(where: { $0.name == args["name"] }) else { return ["ok": false, "error": "no_prop"] }
             _ = toggleInspectorProp(id: prop.id)

@@ -368,6 +368,7 @@
 		ABB503DAE1C9205EED77AF5C /* ChatIngestHub.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09938EA7249F35AB71EBF69F /* ChatIngestHub.swift */; };
 		B434CC88AFED8D3DD5014035 /* YouTubeChatConnector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27544121B6381B6ABC118974 /* YouTubeChatConnector.swift */; };
 		282BD1022248B8E6D688A390 /* XChatConnector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79855F983DA36D148C037F2A /* XChatConnector.swift */; };
+		C7A11E5D0B3F4E2A9C61D0C1 /* ChatAvatarFileCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A11E5D0B3F4E2A9C61D0C2 /* ChatAvatarFileCache.swift */; };
 		C7F100000000000000000007 /* MeetingSdkBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F200000000000000000007 /* MeetingSdkBridge.swift */; };
 		C7F100000000000000000008 /* ShowController+Backstage.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F200000000000000000008 /* ShowController+Backstage.swift */; };
 		C7F100000000000000000009 /* BackstageControlPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F200000000000000000009 /* BackstageControlPanelView.swift */; };
@@ -795,6 +796,7 @@
 		09938EA7249F35AB71EBF69F /* ChatIngestHub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatIngestHub.swift; sourceTree = "<group>"; };
 		27544121B6381B6ABC118974 /* YouTubeChatConnector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubeChatConnector.swift; sourceTree = "<group>"; };
 		79855F983DA36D148C037F2A /* XChatConnector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XChatConnector.swift; sourceTree = "<group>"; };
+		C7A11E5D0B3F4E2A9C61D0C2 /* ChatAvatarFileCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatAvatarFileCache.swift; sourceTree = "<group>"; };
 		C7F200000000000000000007 /* MeetingSdkBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingSdkBridge.swift; sourceTree = "<group>"; };
 		C7F200000000000000000008 /* ShowController+Backstage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ShowController+Backstage.swift"; sourceTree = "<group>"; };
 		C7F200000000000000000009 /* BackstageControlPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackstageControlPanelView.swift; sourceTree = "<group>"; };
@@ -1125,6 +1127,7 @@
 				09938EA7249F35AB71EBF69F /* ChatIngestHub.swift */,
 				27544121B6381B6ABC118974 /* YouTubeChatConnector.swift */,
 				79855F983DA36D148C037F2A /* XChatConnector.swift */,
+				C7A11E5D0B3F4E2A9C61D0C2 /* ChatAvatarFileCache.swift */,
 				C7F200000000000000000007 /* MeetingSdkBridge.swift */,
 				C7F200000000000000000008 /* ShowController+Backstage.swift */,
 				C7F200000000000000000013 /* ShowController+LibraryHierarchy.swift */,
@@ -1700,6 +1703,7 @@
 				ABB503DAE1C9205EED77AF5C /* ChatIngestHub.swift in Sources */,
 				B434CC88AFED8D3DD5014035 /* YouTubeChatConnector.swift in Sources */,
 				282BD1022248B8E6D688A390 /* XChatConnector.swift in Sources */,
+				C7A11E5D0B3F4E2A9C61D0C1 /* ChatAvatarFileCache.swift in Sources */,
 				C7F100000000000000000007 /* MeetingSdkBridge.swift in Sources */,
 				C7F100000000000000000008 /* ShowController+Backstage.swift in Sources */,
 				C7F100000000000000000013 /* ShowController+LibraryHierarchy.swift in Sources */,

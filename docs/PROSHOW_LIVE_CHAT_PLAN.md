@@ -271,6 +271,17 @@ show's own design is on air instead of the built-in card.
   `LiveChatStreamManager` (`templatePresenter` / `templateDismisser`), `ProShowProp.isChatTemplate`.
   No audio code involved.
 
+## 8c. Chat avatar on image layers (built)
+
+- An image layer (image kind, or a shape with an image fill) can set **Live source: Chat avatar** in the prop editor. This is stored as `imageBinding = "chat.avatar"` on the canvas object and omitted when unset.
+- For the chat template prop, right-click it and use **Chat Avatar Layer**, which lists its image layers (None or a layer name).
+- When a message is featured, `ChatAvatarFileCache` downloads the sender's avatar off the main thread (utility priority, HTTPS only, 2 MB cap, must decode as an image).
+  - It caches the file in Caches/ProShow/ChatAvatars.
+  - It upgrades twimg `_normal` to `_400x400` and ggpht `=sNN` to `=s240`, falling back to the original URL.
+- The render path only reads the cached file: `applyImageBinding` in `resolvedCanvasObjects` never fetches. Until the download lands, or if it fails, the layer keeps its own image. The props resync once the file is on disk.
+- YouTube webhook ingest now reads `authorDetails.profileImageUrl`.
+- `GET /v1/chat/feature` reports `avatar_cached` and `avatar_layers`.
+
 ## 9. Risks
 
 - streamList over HTTP framing is not documented in detail. The parser accepts JSON array framing and newline framing, and the connector falls back to list polling on any framing failure.
