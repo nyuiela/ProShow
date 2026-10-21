@@ -125,6 +125,11 @@ final class ShowController {
     let meetingBridge = MeetingSdkBridge()
     var chatStream: LiveChatStreamManager?
     var chatIngest: ChatIngestHub?
+    /// chat.* values while a live chat message is featured on the chat template prop. Session only, never saved.
+    var featuredChatFields: [String: String] = [:]
+    /// The template prop live chat turned on, so a dismiss hides that prop and nothing else.
+    @ObservationIgnored var chatTemplateShownID: UUID?
+    @ObservationIgnored var chatTemplateClearTask: Task<Void, Never>?
     /// Live chat shown in its own window (set by that window's appear/disappear).
     var isChatDetached: Bool {
         get { LiveChatWindowState.shared.isDetached }
@@ -5075,6 +5080,8 @@ final class ShowController {
         let media = mediaLinkState()
         let timecode = broadcastTimecode(at: now)
         mergeLinkFields(outline: outline, media: media, timecode: timecode, into: &fields)
+        // Featured chat wins over the project's sample chat.* text; the sample returns when cleared.
+        for (key, value) in featuredChatFields { fields[key] = value }
         fields["time.now"] = DynamicTextEngine.formatDate(now, format: "h:mm:ss a", timeZone: .current)
         if let timer = inspector.timers.first(where: \.isRunning) ?? inspector.timers.first {
             fields["timer.countdown"] = CountdownFormatCatalog.format(
@@ -8372,6 +8379,9 @@ final class ShowController {
         }
         if parts == ["v1", "chat", "x"] {
             return handleXChatControl(method: method, body: body)
+        }
+        if parts == ["v1", "chat", "feature"] {
+            return handleChatFeatureControl(method: method, body: body)
         }
         if method == "POST", parts == ["v1", "chat", "overlay"] {
             let parsed = ControlHTTP.jsonObject(body)

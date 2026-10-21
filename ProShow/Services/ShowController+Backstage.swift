@@ -6,6 +6,7 @@ import AppKit
 extension ShowController {
     func bootstrapBackstageServices() {
         chatStream = LiveChatStreamManager(chatEngine: chat)
+        bootstrapChatTemplate()
         virtualCameraOutput = VirtualCameraOutputService(sink: virtualCamera)
         virtualCameraOutput?.syncProjectOutput(
             width: projectSettings.resolution.width,
@@ -156,6 +157,118 @@ extension ShowController {
         guard let chatStream else { return }
         _ = chatStream.triggerChatOverlay(message, on: compositor)
         refreshLiveStack()
+    }
+
+    // MARK: Chat template prop
+
+    static let chatTemplateFallbackName = "Chat highlight"
+
+    /// The marked prop, else a prop named "Chat highlight". Nil keeps the built-in card.
+    var chatTemplateProp: ProShowProp? {
+        inspector.props.first(where: \.isChatTemplate)
+            ?? inspector.props.first {
+                $0.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                    .caseInsensitiveCompare(Self.chatTemplateFallbackName) == .orderedSame
+            }
+    }
+
+    func setPropChatTemplate(id: UUID, on: Bool) {
+        inspector.setPropChatTemplate(id: id, on: on)
+        persistStudio()
+    }
+
+    static func chatTemplateFields(for message: LiveChatMessage) -> [String: String] {
+        [
+            "chat.name": message.senderName,
+            "chat.message": message.messageText,
+            "chat.platform": message.platformSource,
+            "chat.avatar": message.senderAvatarUrl ?? "",
+        ]
+    }
+
+    /// Puts the message on the template prop. A pick while it is up swaps the text in place.
+    /// False when there is no template, so the caller draws the built-in card.
+    func showChatOnTemplate(_ message: LiveChatMessage, at date: Date = Date()) -> Bool {
+        guard let prop = chatTemplateProp else { return false }
+        chatTemplateClearTask?.cancel()
+        chatTemplateClearTask = nil
+        if let shown = chatTemplateShownID, shown != prop.id,
+           inspector.props.contains(where: { $0.id == shown && $0.isActive }) {
+            _ = toggleInspectorProp(id: shown, at: date)
+        }
+        featuredChatFields = Self.chatTemplateFields(for: message)
+        chatTemplateShownID = prop.id
+        if prop.isActive {
+            tickProgram()
+        } else {
+            _ = toggleInspectorProp(id: prop.id, at: date)
+        }
+        return true
+    }
+
+    /// Hides the template prop through its exit animation, then drops the chat values.
+    func hideChatTemplate(at date: Date = Date()) {
+        guard let id = chatTemplateShownID else {
+            clearFeaturedChatFields()
+            return
+        }
+        chatTemplateShownID = nil
+        guard let prop = inspector.props.first(where: { $0.id == id }), prop.isActive else {
+            clearFeaturedChatFields()
+            return
+        }
+        _ = toggleInspectorProp(id: id, at: date)
+        // Keep the message on the card while it fades; the sample comes back after.
+        let hold = BuildAnimationEngine.authoredBuildOutDuration(in: prop.elements) + 0.15
+        chatTemplateClearTask?.cancel()
+        chatTemplateClearTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(max(0.05, hold)))
+            guard !Task.isCancelled, let self, self.chatTemplateShownID == nil else { return }
+            self.clearFeaturedChatFields()
+        }
+    }
+
+    private func clearFeaturedChatFields() {
+        guard !featuredChatFields.isEmpty else { return }
+        featuredChatFields = [:]
+        tickProgram()
+    }
+
+    /// Same calls as the chat panel's Display on screen and Dismiss.
+    func handleChatFeatureControl(method: String, body: Data?) -> (Int, String) {
+        guard let chatStream else { return (503, #"{"ok":false,"error":"chat_unavailable"}"#) }
+        if method == "POST" {
+            let parsed = ControlHTTP.jsonObject(body)
+            if parsed["dismiss"] == "1" || parsed["dismiss"] == "true" {
+                dismissChatOverlay()
+            } else {
+                let message = parsed["id"].flatMap { id in chatStream.inbox.first { $0.id == id } }
+                    ?? parsed["index"].flatMap(Int.init).flatMap { chatStream.inbox.indices.contains($0) ? chatStream.inbox[$0] : nil }
+                guard let message else { return (404, #"{"ok":false,"error":"message_not_found"}"#) }
+                triggerChatOverlay(message)
+            }
+        }
+        let template = chatTemplateProp
+        return (200, ControlJSON.encode([
+            "ok": true,
+            "template": template?.name ?? NSNull(),
+            "template_marked": template?.isChatTemplate ?? false,
+            "template_active": template?.isActive ?? false,
+            "on_template": chatStream.overlayOnTemplate,
+            "card": compositor.stack.chatOverlay != nil,
+            "featured": chatStream.activeOverlay?.id ?? NSNull(),
+            "fields": featuredChatFields,
+            "inbox": chatStream.inbox.prefix(5).map { ["id": $0.id, "name": $0.senderName, "platform": $0.platformSource] },
+        ]))
+    }
+
+    func bootstrapChatTemplate() {
+        chatStream?.templatePresenter = { [weak self] message in
+            self?.showChatOnTemplate(message) ?? false
+        }
+        chatStream?.templateDismisser = { [weak self] in
+            self?.hideChatTemplate()
+        }
     }
 
     func dismissChatOverlay() {

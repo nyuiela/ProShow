@@ -152,6 +152,7 @@ enum ControlAPIOpenAPI {
             "/v1/library/{library_id}/{presentation_id}/trigger": get("Load a library presentation and go live."),
             "/v1/soundboard/{pad_id}/play": post("Fire a soundboard pad."),
             "/v1/chat/overlay": post("Push a chat overlay card."),
+            "/v1/chat/feature": post("Display on screen for an inbox message: id or index (0 = newest), or dismiss=1. Uses the chat template prop when there is one. GET for state."),
             "/v1/chat/ingest/{platform}": post("Zoom / Meet / YouTube / Twitch webhook ingest."),
             "/v1/chat/youtube": post("YouTube chat ingest: input (URL, video id, or auto), chat_id, or stop. GET for state."),
             "/v1/chat/x": post("X broadcast chat ingest: input (broadcast id, link, or auto), stop, or mock_base (loopback only). GET for state. No send route."),

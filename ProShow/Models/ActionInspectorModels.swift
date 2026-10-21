@@ -149,6 +149,8 @@ struct ProShowProp: Identifiable, Hashable, Codable, Sendable, Equatable {
     var phoneMode: PropPhoneMode = .linked
     /// Outputs that draw this prop when it is on.
     var showOn: PropOutputTarget = .both
+    /// Live chat "Display on screen" fills this prop's chat.* fields and toggles it. One prop at most.
+    var isChatTemplate: Bool = false
 
     init(
         id: UUID = UUID(),
@@ -194,10 +196,11 @@ struct ProShowProp: Identifiable, Hashable, Codable, Sendable, Equatable {
         phoneMode = try container.decodeIfPresent(PropPhoneMode.self, forKey: .phoneMode)
             ?? ((phoneElements?.isEmpty == false) ? .custom : .linked)
         showOn = try container.decodeIfPresent(PropOutputTarget.self, forKey: .showOn) ?? .both
+        isChatTemplate = try container.decodeIfPresent(Bool.self, forKey: .isChatTemplate) ?? false
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, elements, transitionDuration, autoClearMode, isActive, collectionName, transition, liveQuoteRefresh, phoneElements, phoneMode, showOn
+        case id, name, elements, transitionDuration, autoClearMode, isActive, collectionName, transition, liveQuoteRefresh, phoneElements, phoneMode, showOn, isChatTemplate
     }
 
     func encode(to encoder: Encoder) throws {
@@ -214,6 +217,8 @@ struct ProShowProp: Identifiable, Hashable, Codable, Sendable, Equatable {
         try container.encodeIfPresent(phoneElements, forKey: .phoneElements)
         try container.encode(phoneMode, forKey: .phoneMode)
         try container.encode(showOn, forKey: .showOn)
+        // Written only when set, so unmarked props save exactly as before.
+        if isChatTemplate { try container.encode(true, forKey: .isChatTemplate) }
     }
 
     var autoClearTitle: String { autoClearMode.title }

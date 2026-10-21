@@ -1720,6 +1720,16 @@ private struct PropActionPane: View {
                 }
             }
         }
+        Button {
+            controller.setPropChatTemplate(id: prop.id, on: !prop.isChatTemplate)
+        } label: {
+            if controller.chatTemplateProp?.id == prop.id {
+                Label(prop.isChatTemplate ? "Use as Chat Template" : "Use as Chat Template (by name)", systemImage: "checkmark")
+            } else {
+                Text("Use as Chat Template")
+            }
+        }
+        .help("Live chat Display on screen fills this prop's chat.name, chat.message, chat.platform and chat.avatar and shows it.")
         Menu("Auto Clear") {
             Button("Never") { inspector.setPropAutoClear(id: prop.id, mode: .never); controller.persistStudio() }
             Button("On Next Slide") { inspector.setPropAutoClear(id: prop.id, mode: .onNextSlide); controller.persistStudio() }

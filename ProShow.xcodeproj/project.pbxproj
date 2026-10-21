@@ -209,6 +209,7 @@
 		A1T000000000000000000015 /* LiveChatOverlayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000015 /* LiveChatOverlayTests.swift */; };
 		2BABB7AF45D2559942FEEDA6 /* YouTubeChatIngestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22A34932106B5A07A8C5ECD5 /* YouTubeChatIngestTests.swift */; };
 		DE565729698310CC34CEDE2A /* XChatIngestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A5455AE7C49B323CFE2A830 /* XChatIngestTests.swift */; };
+		C7A11E5D0B3F4E2A9C61D0B1 /* ChatTemplatePropTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A11E5D0B3F4E2A9C61D0B2 /* ChatTemplatePropTests.swift */; };
 		A1T000000000000000000016 /* ProjectSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000016 /* ProjectSettingsTests.swift */; };
 		A1T000000000000000000017 /* CanvasEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000017 /* CanvasEngineTests.swift */; };
 		A1T000000000000000000018 /* ActionInspectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000018 /* ActionInspectorTests.swift */; };
@@ -636,6 +637,7 @@
 		A2T000000000000000000015 /* LiveChatOverlayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveChatOverlayTests.swift; sourceTree = "<group>"; };
 		22A34932106B5A07A8C5ECD5 /* YouTubeChatIngestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubeChatIngestTests.swift; sourceTree = "<group>"; };
 		2A5455AE7C49B323CFE2A830 /* XChatIngestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XChatIngestTests.swift; sourceTree = "<group>"; };
+		C7A11E5D0B3F4E2A9C61D0B2 /* ChatTemplatePropTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatTemplatePropTests.swift; sourceTree = "<group>"; };
 		A2T000000000000000000016 /* ProjectSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSettingsTests.swift; sourceTree = "<group>"; };
 		A2T000000000000000000017 /* CanvasEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasEngineTests.swift; sourceTree = "<group>"; };
 		A2T000000000000000000018 /* ActionInspectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionInspectorTests.swift; sourceTree = "<group>"; };
@@ -1351,6 +1353,7 @@
 				A2T000000000000000000015 /* LiveChatOverlayTests.swift */,
 				22A34932106B5A07A8C5ECD5 /* YouTubeChatIngestTests.swift */,
 				2A5455AE7C49B323CFE2A830 /* XChatIngestTests.swift */,
+				C7A11E5D0B3F4E2A9C61D0B2 /* ChatTemplatePropTests.swift */,
 				C7F20000000000000000000A /* BackstageEngineTests.swift */,
 				C7F200000000000000000012 /* BackstageIntegrationTests.swift */,
 				A2T000000000000000000016 /* ProjectSettingsTests.swift */,
@@ -1903,6 +1906,7 @@
 				A1T000000000000000000015 /* LiveChatOverlayTests.swift in Sources */,
 				2BABB7AF45D2559942FEEDA6 /* YouTubeChatIngestTests.swift in Sources */,
 				DE565729698310CC34CEDE2A /* XChatIngestTests.swift in Sources */,
+				C7A11E5D0B3F4E2A9C61D0B1 /* ChatTemplatePropTests.swift in Sources */,
 				C7F10000000000000000000A /* BackstageEngineTests.swift in Sources */,
 				C7F100000000000000000012 /* BackstageIntegrationTests.swift in Sources */,
 				A1T000000000000000000016 /* ProjectSettingsTests.swift in Sources */,

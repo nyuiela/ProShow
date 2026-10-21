@@ -18,6 +18,11 @@ final class LiveChatStreamManager {
     private var seenOrder: [String] = []
     static let seenLimit = 2000
     private var autoClearTask: Task<Void, Never>?
+    /// Shows a featured message on the project's chat template prop. False means no template.
+    var templatePresenter: ((LiveChatMessage) -> Bool)?
+    var templateDismisser: (() -> Void)?
+    /// The featured message is on the template prop, not the built-in card.
+    private(set) var overlayOnTemplate = false
 
     init(chatEngine: LiveChatEngine) {
         self.chatEngine = chatEngine
@@ -120,6 +125,19 @@ final class LiveChatStreamManager {
         } else {
             ingest(featured)
         }
+        if let templatePresenter, templatePresenter(featured) {
+            if !overlayOnTemplate {
+                chatEngine?.dismissOverlay()
+                compositor.setChatOverlay(nil)
+            }
+            overlayOnTemplate = true
+            scheduleAutoClear(compositor: compositor)
+            return nil
+        }
+        if overlayOnTemplate {
+            overlayOnTemplate = false
+            templateDismisser?()
+        }
         guard let studio = featured.asStudioChatMessage() else { return nil }
         let card = chatEngine?.pushOverlay(studio)
         if let card {
@@ -137,6 +155,10 @@ final class LiveChatStreamManager {
     func dismissOverlay(compositor: CompositorEngine) {
         autoClearTask?.cancel()
         activeOverlay = nil
+        if overlayOnTemplate {
+            overlayOnTemplate = false
+            templateDismisser?()
+        }
         chatEngine?.dismissOverlay()
         compositor.setChatOverlay(nil)
         for index in inbox.indices where inbox[index].isFeaturedOnScreen {

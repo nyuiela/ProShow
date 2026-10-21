@@ -242,6 +242,35 @@ Acceptance: blocked author never reappears in session; filtered words never reac
 
 Rules if built: operator types and confirms every reply, nothing automatic, posts as the signed in account, separate flag `proshow.liveChatReplyV1`.
 
+## 8b. Display on screen through a project prop (built)
+
+"Display on screen" in the chat panel uses a prop from the project when there is one, so the
+show's own design is on air instead of the built-in card.
+
+- **Template prop.** A prop marked **Use as Chat Template** (prop right-click menu). One prop
+  at most; marking one clears the others; a duplicate starts unmarked. With none marked, a prop
+  named `Chat highlight` is used. With neither, the built-in card draws as before.
+  The flag saves as `isChatTemplate: true` and only when set, so other props save unchanged.
+- **Values.** While a message is featured, `dynamicTextContext()` adds `chat.name`,
+  `chat.message`, `chat.platform` (`YouTube`, `X`, ...) and `chat.avatar` (the avatar URL, or
+  empty). They override the project's `chat.*` text fields for that moment only and are never
+  saved. The project's sample text returns once the prop has finished leaving.
+- **Show and hide.** A pick turns the prop on with `toggleInspectorProp`, so its own enter
+  animation plays. A pick while it is up swaps the text in place, with no re-entry. Dismiss and
+  the 10 s auto-clear (and an upstream delete or block of the featured message) turn it off
+  through its own exit animation. The chat values stay on it until the exit finishes.
+- **Already on.** If the template prop is on when a pick arrives (for example, its sample is
+  showing), the pick fills it in place, and Dismiss turns it off.
+- **Outputs.** The prop's own Show on setting applies. A Stream only prop stays off the Phone
+  layout. A Phone lane that letterboxes the whole Stream picture still shows it, as it does any
+  Stream prop.
+- **Control API.** `POST /v1/chat/feature` with `id` or `index` (0 = newest), or `dismiss=1`;
+  `GET` returns the template, whether it is on, and the live `chat.*` values. These are the same
+  calls the panel makes.
+- **Code.** `ShowController+Backstage.swift` (template lookup, show and hide, values),
+  `LiveChatStreamManager` (`templatePresenter` / `templateDismisser`), `ProShowProp.isChatTemplate`.
+  No audio code involved.
+
 ## 9. Risks
 
 - streamList over HTTP framing is not documented in detail. The parser accepts JSON array framing and newline framing, and the connector falls back to list polling on any framing failure.

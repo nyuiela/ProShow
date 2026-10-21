@@ -193,6 +193,7 @@ final class ActionInspectorEngine {
         copy.id = UUID()
         copy.name = prop.name.hasSuffix(" Copy") ? prop.name : "\(prop.name) Copy"
         copy.isActive = false
+        copy.isChatTemplate = false
         props.append(copy)
         selectedPropID = copy.id
         return copy
@@ -210,6 +211,15 @@ final class ActionInspectorEngine {
     func setPropAutoClear(id: UUID, mode: ProShowProp.AutoClearMode) {
         guard let index = props.firstIndex(where: { $0.id == id }) else { return }
         props[index].autoClearMode = mode
+        selectedPropID = id
+    }
+
+    /// Marks one prop as the live chat template, or unmarks it. Marking clears any other mark.
+    func setPropChatTemplate(id: UUID, on: Bool) {
+        guard props.contains(where: { $0.id == id }) else { return }
+        for index in props.indices {
+            props[index].isChatTemplate = on && props[index].id == id
+        }
         selectedPropID = id
     }
 

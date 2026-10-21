@@ -80,6 +80,9 @@ enum ControlHTTP {
         if parts == ["v1", "ai", "compose"] || parts == ["v1", "ai", "apply"] {
             return method == "POST"
         }
+        if parts == ["v1", "chat", "feature"] {
+            return method == "POST" || method == "GET"
+        }
         if parts == ["v1", "chat", "overlay"]
             || parts == ["v1", "slides", "trigger"]
             || parts == ["v1", "slide", "next"]
