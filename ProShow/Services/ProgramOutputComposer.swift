@@ -1153,7 +1153,8 @@ final class ProgramOutputComposer: @unchecked Sendable {
                 blit(image, into: ctx, rect: rect)
             } else if let still = canvasObjectStillImage(for: object, textContext: textContext) {
                 let mediaStyle = MediaFrameStyle.from(object, scale: layoutScale)
-                blitCanvasImage(still, into: ctx, rect: rect, style: mediaStyle, cacheScaled: true)
+                let propBuildAlpha = animatesText && hasBuildTimeline ? CGFloat(buildState.opacity) : 1
+                blitCanvasImage(still, into: ctx, rect: rect, style: mediaStyle, cacheScaled: true, buildAlpha: propBuildAlpha)
             } else if object.isTextLike {
                 drawTextBoxChrome(object: object, rect: rect, layoutScale: layoutScale, radius: radius, in: ctx)
             } else if object.fill.type != .none {
@@ -1865,7 +1866,7 @@ final class ProgramOutputComposer: @unchecked Sendable {
     }
 
     /// Parity with `CanvasObjectShapeLayer` image `.fit` / `.fill` / `.crop`.
-    private func blitCanvasImage(_ image: CGImage, into ctx: CGContext, rect: CGRect, style: MediaFrameStyle, cacheScaled: Bool = false) {
+    private func blitCanvasImage(_ image: CGImage, into ctx: CGContext, rect: CGRect, style: MediaFrameStyle, cacheScaled: Bool = false, buildAlpha: CGFloat = 1) {
         ctx.saveGState()
         ctx.clip(to: rect)
         ctx.translateBy(x: rect.minX, y: rect.maxY)
@@ -1900,7 +1901,8 @@ final class ProgramOutputComposer: @unchecked Sendable {
             dest = dest.offsetBy(dx: off.width, dy: off.height)
         }
 
-        ctx.setAlpha(CGFloat(style.opacity))
+        // setAlpha replaces the caller's alpha, so a prop build fade is multiplied in here.
+        ctx.setAlpha(CGFloat(style.opacity) * max(0, min(1, buildAlpha)))
         if cacheScaled, let scaled = scaledStill(drawImage, deviceSize: ctx.convertToDeviceSpace(dest).standardized.size) {
             ctx.draw(scaled, in: dest)
         } else {
