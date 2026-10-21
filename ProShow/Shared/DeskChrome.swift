@@ -43,6 +43,11 @@ private struct ProShowProgramVideoInputKey: EnvironmentKey {
     static let defaultValue: VideoInputSource? = nil
 }
 
+/// Preview surfaces (editor, thumbnails, Phone monitor) resolve each live well to its own device.
+private struct ProShowWellsKeepOwnDeviceKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
 private struct ProShowShowsProgramVideoLayerKey: EnvironmentKey {
     static let defaultValue = true
 }
@@ -86,6 +91,11 @@ extension EnvironmentValues {
     var proShowShowsProgramVideoLayer: Bool {
         get { self[ProShowShowsProgramVideoLayerKey.self] }
         set { self[ProShowShowsProgramVideoLayerKey.self] = newValue }
+    }
+
+    var proShowWellsKeepOwnDevice: Bool {
+        get { self[ProShowWellsKeepOwnDeviceKey.self] }
+        set { self[ProShowWellsKeepOwnDeviceKey.self] = newValue }
     }
 }
 
@@ -1381,6 +1391,7 @@ struct AssignedSourcePreview: View {
     @Environment(\.programRenderPaused) private var programRenderPaused
     @Environment(\.proShowProgramVideoInput) private var programVideoInput
     @Environment(\.proShowShowsProgramVideoLayer) private var showsProgramVideoLayer
+    @Environment(\.proShowWellsKeepOwnDevice) private var wellsKeepOwnDevice
 
     private var sharedPresentation: SharedProgramPresentation {
         mirrorsProgramPlayer ? .mirroredFrame : .playerLayer
@@ -1482,7 +1493,8 @@ struct AssignedSourcePreview: View {
             assigned: source,
             objectKind: canvasObjectKind,
             programInput: programVideoInput,
-            showsProgramVideoLayer: showsProgramVideoLayer
+            showsProgramVideoLayer: showsProgramVideoLayer,
+            wellsKeepOwnDevice: wellsKeepOwnDevice
         )
     }
 

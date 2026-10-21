@@ -403,4 +403,41 @@ struct CompositorEngineTests {
             )
         )
     }
+
+    @Test
+    func liveVideoRouting_previewWellsKeepTheirOwnDevice() {
+        let screen = VideoInputSource(id: UUID(), label: "Display", kind: .screenShare, endpoint: "sck://display/1")
+        let camera = AssignedMediaSource(
+            sourceID: "cam", name: "Camera", sourceType: .systemCamera,
+            category: .videoCapture, connectionString: "avf://cam", placeholderLetter: "A"
+        )
+        let display = AssignedMediaSource(
+            sourceID: "display", name: "Display", sourceType: .systemDisplay,
+            category: .videoCapture, connectionString: "sck://display/1", placeholderLetter: "B"
+        )
+        let emptySlot = AssignedMediaSource(
+            sourceID: "placeholder-A", name: "A", sourceType: .placeholderSlot,
+            category: .placeholders, connectionString: "placeholder://A", placeholderLetter: "A"
+        )
+        for layer in [true, false] {
+            // Camera well beside a screen-share slide input keeps the camera.
+            #expect(!ProgramLiveVideoRouting.canvasUsesProgramInput(
+                assigned: camera, objectKind: .videoInput, programInput: screen,
+                showsProgramVideoLayer: layer, wellsKeepOwnDevice: true))
+            #expect(!ProgramLiveVideoRouting.canvasUsesProgramInput(
+                assigned: camera, objectKind: .rectangle, programInput: screen,
+                showsProgramVideoLayer: layer, wellsKeepOwnDevice: true))
+            // Same device shares the slide input.
+            #expect(ProgramLiveVideoRouting.canvasUsesProgramInput(
+                assigned: display, objectKind: .videoInput, programInput: screen,
+                showsProgramVideoLayer: layer, wellsKeepOwnDevice: true))
+            // Unassigned video well shares it; an unfilled placeholder does not.
+            #expect(ProgramLiveVideoRouting.canvasUsesProgramInput(
+                assigned: nil, objectKind: .videoInput, programInput: screen,
+                showsProgramVideoLayer: layer, wellsKeepOwnDevice: true))
+            #expect(!ProgramLiveVideoRouting.canvasUsesProgramInput(
+                assigned: emptySlot, objectKind: .videoInput, programInput: screen,
+                showsProgramVideoLayer: layer, wellsKeepOwnDevice: true))
+        }
+    }
 }

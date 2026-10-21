@@ -875,6 +875,7 @@ struct CanvasObjectShapeLayer: View {
     @Environment(\.programRenderPaused) private var programRenderPaused
     @Environment(\.proShowProgramVideoInput) private var programVideoInput
     @Environment(\.proShowShowsProgramVideoLayer) private var showsProgramVideoLayer
+    @Environment(\.proShowWellsKeepOwnDevice) private var wellsKeepOwnDevice
 
     var body: some View {
         let path = CanvasObjectDrawing.shapePath(for: object, size: CGSize(width: width, height: height), scale: scale)
@@ -895,10 +896,11 @@ struct CanvasObjectShapeLayer: View {
     private var paintsProgramCanvasVideo: Bool {
         guard playsAssignedVideo, programVideoInput != nil else { return false }
         return ProgramLiveVideoRouting.canvasUsesProgramInput(
-            assigned: object.assignedSource,
+            assigned: resolvedAssignedSource(),
             objectKind: object.kind,
             programInput: programVideoInput,
-            showsProgramVideoLayer: showsProgramVideoLayer
+            showsProgramVideoLayer: showsProgramVideoLayer,
+            wellsKeepOwnDevice: wellsKeepOwnDevice
         )
     }
 
@@ -989,10 +991,9 @@ struct CanvasObjectShapeLayer: View {
         }
     }
 
+    /// Same order as `ShowController.resolvedCanvasObjects`: a lettered well follows its placeholder,
+    /// then its own assignment. Previews and the encode then pick the same source for each well.
     private func resolvedAssignedSource() -> AssignedMediaSource? {
-        if let assigned = object.assignedSource, assigned.isMappedFill {
-            return assigned
-        }
         if let letter = object.assignedPlaceholderLetter, let mapped = resolvePlaceholderSource?(letter) {
             return mapped
         }
@@ -1166,6 +1167,7 @@ struct ProgramSlideThumbnailPreview: View {
             .environment(\.proShowVideoInputs, controller.videoInputs)
             .environment(\.proShowProgramVideoInput, videoInput)
             .environment(\.proShowShowsProgramVideoLayer, false)
+            .environment(\.proShowWellsKeepOwnDevice, true)
         }
         .onAppear { controller.prepareSlidePreviewCapture(for: slide) }
         .onChange(of: slide.id) { _, _ in controller.prepareSlidePreviewCapture(for: slide) }

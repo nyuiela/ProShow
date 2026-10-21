@@ -101,6 +101,7 @@ struct CanvasEditorView: View {
         .environment(\.liveQuoteEngine, controller.liveQuotes)
         .environment(\.proShowVideoInputs, controller.videoInputs)
         .environment(\.proShowProgramVideoInput, editorCameraPreviewInput)
+        .environment(\.proShowWellsKeepOwnDevice, true)
         .environment(\.buildClock, controller.editorBuildClock())
         .environment(\.animationEvaluationMode, controller.isCanvasEditorPresented ? controller.editorAnimationMode() : .thumbnailPreview)
         .environment(\.buildPhaseFilter, controller.editorBuildPhaseFilter())
@@ -233,7 +234,7 @@ struct CanvasEditorView: View {
     /// Same camera the slide thumbnail paints, so the artboard is not an empty video well.
     private var editorCameraPreviewInput: VideoInputSource? {
         guard editor.kind == .presentation, let document = editor.selectedDocument else { return nil }
-        let hostsCamera = document.objects.contains {
+        let hostsCamera = controller.resolvedCanvasObjects(document.objects).contains {
             $0.kind == .videoInput || $0.rendersLiveVideoInputOnCanvas
         }
         guard hostsCamera, let slideID = document.slideID, let slide = controller.show.slide(id: slideID) else {
