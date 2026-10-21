@@ -586,6 +586,9 @@ struct YouTubeChatIngestTests {
         let hub = ChatIngestHub(stream: LiveChatStreamManager(chatEngine: LiveChatEngine()))
         #expect(hub.replyPlatform == nil)
         #expect(hub.replyBlockedReason == "No chat connected")
+        hub.youtubeState = .resolving
+        #expect(hub.replyBlockedReason == "Finding chat")
+        hub.youtubeState = .idle
         hub.xState = .polling
         #expect(hub.replyPlatform == .x)
         #expect(hub.replyBlockedReason != "Connect YouTube chat first")

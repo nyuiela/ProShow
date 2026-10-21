@@ -185,7 +185,7 @@ final class ChatIngestHub {
     /// Nil when there is no target and zero or two chats are connected.
     var replyPlatform: ChatPlatform? {
         if let replyTarget { return ChatPlatform.from(displayName: replyTarget.platformSource) }
-        switch (youtubeState.isActive, xState.isActive) {
+        switch (Self.canReply(youtubeState), Self.canReply(xState)) {
         case (true, false): return .youtube
         case (false, true): return .x
         default: return nil
@@ -196,17 +196,24 @@ final class ChatIngestHub {
     /// Only a reply to a YouTube message needs YouTube; X and local actions never do.
     var replyBlockedReason: String? {
         guard let platform = replyPlatform else {
-            return youtubeState.isActive || xState.isActive ? "Pick a message" : "No chat connected"
+            if Self.canReply(youtubeState) || Self.canReply(xState) { return "Pick a message" }
+            return youtubeState == .resolving || xState == .resolving ? "Finding chat" : "No chat connected"
         }
         switch platform {
         case .youtube:
-            return youtube != nil && youtubeState.isActive ? nil : "Connect YouTube chat first"
+            if youtube != nil && Self.canReply(youtubeState) { return nil }
+            return youtubeState == .resolving ? "Finding chat" : "Connect YouTube chat first"
         case .x:
             if !xSignedIn && !xMock && makeXConnector == nil { return XChatError.unauthorized.reason }
             return xConnector != nil && xBroadcastID != nil && xState.isActive ? nil : XChatError.notConnected.reason
         default:
             return "Replies go to YouTube or X"
         }
+    }
+
+    /// A chat is reply ready once it reads messages, not while it is still finding the broadcast.
+    private static func canReply(_ state: ChatConnectorState) -> Bool {
+        state == .streaming || state == .polling
     }
 
     func setReplyTarget(_ message: LiveChatMessage?) {
