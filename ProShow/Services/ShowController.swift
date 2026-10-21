@@ -3739,6 +3739,13 @@ final class ShowController {
                   let layer = prop.elements.first(where: { $0.name == args["layer"] }) else { return ["ok": false, "error": "no_layer"] }
             let ok = setPropImageBinding(propID: prop.id, layerID: layer.id, binding: args["binding"])
             return ["ok": ok, "binding": args["binding"] ?? ""]
+        case "screen_smoothness":
+            // Test hook: this Mac's Smooth / Light choice for one display (video frame interval only).
+            let endpoint = args["endpoint"] ?? "sck://display/1"
+            if let raw = args["value"], let value = ScreenShareSmoothness(rawValue: raw) {
+                videoInputs.ingest.setScreenShareSmoothness(value, endpoint: endpoint)
+            }
+            return ["ok": true, "value": ScreenShareSmoothness.current(endpoint: endpoint).rawValue, "endpoint": endpoint]
         case "capture_diag":
             // Read-only: capture lanes, starts, program input, live layer shots, placeholder failover.
             let now = Date()

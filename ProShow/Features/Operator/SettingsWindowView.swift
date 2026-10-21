@@ -796,9 +796,13 @@ struct SettingsWindowView: View {
                 } else {
                     ForEach(Array(attachedVideo.enumerated()), id: \.element.id) { index, source in
                         SettingsRow(title: source.label, detail: videoKindTitle(source.kind)) {
-                            Image(systemName: source.kind == .screenShare ? "display" : "video.fill")
-                                .foregroundStyle(ShowSidebarPalette.subtitle)
-                                .accessibilityHidden(true)
+                            if source.kind == .screenShare, let endpoint = source.endpoint, !endpoint.isEmpty {
+                                ScreenShareSmoothnessPicker(endpoint: endpoint, ingest: controller.videoInputs.ingest)
+                            } else {
+                                Image(systemName: "video.fill")
+                                    .foregroundStyle(ShowSidebarPalette.subtitle)
+                                    .accessibilityHidden(true)
+                            }
                         }
                         if index < attachedVideo.count - 1 {
                             SettingsHairline()
@@ -1061,3 +1065,31 @@ private struct AISettingsKeyRow: View {
     }
 }
 #endif
+
+/// Smooth (30 fps) or Light (15 fps) for one display's screen share.
+private struct ScreenShareSmoothnessPicker: View {
+    let endpoint: String
+    let ingest: VideoIngestEngine
+    @State private var value: ScreenShareSmoothness
+
+    init(endpoint: String, ingest: VideoIngestEngine) {
+        self.endpoint = endpoint
+        self.ingest = ingest
+        _value = State(initialValue: ScreenShareSmoothness.current(endpoint: endpoint))
+    }
+
+    var body: some View {
+        Picker("Screen share frame rate", selection: $value) {
+            ForEach(ScreenShareSmoothness.allCases, id: \.self) { option in
+                Text(option.title).tag(option)
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.segmented)
+        .fixedSize()
+        .accessibilityLabel("Screen share frame rate")
+        .onChange(of: value) { _, newValue in
+            ingest.setScreenShareSmoothness(newValue, endpoint: endpoint)
+        }
+    }
+}

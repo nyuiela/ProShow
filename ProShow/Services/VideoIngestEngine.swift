@@ -36,6 +36,26 @@ struct ScreenCapturePreset: Hashable, Sendable {
     var capturesAudio: Bool
 }
 
+/// Per-display screen share frame rate, kept on this Mac by display endpoint. Video only.
+enum ScreenShareSmoothness: String, CaseIterable, Sendable {
+    case smooth
+    case light
+
+    var fps: Int { self == .smooth ? 30 : 15 }
+    var title: String { self == .smooth ? "Smooth (30 fps)" : "Light (15 fps)" }
+
+    static func defaultsKey(_ endpoint: String) -> String { "screenShareSmoothness." + endpoint }
+
+    static func current(endpoint: String?) -> ScreenShareSmoothness {
+        let endpoint = (endpoint ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !endpoint.isEmpty,
+              let raw = UserDefaults.standard.string(forKey: defaultsKey(endpoint)),
+              let value = ScreenShareSmoothness(rawValue: raw)
+        else { return .smooth }
+        return value
+    }
+}
+
 protocol VideoDeviceCataloging: Sendable {
     func cameras() -> [StudioVideoSource]
     func screens() -> [StudioVideoSource]
@@ -212,6 +232,7 @@ final class LiveInputLane {
     var lastScreenFrameAt: Date?
     var screenFramesPublished: UInt64 = 0
     var screenIdleFrames: UInt64 = 0
+    var screenCaptureFPS = 0
     var hasLiveScreenStream: Bool {
         stream != nil && !screenCaptureStopped
     }
@@ -701,6 +722,9 @@ final class VideoIngestEngine {
                 "idle": lane.screenIdleFrames,
                 "since_frame_s": lane.lastScreenFrameAt.map { now.timeIntervalSince($0) } ?? -1,
                 "stream": lane.stream != nil,
+                "fps_cap": lane.screenCaptureFPS,
+                "width": lane.lastFrame?.width ?? 0,
+                "height": lane.lastFrame?.height ?? 0,
             ]
         }
         #else
@@ -1474,6 +1498,18 @@ final class VideoIngestEngine {
         }
     }
 
+    /// Stores the display's Smooth / Light choice and restarts its live capture so the new interval applies.
+    func setScreenShareSmoothness(_ value: ScreenShareSmoothness, endpoint: String) {
+        let endpoint = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !endpoint.isEmpty, ScreenShareSmoothness.current(endpoint: endpoint) != value else { return }
+        UserDefaults.standard.set(value.rawValue, forKey: ScreenShareSmoothness.defaultsKey(endpoint))
+        var seen = Set<ObjectIdentifier>()
+        for lane in lanes.values where lane.kind == .screenShare && lane.isLive && lane.endpoint == endpoint {
+            guard seen.insert(ObjectIdentifier(lane)).inserted else { continue }
+            restartScreenCapture(screenSource(for: lane), force: true)
+        }
+    }
+
     private func restartScreenCapturesAfterSpaceChange() {
         let live = lanes.values.filter { $0.kind == .screenShare && $0.isLive }
         for lane in live {
@@ -1556,7 +1592,10 @@ final class VideoIngestEngine {
         lane.lastScreenFrameAt = Date()
         retireScreenStream(lane.stream)
         lane.stream = nil
-        let preset = screenCapturePreset()
+        var preset = screenCapturePreset()
+        // Smooth / Light per display: only the frame interval changes.
+        preset.fps = min(preset.fps, ScreenShareSmoothness.current(endpoint: source.endpoint).fps)
+        lane.screenCaptureFPS = preset.fps
         let index = Self.displayIndex(from: source.endpoint)
         let relay = lane.screenRelay
         let publishKey = ObjectIdentifier(lane)
