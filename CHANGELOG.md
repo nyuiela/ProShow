@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.2 build 8 (2026-10-21)
+
+- Props play their enter and exit builds on Stream and Phone, the same as in the editor. Before, they switched on and off at once on both outputs.
+- Prop exits run for the authored build-out time, whether the prop is toggled off or clears on its own timer.
+- Prop images fade with the build, not only prop text.
+- On Phone, grouped prop elements (the chat card's avatar, name and message) are fitted together, so the avatar no longer covers the first letter of the name.
+
 ## 0.5.1 build 5 (2026-10-21)
 
 - Stream (16:9) and Phone (9:16) go out together with the Phone canvas drawn by the same program renderer: cameras, screen share, video and media slots, images, text fields, timers, props with their own Phone layout (including the chat template) and enter/exit builds. Placeholders resolve the same way as in the editor preview.
