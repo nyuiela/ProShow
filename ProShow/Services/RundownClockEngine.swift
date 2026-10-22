@@ -79,6 +79,9 @@ final class RundownClockEngine {
     @ObservationIgnored private var firedCueKeys: Set<String> = []
     @ObservationIgnored private var lastTickAt: Date?
     @ObservationIgnored private var previousRemaining: TimeInterval?
+    /// Longest gap between clock ticks on the live item (a main-thread stall shows up here).
+    @ObservationIgnored private(set) var maxTickGapSeconds: TimeInterval = 0
+    @ObservationIgnored private(set) var maxTickGapAtElapsed: TimeInterval = 0
 
     func loadProgram(_ program: ProgramDocumentModel) {
         stopShow(resetBlocks: false)
@@ -260,6 +263,8 @@ final class RundownClockEngine {
         activeBlockRemainingSeconds = activeBlock?.plannedDurationSeconds ?? 0
         previousRemaining = nil
         lastTickAt = now
+        maxTickGapSeconds = 0
+        maxTickGapAtElapsed = 0
         isHeld = false
         isStoppedAtItem = false
         isWaitingOnScript = false
@@ -283,6 +288,10 @@ final class RundownClockEngine {
         guard block.actualStartTime != nil else { return }
         let delta = lastTickAt.map { max(0, now.timeIntervalSince($0)) } ?? 0
         lastTickAt = now
+        if delta > maxTickGapSeconds {
+            maxTickGapSeconds = delta
+            maxTickGapAtElapsed = activeBlockElapsedSeconds
+        }
         if !isHeld {
             activeBlockElapsedSeconds += delta
         }

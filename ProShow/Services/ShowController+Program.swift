@@ -401,15 +401,24 @@ extension ShowController {
         rundownLastCutAt = cutAt
         continueProgramPrompter(for: block)
         let promptedAt = Date()
-        noteRundownCut(block: block, cutAt: cutAt, timings: [
-            "prep_ms": Int((pictureFrom.timeIntervalSince(startedAt) * 1000).rounded()),
-            "picture_ms": Int((cutAt.timeIntervalSince(pictureFrom) * 1000).rounded()),
-            "prompt_ms": Int((promptedAt.timeIntervalSince(cutAt) * 1000).rounded()),
-        ])
         prefetchRundownPageFrames(after: block)
+        let prefetchedAt = Date()
         preloadNextRundownItem(after: block)
+        let preloadedAt = Date()
         StageCueController.syncStageRundownOverlay(controller: self)
+        let stagedAt = Date()
         tickProgram()
+        let tickedAt = Date()
+        func ms(_ a: Date, _ b: Date) -> Int { Int((b.timeIntervalSince(a) * 1000).rounded()) }
+        noteRundownCut(block: block, cutAt: cutAt, timings: [
+            "prep_ms": ms(startedAt, pictureFrom),
+            "picture_ms": ms(pictureFrom, cutAt),
+            "prompt_ms": ms(cutAt, promptedAt),
+            "prefetch_ms": ms(promptedAt, prefetchedAt),
+            "preload_ms": ms(prefetchedAt, preloadedAt),
+            "stage_ms": ms(preloadedAt, stagedAt),
+            "tick_ms": ms(stagedAt, tickedAt),
+        ])
     }
 
     /// Next, start, and take-live all land here. The clock stays manual; this press is the cut.

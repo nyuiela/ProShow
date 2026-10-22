@@ -258,6 +258,8 @@ enum RemoteControlBridge {
             ] as [String: Any]
         }
         out["cuts"] = controller.rundownCutLog
+        out["tick_gap_max_ms"] = Int((clock.maxTickGapSeconds * 1000).rounded())
+        out["tick_gap_at_elapsed"] = clock.maxTickGapAtElapsed
         if let program = clock.program, let idx = clock.activeBlockIndex {
             out["stop_item"] = RundownAutoAdvanceRules.isStopItem(at: idx, in: program.rundownBlocks)
         }
