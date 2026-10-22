@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.5.3 build 12 (2026-10-22)
+
+- Program Auto: one Auto button in the program transport (workspace and float window), remembered on this Mac. With Auto on, the program cuts to the next item when its time runs out. If the prompter is still reading, the cut waits for the read to finish plus 0.75 s, and never more than 12 s past the item's time. Items with no script cut on time.
+- Auto stops instead of cutting on: the first item when it is a waiting slate (Starting soon, Pre-show, Countdown), STANDBY or BRB items, an Outro, and the last item. Auto skips over STANDBY and BRB items. A per-item Stop here flag in the .program overrides this.
+- Hold freezes the item clock and Auto; press Hold again or Space to resume. +30s adds 30 seconds to the live item. Next still cuts at once.
+- The live row in the workspace and float window, and the stage display, count down the live item: 0:12, then +0:05 past the end, and HOLD while held.
+- The prompter loads the next item's script on every program cut, from the workspace, the float window and the remote, and keeps rolling if it was rolling or Auto is on, in kinetic and scroll modes.
+- Prompter pacing fits each item's script to its planned time (120 to 240 wpm) by default. Items can use the prompter's own speed instead.
+- Kinetic prompter word timing no longer drifts: a read ends when its pacing says it will. Before, each word ran slightly long, about a second over a typical item.
+- Stage cues use seconds before the end whatever their sign (older files stored -60) and fire once per item when the countdown crosses them, through holds, +30s and stalls. New programs default to 60, 30 and 0.
+- A cut no longer rewrites the whole .program file when nothing in it changed. That save took about 85 ms per cut on the main thread.
+- The next item's slide images are decoded ahead of its cut and released if it is skipped. Media and cameras are not preloaded.
+- Remote: program next, previous, hold, extend, auto and status over REST (/v1/program/...), OSC (/proshow/program/...) and MIDI notes 62 to 65. slide/next is unchanged.
+- Stream and Phone audio and the mixer are unchanged.
+
 ## 0.5.2 build 11 (2026-10-22)
 
 - Camera rows in a .program keep the stream background they were designed with. Before, every reopen set the row's background off, so the stream dropped the full-frame background image and colour and showed the camera through the slide, while the editor and Phone canvas still looked right.
