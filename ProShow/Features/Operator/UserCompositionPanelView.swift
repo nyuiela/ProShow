@@ -54,8 +54,14 @@ struct UserCompositionPanelView: View {
         }
     }
 
-    @ViewBuilder
     private var elementStack: some View {
+        // Build the list once per body. Before, `elements` (all program layer rows, thumbnails included)
+        // was rebuilt for the empty check, for the ForEach, and again inside every row for the divider.
+        elementStack(elements)
+    }
+
+    @ViewBuilder
+    private func elementStack(_ elements: [UserVisibleElement]) -> some View {
         if elements.isEmpty {
             Text("Nothing on program.")
                 .font(DeskType.micro)

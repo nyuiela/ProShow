@@ -76,28 +76,58 @@ enum CanvasLayerStore {
         guard !trimmed.isEmpty else { return nil }
         if trimmed.hasPrefix("http"), let url = URL(string: trimmed) { return nil }
         let url = URL(fileURLWithPath: trimmed)
-        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
-        // Layer rows ask for this on every redraw. Decode a file once per path and modification date.
+        // Layer rows ask for this on every redraw. Serve a decoded file from memory and look at the disk
+        // again at most every couple of seconds (an edited image file still refreshes).
+        let key = url.path as NSString
+        let now = ProcessInfo.processInfo.systemUptime
+        if let entry = imageCache.object(forKey: key), now - entry.checkedAt < imageRecheckSeconds {
+            return entry.image
+        }
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            imageCache.removeObject(forKey: key)
+            return nil
+        }
         let stamp = (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date)?
             .timeIntervalSince1970 ?? 0
-        let key = "\(url.path)|\(stamp)" as NSString
-        if let cached = imageCache.object(forKey: key) { return cached }
+        if let entry = imageCache.object(forKey: key), entry.stamp == stamp {
+            entry.checkedAt = now
+            return entry.image
+        }
         guard let image = NSImage(contentsOf: url) else { return nil }
-        imageCache.setObject(image, forKey: key)
+        imageCache.setObject(ImageEntry(image: image, stamp: stamp, checkedAt: now), forKey: key)
         return image
     }
 
-    private static let imageCache: NSCache<NSString, NSImage> = {
+    private static let imageRecheckSeconds: TimeInterval = 2
+
+    private final class ImageEntry {
+        let image: NSImage
+        let stamp: TimeInterval
+        var checkedAt: TimeInterval
+        init(image: NSImage, stamp: TimeInterval, checkedAt: TimeInterval) {
+            self.image = image
+            self.stamp = stamp
+            self.checkedAt = checkedAt
+        }
+    }
+
+    nonisolated(unsafe) private static let imageCache: NSCache<NSString, ImageEntry> = {
+        let cache = NSCache<NSString, ImageEntry>()
+        cache.countLimit = 256
+        return cache
+    }()
+
+    private static let swatchCache: NSCache<NSString, NSImage> = {
         let cache = NSCache<NSString, NSImage>()
         cache.countLimit = 256
         return cache
     }()
 
     private static func swatchThumbnail(for object: CanvasObject) -> NSImage? {
-        let key = "swatch|\(object.fillHex)" as NSString
-        if let cached = imageCache.object(forKey: key) { return cached }
+        let key = object.fillHex as NSString
+        if let cached = swatchCache.object(forKey: key) { return cached }
         let image = drawSwatch(for: object)
-        if let image { imageCache.setObject(image, forKey: key) }
+        if let image { swatchCache.setObject(image, forKey: key) }
         return image
     }
 
