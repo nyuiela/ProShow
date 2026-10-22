@@ -246,8 +246,9 @@ final class KineticEngine {
         // Each word is due a fixed time after the previous one was due, so wake-up latency
         // does not add up over a script and the read ends when the pacing says it will.
         let now = Date()
-        // After a stall longer than a quarter second, restart the chain instead of racing to catch up.
-        let slotStart = chainedSlotStart.flatMap { now.timeIntervalSince($0) < 0.25 ? min($0, now) : nil } ?? now
+        // Catch up after a short main-thread stall (a program cut redraws the window for up to about
+        // a second), so the read still ends on pace. After a longer stall, restart the chain instead.
+        let slotStart = chainedSlotStart.flatMap { now.timeIntervalSince($0) < Self.catchUpLimitSeconds ? min($0, now) : nil } ?? now
         let due = slotStart.addingTimeInterval(hold)
         wordHoldStartedAt = slotStart
         runTask = Task { @MainActor in
@@ -274,6 +275,7 @@ final class KineticEngine {
 
     /// Set only while one word hands off to the next inside the run loop.
     @ObservationIgnored private var chainedSlotStart: Date?
+    static let catchUpLimitSeconds: TimeInterval = 1.5
 
     private func nextSpeakableIndex(after index: Int) -> Int? {
         var probe = index + 1
