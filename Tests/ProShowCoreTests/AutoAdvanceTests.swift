@@ -374,6 +374,22 @@ struct AutoAdvanceTests {
         #expect(ShowController.promptScriptState(for: block("Empty", 10), session: session, settings: settings) == .none)
     }
 
+    @Test func kineticReadEndsOnTimeAndMarksFinished() async throws {
+        let engine = KineticEngine()
+        let pacing = ScriptPacing()
+        let script = "one two three four five six seven eight nine ten eleven twelve"
+        engine.load(script: script, baseWPM: 240, pacing: pacing)
+        let planned = ProgramPromptPacing.total(script, wpm: 240, pacing: pacing)
+        let started = Date()
+        engine.start()
+        try await Task.sleep(nanoseconds: UInt64((planned + 0.6) * 1_000_000_000))
+        #expect(engine.isFinished)
+        #expect(!engine.isRunning)
+        let finished = try #require(engine.finishedAt)
+        // Word timing is chained, so wake-up latency does not add up over the read.
+        #expect(abs(finished.timeIntervalSince(started) - planned) < 0.15)
+    }
+
     // MARK: Remote
 
     @Test func remoteProgramRoutes() {

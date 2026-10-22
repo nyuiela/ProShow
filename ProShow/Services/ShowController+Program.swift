@@ -66,6 +66,8 @@ extension ShowController {
         switch settings.promptEngine {
         case .kinetic:
             if let at = session.engine.finishedAt { return .finished(at: at) }
+            // At the end with no finish time (seeked there): nothing left to wait for.
+            if session.engine.isFinished { return .none }
             if session.engine.isRunning || session.engine.activeIndex > 0 { return .reading }
         case .scroll:
             if let at = session.scroll.finishedAt { return .finished(at: at) }
@@ -100,7 +102,7 @@ extension ShowController {
         session.loadProgramItem(script: block.scriptBody, settings: .shared, keepRolling: keepRolling)
     }
 
-    private func noteRundownCut(block: RundownBlock, cutAt: Date) {
+    private func noteRundownCut(block: RundownBlock, cutAt: Date, timings: [String: Int] = [:]) {
         let doc = rundownClock.program ?? programDocument
         var entry: [String: Any] = [
             "index": doc.rundownBlocks.firstIndex(where: { $0.id == block.id }) as Any? ?? NSNull(),
@@ -108,6 +110,7 @@ extension ShowController {
             "cut_at": cutAt.timeIntervalSince1970,
             "prompter_running": TeleprompterSession.shared.isRunning,
         ]
+        for (key, value) in timings { entry[key] = value }
         if let last = rundownClock.lastAdvance, last.toIndex == entry["index"] as? Int {
             entry["reason"] = last.reason.rawValue
             entry["fired_at"] = last.firedAt.timeIntervalSince1970
@@ -362,7 +365,7 @@ extension ShowController {
     }
 
     func executeRundownBlock(_ block: RundownBlock) {
-        continueProgramPrompter(for: block)
+        let startedAt = Date()
         StageCueController.clearStageMessage(controller: self)
         let program = rundownClock.program ?? programDocument
 
@@ -391,10 +394,18 @@ extension ShowController {
             TalentManager.fireLowerThird(talent: talent, controller: self)
         }
 
+        // Picture first: the cut is what the audience sees. The prompter follows a few ms later.
+        let pictureFrom = Date()
         applyRundownPicture(block)
         let cutAt = Date()
         rundownLastCutAt = cutAt
-        noteRundownCut(block: block, cutAt: cutAt)
+        continueProgramPrompter(for: block)
+        let promptedAt = Date()
+        noteRundownCut(block: block, cutAt: cutAt, timings: [
+            "prep_ms": Int((pictureFrom.timeIntervalSince(startedAt) * 1000).rounded()),
+            "picture_ms": Int((cutAt.timeIntervalSince(pictureFrom) * 1000).rounded()),
+            "prompt_ms": Int((promptedAt.timeIntervalSince(cutAt) * 1000).rounded()),
+        ])
         prefetchRundownPageFrames(after: block)
         preloadNextRundownItem(after: block)
         StageCueController.syncStageRundownOverlay(controller: self)
