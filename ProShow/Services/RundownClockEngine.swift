@@ -426,23 +426,34 @@ enum ProgramPromptPacing {
         return fittedWPM(script: block.scriptBody, plannedSeconds: plannedSeconds, pacing: pacing)
     }
 
-    /// Script time is word time (scales with 1/wpm) plus fixed holds for pauses and punctuation.
-    /// Two tokenizations separate them; then solve for the planned duration and clamp to 120...240.
+    /// The slowest whole WPM in 120...240 whose real read time (same tokenizer and pacing the
+    /// prompter plays) fits the planned duration. Read time falls as WPM rises, so a binary search.
     static func fittedWPM(script: String, plannedSeconds: TimeInterval, pacing: ScriptPacing) -> Int? {
         guard plannedSeconds > 0, !script.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        let key = "\(plannedSeconds)|\(String(describing: pacing))|\(script)"
+        if let cached = cache[key] { return cached }
         let range = PromptPacingMode.wpmRange
-        let slow = total(script, wpm: range.lowerBound, pacing: pacing)
-        let fast = total(script, wpm: range.upperBound, pacing: pacing)
-        let ratio = Double(range.upperBound) / Double(range.lowerBound)
-        // slow = K/lo + P, fast = K/hi + P
-        let wordTimeAtFast = (slow - fast) / (ratio - 1)
-        let holds = fast - wordTimeAtFast
-        guard wordTimeAtFast > 0 else { return nil }
-        let available = plannedSeconds - holds
-        guard available > 0 else { return range.upperBound }
-        let wpm = Double(range.upperBound) * wordTimeAtFast / available
-        return min(range.upperBound, max(range.lowerBound, Int(wpm.rounded())))
+        let result: Int
+        if total(script, wpm: range.upperBound, pacing: pacing) > plannedSeconds {
+            result = range.upperBound
+        } else if total(script, wpm: range.lowerBound, pacing: pacing) <= plannedSeconds {
+            result = range.lowerBound
+        } else {
+            var slow = range.lowerBound   // too long
+            var fast = range.upperBound   // fits
+            while fast - slow > 1 {
+                let mid = (slow + fast) / 2
+                if total(script, wpm: mid, pacing: pacing) <= plannedSeconds { fast = mid } else { slow = mid }
+            }
+            result = fast
+        }
+        if cache.count > 256 { cache.removeAll() }
+        cache[key] = result
+        return result
     }
+
+    // Main-thread callers only (prompter load and status).
+    nonisolated(unsafe) private static var cache: [String: Int] = [:]
 
     static func total(_ script: String, wpm: Int, pacing: ScriptPacing) -> TimeInterval {
         ScriptTokenizer.tokenize(script, baseWPM: wpm, pacing: pacing).reduce(0) { $0 + $1.totalDuration }

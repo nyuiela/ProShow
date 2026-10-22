@@ -309,7 +309,9 @@ struct AutoAdvanceTests {
         #expect(fit != nil)
         if let fit {
             #expect((120...240).contains(fit))
-            #expect(abs(ProgramPromptPacing.total(words, wpm: fit, pacing: pacing) - 30) < 2.5)
+            // Slowest speed that still fits: one wpm slower would run past the end.
+            #expect(ProgramPromptPacing.total(words, wpm: fit, pacing: pacing) <= 30)
+            #expect(ProgramPromptPacing.total(words, wpm: fit - 1, pacing: pacing) > 30)
         }
         #expect(ProgramPromptPacing.fittedWPM(script: words, plannedSeconds: 3, pacing: pacing) == 240)
         #expect(ProgramPromptPacing.fittedWPM(script: words, plannedSeconds: 600, pacing: pacing) == 120)
