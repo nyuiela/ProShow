@@ -201,3 +201,98 @@ struct OutlineScriptCompilerTests {
         ))
     }
 }
+
+@Suite struct CameraRowBackgroundTests {
+    /// Camera row with its own designed canvas: full-frame background art plus a camera well.
+    private func designedCameraModel(slideBackground: Bool, boardBackground: Bool) -> (ProgramDocumentModel, UUID) {
+        var model = ProgramDocumentModel.sundayMorningSample()
+        let id = model.rundownBlocks[1].programSlideID ?? UUID()
+        model.rundownBlocks[1].programSlideID = id
+        model.rundownBlocks[1].screenDirections = [ScreenDirection(kind: .camera, label: "Camera")]
+        var slide = cameraRowTestSlide(id: id, title: model.rundownBlocks[1].title, itemNumber: model.rundownBlocks[1].itemNumber)
+        slide.isBlank = false
+        slide.backgroundEnabled = slideBackground
+        slide.backgroundHex = "#F4ECDD"
+        var art = CanvasObject(name: "Background", kind: .image, bounds: .canvas, zIndex: 0, text: "", fillHex: "#F4ECDD")
+        art.visibleOnAudience = true
+        slide.canvas[0].bounds = CanvasBounds(x: 2896, y: 360, width: 800, height: 800)
+        slide.canvas.insert(art, at: 0)
+        slide.editorCanvases = [
+            EditorCanvasFrame(id: UUID(), name: "Stream", width: 3840, height: 2160, originX: 0, originY: 0,
+                              isPrimary: true, backgroundEnabled: boardBackground, backgroundHex: "#F4ECDD"),
+        ]
+        model.programSlides = [slide]
+        return (model, id)
+    }
+
+    @Test
+    func staleLibraryProgramShowGoesOnAirFromRepairedDocument() {
+        var (model, id) = designedCameraModel(slideBackground: false, boardBackground: true)
+        let stale = ProgramOutlinePresentation.makeShow(from: model)
+        _ = ProgramOutlinePresentation.repairStoredProgramDocument(in: &model)
+        #expect(stale.slide(id: id)?.backgroundEnabled == false)
+        let onAir = ProgramOutlinePresentation.currentShow(for: stale, document: model)
+        #expect(onAir.slide(id: id)?.backgroundEnabled == true)
+        let other = Show(id: UUID(), name: "Other", groups: [])
+        #expect(ProgramOutlinePresentation.currentShow(for: other, document: model).id == other.id)
+    }
+
+    @Test
+    func repairKeepsDesignedCameraRowBackground() {
+        var (model, id) = designedCameraModel(slideBackground: true, boardBackground: true)
+        ProgramOutlinePresentation.repairStoredProgramDocument(in: &model)
+        let slide = model.programSlides.first { $0.id == id }!
+        #expect(slide.backgroundEnabled)
+        #expect(slide.audienceCanvas().contains { $0.name == "Background" })
+    }
+
+    @Test
+    func repairRestoresBackgroundAnEarlierReopenFlipped() {
+        var (model, id) = designedCameraModel(slideBackground: false, boardBackground: true)
+        #expect(!model.programSlides[0].audienceCanvas().contains { $0.name == "Background" })
+        let changed = ProgramOutlinePresentation.repairStoredProgramDocument(in: &model)
+        #expect(changed)
+        let slide = model.programSlides.first { $0.id == id }!
+        #expect(slide.backgroundEnabled)
+        #expect(slide.audienceCanvas().contains { $0.name == "Background" })
+    }
+
+    @Test
+    func repairKeepsTransparentBoardTransparent() {
+        var (model, id) = designedCameraModel(slideBackground: false, boardBackground: false)
+        ProgramOutlinePresentation.repairStoredProgramDocument(in: &model)
+        #expect(model.programSlides.first { $0.id == id }!.backgroundEnabled == false)
+    }
+
+    @Test
+    func syncKeepsDesignedCameraRowBackground() {
+        var (model, id) = designedCameraModel(slideBackground: true, boardBackground: true)
+        ProgramOutlinePresentation.syncProgramSlide(at: 1, in: &model)
+        #expect(model.programSlides.first { $0.id == id }!.backgroundEnabled)
+    }
+}
+
+private func cameraRowTestSlide(id: UUID, title: String, itemNumber: String) -> Slide {
+    var slide = Slide(
+        id: id,
+        title: title,
+        lines: [],
+        notes: "",
+        isBlank: true,
+        canvas: [],
+        label: itemNumber,
+        backgroundEnabled: false,
+        backgroundHex: "#000000"
+    )
+    var object = CanvasObject(
+        name: "Camera",
+        kind: .videoInput,
+        bounds: .canvas,
+        zIndex: 0,
+        text: "",
+        fillHex: "#000000"
+    )
+    object.visibleOnAudience = true
+    slide.canvas = [object]
+    return slide
+}

@@ -18,6 +18,15 @@ enum ProgramOutlinePresentation {
         )
     }
 
+    /// The library keeps a saved copy of the `.program` show. That copy can be older than the
+    /// repaired document (camera rows with the background flag a reopen flipped), so the
+    /// program show always goes on air from the document. Other shows pass through.
+    static func currentShow(for found: Show, document: ProgramDocumentModel) -> Show {
+        guard found.id == showID else { return found }
+        let built = makeShow(from: document)
+        return built.allSlides.isEmpty ? found : built
+    }
+
     static func applyShow(_ show: Show, to document: inout ProgramDocumentModel) {
         guard show.id == showID else { return }
         for slide in show.allSlides {
@@ -78,12 +87,15 @@ enum ProgramOutlinePresentation {
                 changed = true
             }
         }
+        let slidesBeforeSync = document.programSlides
         syncProgramSlides(
             in: &document,
             mediaLookup: mediaLookup,
             showLookup: showLookup,
             playlistShowLookup: playlistShowLookup
         )
+        // The sync merges too; count what it fixed so the repaired file gets saved.
+        if document.programSlides != slidesBeforeSync { changed = true }
         for index in document.rundownBlocks.indices {
             var block = document.rundownBlocks[index]
             let source = RundownBlockSlideSource.resolve(block)

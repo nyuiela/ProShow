@@ -6844,7 +6844,8 @@ final class ShowController {
         }
         let loaded = store.loadAll()
         libraryShows = loaded.isEmpty ? libraryShows : loaded
-        guard let found = libraryShows.first(where: { $0.id == id }) else { return }
+        guard var found = libraryShows.first(where: { $0.id == id }) else { return }
+        found = ProgramOutlinePresentation.currentShow(for: found, document: rundownClock.program ?? programDocument)
         clearProgramPlaylistSelection()
         show = found
         selectedSlideID = found.allSlides.first?.id
