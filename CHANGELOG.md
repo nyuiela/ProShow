@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.4 build 13 (2026-10-22)
+
+- Takes no longer stall the app. After a program cut, Next or a slide take the main thread was busy for 0.6 to 1 s, so the stream held the old or a half-drawn slide and the slide completed late. Now the longest main-thread wait after a take is under 90 ms and the new slide starts on the stream within about 40 ms.
+- Cause: every take rescanned cameras and rewrote the camera list and the main layer even when nothing changed, and each write redrew every live slide thumbnail and the on-air layer list. Those writes now happen only when something changed, warm thumbnails skip the scan, and the slide grid cells read their own selected and live state.
+- The Active on-air layer list builds its rows once per redraw and only for visible rows. Before, it rebuilt the whole list for every row and reloaded layer thumbnails from disk.
+- Because takes no longer stall, the program transition (0.5 s) now plays on the stream at every cut. Before, the stall swallowed it.
+- The stream holds the last good camera picture of a source for up to 1.5 s while a new slide's camera window waits for its first frame, instead of showing the window's fill.
+- Debug builds no longer copy themselves into /Applications. Pinning a Debug build now needs PROSHOW_PIN_DEBUG_APP=1, moves the old app to the Trash, and never replaces a signed Release app.
+- Stream and Phone audio and the mixer are unchanged.
+
 ## 0.5.3 build 12 (2026-10-22)
 
 - Program Auto: one Auto button in the program transport (workspace and float window), remembered on this Mac. With Auto on, the program cuts to the next item when its time runs out. If the prompter is still reading, the cut waits for the read to finish plus 0.75 s, and never more than 12 s past the item's time. Items with no script cut on time.
