@@ -2882,6 +2882,34 @@ final class ShowController {
     /// One copy per captured frame, shared by the Stream and Phone canvases of the same frame.
     private var liveSnapshotMemo: [ObjectIdentifier: (source: CVPixelBuffer, snapshot: CVPixelBuffer)] = [:]
 
+    /// Last good camera picture per live well source, for the encode path. On a take the new slide's
+    /// camera well can reach the compositor a frame or more before its capture buffer resolves; without a
+    /// picture the well fell through to its fill and the stream flashed a white box. Hold the last good
+    /// frame of the same source until the new one arrives (bounded so a lost camera still shows as lost).
+    @ObservationIgnored private var lastGoodLiveWellPixels: [String: (buffer: CVPixelBuffer, at: TimeInterval)] = [:]
+    private static let liveWellHoldSeconds: TimeInterval = 1.5
+
+    private static func liveWellSourceKey(_ object: CanvasObject) -> String {
+        guard let source = object.assignedSource else { return "program" }
+        let endpoint = source.connectionString?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return endpoint.isEmpty ? "id:" + source.sourceID : endpoint
+    }
+
+    private func heldLiveWellPixel(for object: CanvasObject, resolved: CVPixelBuffer?) -> CVPixelBuffer? {
+        let key = Self.liveWellSourceKey(object)
+        let now = ProcessInfo.processInfo.systemUptime
+        if let resolved {
+            lastGoodLiveWellPixels[key] = (resolved, now)
+            return resolved
+        }
+        guard let held = lastGoodLiveWellPixels[key] else { return nil }
+        guard now - held.at <= Self.liveWellHoldSeconds else {
+            lastGoodLiveWellPixels[key] = nil
+            return nil
+        }
+        return held.buffer
+    }
+
     private func liveSnapshot(_ buffer: CVPixelBuffer) -> CVPixelBuffer {
         let key = ObjectIdentifier(buffer)
         if let hit = liveSnapshotMemo[key], hit.source === buffer { return hit.snapshot }
@@ -2934,13 +2962,14 @@ final class ShowController {
                     continue
                 }
                 guard ProgramOutputComposer.needsLiveVideoPixel(for: object) else { continue }
-                if let buffer = pixelBufferForCanvasLiveObject(
+                let resolved = pixelBufferForCanvasLiveObject(
                     object,
                     programVideo: programVideo,
                     stack: stack,
                     forBroadcast: true
-                ) {
-                    pixels[object.id] = liveSnapshot(buffer)
+                ).map { liveSnapshot($0) }
+                if let buffer = heldLiveWellPixel(for: object, resolved: resolved) {
+                    pixels[object.id] = buffer
                 }
             }
         }
@@ -2967,13 +2996,14 @@ final class ShowController {
                     continue
                 }
                 guard ProgramOutputComposer.needsLiveVideoPixel(for: object) else { continue }
-                if let buffer = pixelBufferForCanvasLiveObject(
+                let resolved = pixelBufferForCanvasLiveObject(
                     object,
                     programVideo: programVideo,
                     stack: stack,
                     forBroadcast: true
-                ) {
-                    pixels[object.id] = liveSnapshot(buffer)
+                ).map { liveSnapshot($0) }
+                if let buffer = heldLiveWellPixel(for: object, resolved: resolved) {
+                    pixels[object.id] = buffer
                 }
             }
         }
