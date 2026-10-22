@@ -70,7 +70,9 @@ struct UserCompositionPanelView: View {
                 .padding(.vertical, 4)
         } else {
             ScrollView {
-                VStack(spacing: 0) {
+                // Lazy: a take replaces most rows (new slide objects), and building all ~40 rows with their
+                // buttons at once was a large part of the post-take main-thread stall. Only visible rows build.
+                LazyVStack(spacing: 0) {
                     ForEach(Array(elements.enumerated()), id: \.element.id) { index, item in
                         UserLayerRowView(
                             controller: controller,
