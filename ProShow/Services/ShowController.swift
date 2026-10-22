@@ -3511,7 +3511,11 @@ final class ShowController {
             if goLive {
                 layers[clamped].liveShotID = shot.id
             }
-            masterLayers = layers
+            // Re-taking the same camera produces identical layers. Skip the observed write so the slide
+            // grid and layer list are not invalidated on every take.
+            if layers != masterLayers {
+                masterLayers = layers
+            }
             routeAddedShot(shot, goLive: goLive)
             return shot
         }
@@ -4053,6 +4057,10 @@ final class ShowController {
             items = [discoveredLiveInput(from: source)]
         }
         guard !items.isEmpty else { return }
+        // Every live thumbnail calls this from onAppear. When its inputs are already warm (shot on the
+        // main layer and capture running) there is nothing to do; re-running the device scan for each of
+        // 37 tiles is what held the main thread after a take.
+        if items.allSatisfy({ previewCaptureIsWarm($0) }) { return }
         for item in items where item.sourceType.needsMainLayerShot {
             _ = upsertLiveShot(item, layerIndex: 0, goLive: false)
             warmLiveCaptureForPreview(item)
@@ -4077,6 +4085,23 @@ final class ShowController {
             )
         }
         return nil
+    }
+
+    /// True when a preview input already has its main-layer shot and a running capture lane.
+    private func previewCaptureIsWarm(_ item: DiscoveredSourceItem) -> Bool {
+        guard item.sourceType.needsMainLayerShot else { return true }
+        switch item.sourceType {
+        case .systemCamera, .ndiSource, .systemDisplay, .systemWindow:
+            break
+        default:
+            return false
+        }
+        guard masterLayers.indices.contains(0),
+              masterLayers[0].shots.contains(where: { !$0.isCopy && Self.sameLiveInput($0.source, item) })
+        else { return false }
+        let id = HardwareSourceIdentity.uuid(for: item.connectionString ?? item.id)
+        guard let source = videoInputs.source(id: id) else { return false }
+        return videoInputs.isRunning(endpoint: source.endpoint, sourceID: source.id.uuidString)
     }
 
     private func warmLiveCaptureForPreview(_ item: DiscoveredSourceItem) {
@@ -4648,7 +4673,7 @@ final class ShowController {
     }
 
     func renderLayerForProgramElement(_ elementID: UUID) -> RenderLayer? {
-        guard let row = programLayerRow(id: elementID) else { return nil }
+        guard let row = programLayerRowForRendering(id: elementID) else { return nil }
         switch row.target {
         case .programMedia: return .media
         case .programVideoInput: return .videoInput

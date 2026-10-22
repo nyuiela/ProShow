@@ -77,10 +77,31 @@ enum CanvasLayerStore {
         if trimmed.hasPrefix("http"), let url = URL(string: trimmed) { return nil }
         let url = URL(fileURLWithPath: trimmed)
         guard FileManager.default.fileExists(atPath: url.path) else { return nil }
-        return NSImage(contentsOf: url)
+        // Layer rows ask for this on every redraw. Decode a file once per path and modification date.
+        let stamp = (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date)?
+            .timeIntervalSince1970 ?? 0
+        let key = "\(url.path)|\(stamp)" as NSString
+        if let cached = imageCache.object(forKey: key) { return cached }
+        guard let image = NSImage(contentsOf: url) else { return nil }
+        imageCache.setObject(image, forKey: key)
+        return image
     }
 
+    private static let imageCache: NSCache<NSString, NSImage> = {
+        let cache = NSCache<NSString, NSImage>()
+        cache.countLimit = 256
+        return cache
+    }()
+
     private static func swatchThumbnail(for object: CanvasObject) -> NSImage? {
+        let key = "swatch|\(object.fillHex)" as NSString
+        if let cached = imageCache.object(forKey: key) { return cached }
+        let image = drawSwatch(for: object)
+        if let image { imageCache.setObject(image, forKey: key) }
+        return image
+    }
+
+    private static func drawSwatch(for object: CanvasObject) -> NSImage? {
         let size = NSSize(width: 28, height: 28)
         let image = NSImage(size: size)
         image.lockFocus()

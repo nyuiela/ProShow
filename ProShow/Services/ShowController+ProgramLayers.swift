@@ -40,6 +40,13 @@ extension ShowController {
         rawProgramLayerRows.first { $0.id == id }
     }
 
+    /// Same row as programLayerRow(id:), built once per main run loop turn. Each of the ~40 layer rows
+    /// asked for its own row while drawing, and every ask rebuilt all rows (thumbnails included), so one
+    /// layer list pass was O(n^2). Only for lookups that read the row kind while rendering.
+    func programLayerRowForRendering(id: UUID) -> ProgramLayerRow? {
+        ProgramLayerRowTurnCache.rows(for: self)[id]
+    }
+
     func programLayerToggleVisibility(id: UUID) {
         if isCanvasEditorPresented {
             compositionToggleVisibility(id: id)
@@ -213,5 +220,32 @@ extension ShowController {
         syncActivePropsToCompositor()
         refreshLiveStack()
         persistStudio()
+    }
+}
+
+@MainActor
+private enum ProgramLayerRowTurnCache {
+    private static var rows: [UUID: ProgramLayerRow]?
+    private static var owner: ObjectIdentifier?
+
+    static func rows(for controller: ShowController) -> [UUID: ProgramLayerRow] {
+        let key = ObjectIdentifier(controller)
+        if let rows, owner == key { return rows }
+        let built = Dictionary(
+            controller.rawProgramLayerRows.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let scheduleDrop = rows == nil
+        rows = built
+        owner = key
+        if scheduleDrop {
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    ProgramLayerRowTurnCache.rows = nil
+                    ProgramLayerRowTurnCache.owner = nil
+                }
+            }
+        }
+        return built
     }
 }

@@ -183,11 +183,17 @@ final class VideoInputEngine {
         for source in live {
             upsert(source)
         }
-        sources.removeAll { source in
-            shouldDrop(source, present: live)
+        // Write only when something is dropped. `sources` is observed by every live thumbnail and layer
+        // row; a no-op removeAll still fires willSet and invalidated the whole grid on every take.
+        if sources.contains(where: { shouldDrop($0, present: live) }) {
+            sources.removeAll { source in
+                shouldDrop(source, present: live)
+            }
         }
         let remaining = Set(sources.map(\.id))
-        sourceAliases = sourceAliases.filter { remaining.contains($0.value) }
+        if sourceAliases.values.contains(where: { !remaining.contains($0) }) {
+            sourceAliases = sourceAliases.filter { remaining.contains($0.value) }
+        }
     }
 
     @discardableResult
@@ -207,17 +213,24 @@ final class VideoInputEngine {
     }
 
     private func rememberAlias(_ incoming: UUID, stored: UUID) {
-        guard incoming != stored else { return }
+        guard incoming != stored, sourceAliases[incoming] != stored else { return }
         sourceAliases[incoming] = stored
     }
 
+    /// One observed write, and only when a field actually changed. refreshDevices() runs on every take
+    /// (goLive -> enableLiveIO) and from thumbnail onAppear; four unconditional element writes per source
+    /// each invalidated every view reading `sources` and made the post-take main-thread stall.
     private func merge(_ incoming: StudioVideoSource, into index: Int) {
-        sources[index].label = incoming.label
-        sources[index].kind = incoming.kind
+        var merged = sources[index]
+        merged.label = incoming.label
+        merged.kind = incoming.kind
         if let endpoint = incoming.endpoint, !endpoint.isEmpty {
-            sources[index].endpoint = endpoint
+            merged.endpoint = endpoint
         }
-        sources[index].enabled = incoming.enabled
+        merged.enabled = incoming.enabled
+        if merged != sources[index] {
+            sources[index] = merged
+        }
     }
 
     private func shouldDrop(_ source: StudioVideoSource, present: [StudioVideoSource]) -> Bool {
