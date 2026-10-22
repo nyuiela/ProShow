@@ -30,14 +30,46 @@ final class TeleprompterSession {
         return .play
     }
 
+    /// Words per minute the program picks for a script (fit to the item's duration). Nil: settings.
+    @ObservationIgnored var programWPMResolver: ((String) -> Int?)?
+
+    func effectiveWPM(for script: String, settings: TeleprompterSettingsStore) -> Int {
+        programWPMResolver?(script) ?? settings.baseWPM
+    }
+
+    /// True when the prompter is rolling, or rolled to the end of the current script.
+    var rolledThrough: Bool {
+        isRunning || engine.finishedAt != nil || scroll.finishedAt != nil
+    }
+
+    /// Program advance: the next item's script from the top, still rolling when asked.
+    /// Loads even when the text matches the last item, because it is a new read.
+    func loadProgramItem(script: String, settings: TeleprompterSettingsStore, keepRolling: Bool) {
+        self.script = script
+        engine.setChunkCapacity(settings.style.chunkCapacity)
+        loadedSignature = Self.signature(script: script, wpm: effectiveWPM(for: script, settings: settings), settings: settings)
+        engine.load(script: script, baseWPM: effectiveWPM(for: script, settings: settings), pacing: settings.style.scriptPacing)
+        engine.setChunkCapacity(settings.style.chunkCapacity)
+        scroll.reset()
+        guard keepRolling, !script.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        switch settings.promptEngine {
+        case .kinetic:
+            engine.start()
+        case .scroll:
+            scroll.speedPointsPerSecond = settings.scrollSpeed
+            scroll.start()
+        }
+    }
+
     func loadIfNeeded(script: String, settings: TeleprompterSettingsStore) {
-        let signature = Self.signature(script: script, settings: settings)
+        let wpm = effectiveWPM(for: script, settings: settings)
+        let signature = Self.signature(script: script, wpm: wpm, settings: settings)
         self.script = script
         engine.setChunkCapacity(settings.style.chunkCapacity)
         guard signature != loadedSignature else { return }
         let wasRunning = engine.isRunning
         loadedSignature = signature
-        engine.load(script: script, baseWPM: settings.baseWPM, pacing: settings.style.scriptPacing)
+        engine.load(script: script, baseWPM: wpm, pacing: settings.style.scriptPacing)
         engine.setChunkCapacity(settings.style.chunkCapacity)
         scroll.reset()
         if wasRunning, settings.promptEngine == .kinetic {
@@ -112,11 +144,11 @@ final class TeleprompterSession {
         return true
     }
 
-    private static func signature(script: String, settings: TeleprompterSettingsStore) -> String {
+    private static func signature(script: String, wpm: Int, settings: TeleprompterSettingsStore) -> String {
         let style = settings.style
         return [
             script,
-            String(settings.baseWPM),
+            String(wpm),
             String(style.lineBreakPause),
             String(style.tagPause),
             String(style.longTagPause),

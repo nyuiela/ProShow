@@ -8,6 +8,8 @@ final class KineticEngine {
     private(set) var words: [SpokenWord] = []
     private(set) var activeIndex: Int = 0
     private(set) var isRunning = false
+    /// When the playhead ran off the end of the script while rolling. Cleared by load, reset and seek.
+    private(set) var finishedAt: Date?
     private(set) var lines: [KineticLine] = []
     private(set) var lineWindow = KineticLineWindow(startLine: 0, visibleCount: 5)
     /// True while voice tracking is delaying the WPM floor advance.
@@ -78,6 +80,7 @@ final class KineticEngine {
         pause()
         words = ScriptTokenizer.tokenize(body, baseWPM: baseWPM, pacing: pacing)
         activeIndex = 0
+        finishedAt = nil
         rebuildLines()
         refitVisibleLines()
         lineWindow = KineticLineWindow(startLine: 0, visibleCount: fittedVisibleLines)
@@ -155,6 +158,7 @@ final class KineticEngine {
     func reset() {
         pause()
         activeIndex = 0
+        finishedAt = nil
         refitVisibleLines()
         lineWindow = KineticLineWindow(startLine: 0, visibleCount: fittedVisibleLines)
             .clamped(totalLines: lines.count)
@@ -163,6 +167,7 @@ final class KineticEngine {
     func seek(to index: Int) {
         guard !words.isEmpty else { return }
         activeIndex = min(max(0, index), words.count)
+        if activeIndex < words.count { finishedAt = nil }
         voiceHoldActive = false
         reconcileWindow()
         if isRunning {
@@ -208,6 +213,7 @@ final class KineticEngine {
             self.reconcileWindow()
             if self.activeIndex >= self.words.count {
                 self.isRunning = false
+                self.finishedAt = Date()
                 return
             }
             self.scheduleAdvance()

@@ -1,6 +1,8 @@
 import Foundation
 
 extension ShowController {
+    static let rundownAutoAdvanceKey = "proshow.rundown.autoAdvance"
+
     func configureRundownEngine() {
         rundownClock.onStageCue = { [weak self] message, flash in
             guard let self else { return }
@@ -9,6 +11,146 @@ extension ShowController {
         rundownClock.onBlockStarted = { [weak self] block in
             self?.executeRundownBlock(block)
         }
+        rundownClock.autoAdvanceEnabled = UserDefaults.standard.bool(forKey: Self.rundownAutoAdvanceKey)
+        rundownClock.scriptStateProvider = { block in
+            ShowController.promptScriptState(for: block, session: .shared, settings: .shared)
+        }
+        TeleprompterSession.shared.programWPMResolver = { [weak self] script in
+            self?.programPromptWPM(for: script)
+        }
+    }
+
+    /// Auto on/off, kept across launches.
+    var rundownAutoAdvance: Bool {
+        get { rundownClock.autoAdvanceEnabled }
+        set {
+            rundownClock.autoAdvanceEnabled = newValue
+            UserDefaults.standard.set(newValue, forKey: Self.rundownAutoAdvanceKey)
+            StageCueController.syncStageRundownOverlay(controller: self)
+        }
+    }
+
+    func toggleRundownAutoAdvance() {
+        rundownAutoAdvance.toggle()
+    }
+
+    /// Hold freezes the item clock and auto-advance. Press again to resume.
+    func toggleRundownHold() {
+        rundownClock.toggleHold()
+        StageCueController.syncStageRundownOverlay(controller: self)
+    }
+
+    /// +30 s on the live item.
+    func extendRundownBlock() {
+        rundownClock.extendActiveBlock()
+        StageCueController.syncStageRundownOverlay(controller: self)
+    }
+
+    /// Space in the program: resumes a Hold, otherwise Next.
+    func rundownSpaceAction() {
+        if rundownClock.isShowRunning, rundownClock.isHeld {
+            toggleRundownHold()
+        } else {
+            advanceRundownBlock()
+        }
+    }
+
+    /// What the prompter says about this item's script, for the auto-advance guard.
+    static func promptScriptState(
+        for block: RundownBlock,
+        session: TeleprompterSession,
+        settings: TeleprompterSettingsStore
+    ) -> RundownScriptState {
+        let body = block.scriptBody
+        guard !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, session.script == body else { return .none }
+        switch settings.promptEngine {
+        case .kinetic:
+            if let at = session.engine.finishedAt { return .finished(at: at) }
+            if session.engine.isRunning || session.engine.activeIndex > 0 { return .reading }
+        case .scroll:
+            if let at = session.scroll.finishedAt { return .finished(at: at) }
+            if session.scroll.isRunning || session.scroll.offset > 2 { return .reading }
+        }
+        // Loaded but never started: the prompter is not in use, so the duration rules.
+        return .none
+    }
+
+    /// Fit-to-duration words per minute for a program script, or nil to use the prompter's own.
+    func programPromptWPM(for script: String) -> Int? {
+        let doc = rundownClock.program ?? programDocument
+        let blocks = doc.rundownBlocks
+        let preferred = [rundownClock.activeBlockIndex, rundownFocusedBlockIndex].compactMap { $0 }
+        let block = preferred.compactMap { blocks.indices.contains($0) && blocks[$0].scriptBody == script ? blocks[$0] : nil }.first
+            ?? blocks.first(where: { $0.scriptBody == script })
+        guard let block else { return nil }
+        let settings = TeleprompterSettingsStore.shared
+        // The planned length only: +30 s must not change the speed of a script already rolling.
+        return ProgramPromptPacing.wpm(for: block, plannedSeconds: block.plannedDurationSeconds, baseWPM: settings.baseWPM, pacing: settings.style.scriptPacing)
+    }
+
+    /// Every program advance (Next, auto, float window, double-click, start) lands here first:
+    /// follow the item in the outline and the prompter, and keep the prompter rolling.
+    func continueProgramPrompter(for block: RundownBlock) {
+        let doc = rundownClock.program ?? programDocument
+        if let index = doc.rundownBlocks.firstIndex(where: { $0.id == block.id }) {
+            rundownFocusedBlockIndex = index
+        }
+        let session = TeleprompterSession.shared
+        let keepRolling = session.rolledThrough || rundownClock.autoAdvanceEnabled
+        session.loadProgramItem(script: block.scriptBody, settings: .shared, keepRolling: keepRolling)
+    }
+
+    /// Decodes the next item's design images so its cut does not wait on disk. Pages are prefetched
+    /// by `prefetchRundownPageFrames`. Media and cameras are not preloaded (they start capture and audio).
+    func preloadNextRundownItem(after block: RundownBlock) {
+        let doc = rundownClock.program ?? programDocument
+        guard let index = doc.rundownBlocks.firstIndex(where: { $0.id == block.id }) else { return }
+        // A skip leaves the last preload unused: drop what the live item does not share.
+        let livePaths = Set(rundownImagePaths(for: block, in: doc))
+        let stale = rundownPreloadedPaths.subtracting(livePaths)
+        if !stale.isEmpty, rundownPreloadedBlockID != block.id {
+            for path in stale { DecodedImageCache.shared.remove(atPath: path, maxLongSide: nil) }
+        }
+        rundownPreloadedPaths = []
+        rundownPreloadedBlockID = nil
+        let nextIndex = rundownClock.autoAdvanceEnabled
+            ? RundownAutoAdvanceRules.nextAutoIndex(after: index, in: doc.rundownBlocks)
+            : (index + 1 < doc.rundownBlocks.count ? index + 1 : nil)
+        guard let nextIndex else { return }
+        let next = doc.rundownBlocks[nextIndex]
+        let paths = rundownImagePaths(for: next, in: doc).filter { !livePaths.contains($0) }
+        rundownPreloadedBlockID = next.id
+        rundownPreloadedPaths = Set(paths.filter { !DecodedImageCache.shared.contains(atPath: $0, maxLongSide: nil) })
+        guard !paths.isEmpty else { return }
+        DispatchQueue.global(qos: .utility).async {
+            for path in paths { _ = DecodedImageCache.shared.image(atPath: path, maxLongSide: nil) }
+        }
+    }
+
+    /// Design image files on an item's program slide, resolved the way the program composite reads them.
+    func rundownImagePaths(for block: RundownBlock, in doc: ProgramDocumentModel) -> [String] {
+        guard let slideID = doc.rundownBlocks.first(where: { $0.id == block.id })?.programSlideID ?? block.programSlideID,
+              let slide = doc.programSlides.first(where: { $0.id == slideID })
+        else { return [] }
+        var paths: [String] = []
+        for object in slide.canvas {
+            if object.isTextLike || object.kind.isBrowserLike { continue }
+            if let path = object.assignedSource?.connectionString, !path.isEmpty,
+               path.hasPrefix("/") || path.hasPrefix("~"),
+               !AssignedMediaSource.pathLooksLikeVideo(path) {
+                paths.append(path)
+            }
+            guard object.fill.type == .image else { continue }
+            let raw = object.fill.imageURI.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !raw.isEmpty, !AssignedMediaSource.pathLooksLikeVideo(raw) else { continue }
+            #if os(macOS)
+            paths.append(MediaPath.resolve(raw)?.path ?? raw)
+            #else
+            paths.append(raw)
+            #endif
+        }
+        var seen = Set<String>()
+        return paths.filter { seen.insert($0).inserted }
     }
 
     func loadProgramDocument(_ model: ProgramDocumentModel, url: URL? = nil) {
@@ -200,6 +342,7 @@ extension ShowController {
     }
 
     func executeRundownBlock(_ block: RundownBlock) {
+        continueProgramPrompter(for: block)
         StageCueController.clearStageMessage(controller: self)
         let program = rundownClock.program ?? programDocument
 
@@ -229,7 +372,9 @@ extension ShowController {
         }
 
         applyRundownPicture(block)
+        rundownLastCutAt = Date()
         prefetchRundownPageFrames(after: block)
+        preloadNextRundownItem(after: block)
         StageCueController.syncStageRundownOverlay(controller: self)
         tickProgram()
     }

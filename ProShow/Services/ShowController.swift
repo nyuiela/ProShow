@@ -315,6 +315,11 @@ final class ShowController {
     var rundownStageSegmentTitle: String?
     var rundownStageCountdownText: String?
     var rundownStageNextCue: String?
+    /// Design images decoded ahead for the next outline item; dropped if that item is skipped.
+    @ObservationIgnored var rundownPreloadedPaths: Set<String> = []
+    @ObservationIgnored var rundownPreloadedBlockID: UUID?
+    /// When the last program cut was taken (clock advance, Next or jump).
+    @ObservationIgnored var rundownLastCutAt: Date?
     var isGoLiveSetupPresented = false
     var isProvisioningStreams = false
     var broadcastMetadata = BroadcastMetadata.default

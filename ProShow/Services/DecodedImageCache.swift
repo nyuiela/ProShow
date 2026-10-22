@@ -23,6 +23,19 @@ final class DecodedImageCache: @unchecked Sendable {
     private var checkedAt: [NSString: TimeInterval] = [:]
     private static let recheckInterval: TimeInterval = 1
 
+    /// Drops one decoded image, for preloads that were skipped.
+    func remove(atPath path: String, maxLongSide: Int?) {
+        let key = "\(path)#\(maxLongSide ?? 0)" as NSString
+        cache.removeObject(forKey: key)
+        checkLock.lock()
+        checkedAt[key] = nil
+        checkLock.unlock()
+    }
+
+    func contains(atPath path: String, maxLongSide: Int?) -> Bool {
+        cache.object(forKey: "\(path)#\(maxLongSide ?? 0)" as NSString) != nil
+    }
+
     func image(atPath path: String, maxLongSide: Int?) -> CGImage? {
         let key = "\(path)#\(maxLongSide ?? 0)" as NSString
         let now = ProcessInfo.processInfo.systemUptime
