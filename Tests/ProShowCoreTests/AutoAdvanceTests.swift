@@ -391,5 +391,13 @@ struct AutoAdvanceTests {
         #expect(RemoteControlBridge.parseMIDI(status: 0x90, data1: 62, data2: 100) == .programNext)
         #expect(RemoteControlBridge.parseMIDI(status: 0x90, data1: 63, data2: 100) == .programPrevious)
         #expect(RemoteControlBridge.parseMIDI(status: 0x90, data1: 64, data2: 100) == .programHold)
+        // The HTTP server lets these through before the bridge parses them.
+        for route in ["next", "prev", "previous", "hold", "extend", "auto"] {
+            #expect(ControlHTTP.allowedMethod(for: "/v1/program/\(route)", method: "POST"))
+            #expect(!ControlHTTP.allowedMethod(for: "/v1/program/\(route)", method: "GET"))
+        }
+        #expect(ControlHTTP.allowedMethod(for: "/v1/program/status", method: "GET"))
+        #expect(ControlHTTP.allowedMethod(for: "/v1/program/status", method: "POST"))
+        #expect(ControlHTTP.allowedMethod(for: "/v1/slide/next", method: "POST"))
     }
 }

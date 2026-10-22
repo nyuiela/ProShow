@@ -83,6 +83,13 @@ enum ControlHTTP {
         if parts == ["v1", "chat", "feature"] {
             return method == "POST" || method == "GET"
         }
+        if parts == ["v1", "program", "status"] {
+            return method == "POST" || method == "GET"
+        }
+        if parts.count == 3, parts[0] == "v1", parts[1] == "program",
+           ["next", "prev", "previous", "hold", "extend", "auto"].contains(parts[2]) {
+            return method == "POST"
+        }
         if parts == ["v1", "chat", "overlay"]
             || parts == ["v1", "slides", "trigger"]
             || parts == ["v1", "slide", "next"]
