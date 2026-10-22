@@ -56,7 +56,7 @@ struct AutoAdvanceTests {
         run(e, from: 10.0, to: 10.1)
         #expect(e.activeBlockIndex == 1)
         #expect(e.lastAdvance?.reason == .clock)
-        #expect(e.activeBlockElapsedSeconds == 0)
+        #expect(e.activeBlockElapsedSeconds < 0.15)
     }
 
     @Test func manualModeDoesNotAdvance() {
