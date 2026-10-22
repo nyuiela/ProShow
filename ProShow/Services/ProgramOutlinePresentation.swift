@@ -204,7 +204,11 @@ enum ProgramOutlinePresentation {
         case .camera:
             let hadStaleBrowser = stored.canvas.contains { $0.kind.isBrowserLike }
             stored.canvas.removeAll { $0.kind.isBrowserLike }
-            stored.backgroundEnabled = built.backgroundEnabled
+            stored.backgroundEnabled = cameraRowBackgroundEnabled(
+                stored: stored,
+                built: built,
+                hadStaleBrowser: hadStaleBrowser
+            )
             // A camera row that still has a leftover browser and no input gets the
             // input back. A rectangle the operator deleted stays deleted.
             if hadStaleBrowser,
@@ -219,6 +223,20 @@ enum ProgramOutlinePresentation {
         case .blank, .playlistItem, .presentationSlide:
             break
         }
+    }
+
+    /// A camera row keeps the background its canvas was authored with. The primary Stream board
+    /// is what the editor shows, so it wins; a bare legacy browser row takes the camera template's.
+    /// Before, every reopen forced the template's `false`, and the stream then dropped full-frame
+    /// design layers and the background colour while the editor still showed them.
+    static func cameraRowBackgroundEnabled(stored: Slide, built: Slide, hadStaleBrowser: Bool) -> Bool {
+        if let primary = stored.editorCanvases.first(where: \.isPrimary) {
+            return primary.backgroundEnabled
+        }
+        if hadStaleBrowser, stored.canvas.allSatisfy({ $0.kind == .videoInput }) {
+            return built.backgroundEnabled
+        }
+        return stored.backgroundEnabled
     }
 
     private static func buildProgramSlide(
