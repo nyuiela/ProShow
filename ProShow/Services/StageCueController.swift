@@ -24,8 +24,7 @@ enum StageCueController {
             return
         }
         controller.rundownStageSegmentTitle = block.title
-        let remaining = max(0, clock.activeBlockRemainingSeconds)
-        controller.rundownStageCountdownText = ProgramTimecode.format(remaining)
+        controller.rundownStageCountdownText = clock.liveCountdownText
         controller.rundownStageNextCue = clock.upcomingTalentCueText
         if let message = clock.currentStageMessage, !message.isEmpty {
             controller.stageAlertBanner = message

@@ -37,7 +37,7 @@ final class RundownClockEngine {
     /// Never hold an auto cut more than this past the planned end, even if the script is unread.
     static let scriptCapSeconds: TimeInterval = 12
     static let extendStepSeconds: TimeInterval = 30
-    static let tickInterval: TimeInterval = 0.05
+    static let tickInterval: TimeInterval = 0.1
 
     private(set) var program: ProgramDocumentModel?
     private(set) var activeBlockIndex: Int?
@@ -212,6 +212,20 @@ final class RundownClockEngine {
         previousRemaining = activeBlockRemainingSeconds
     }
 
+    /// Countdown for the live row and the stage: "0:12", "+0:05" past the end, "HOLD 0:12" while held.
+    var liveCountdownText: String {
+        Self.countdownText(remaining: activeBlockRemainingSeconds, held: isHeld)
+    }
+
+    static func countdownText(remaining: TimeInterval, held: Bool) -> String {
+        let over = remaining < 0
+        // Count up past the end; round the countdown up so 0:00 is the cut.
+        let seconds = over ? Int((-remaining).rounded(.down)) : Int(remaining.rounded(.up))
+        let body = String(format: "%d:%02d", seconds / 60, seconds % 60)
+        let text = over ? "+" + body : body
+        return held ? "HOLD " + text : text
+    }
+
     // MARK: - Clock
 
     private func advance(reason: RundownAdvanceReason, dueAt: Date?, now: Date) {
@@ -262,7 +276,7 @@ final class RundownClockEngine {
         if let timer { RunLoop.main.add(timer, forMode: .common) }
     }
 
-    /// One clock step. The live timer calls this at 20 Hz; tests call it with their own times.
+    /// One clock step. The live timer calls this at 10 Hz (cuts land on time through a one-shot); tests call it with their own times.
     func tick(now: Date = Date()) {
         guard isShowRunning, var program, let idx = activeBlockIndex, program.rundownBlocks.indices.contains(idx) else { return }
         let block = program.rundownBlocks[idx]

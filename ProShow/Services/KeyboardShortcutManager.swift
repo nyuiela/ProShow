@@ -335,7 +335,7 @@ final class KeyboardShortcutManager {
             controller.requestDeskDestructiveConfirm(.emergencyClearAll)
         case .advance:
             if controller.operatorMode == .rundown, controller.rundownClock.isShowRunning {
-                controller.advanceRundownBlock()
+                controller.rundownSpaceAction()
             } else {
                 controller.advance()
             }

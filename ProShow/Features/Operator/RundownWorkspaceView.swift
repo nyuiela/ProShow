@@ -336,13 +336,14 @@ struct RundownWorkspaceView: View {
         _ symbol: String,
         label: String,
         enabled: Bool = true,
+        active: Bool = false,
         shortcut: KeyEquivalent? = nil,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(DeskControlSize.regular.iconFont)
-                .foregroundStyle(ProShowTheme.toolbarIcon)
+                .foregroundStyle(active ? ProShowTheme.accent : ProShowTheme.toolbarIcon)
                 .frame(width: DeskLayout.hit, height: DeskLayout.hit)
                 .contentShape(Rectangle())
         }
@@ -404,10 +405,16 @@ struct RundownWorkspaceView: View {
                 .font(DeskType.mono)
                 .foregroundStyle(isActive ? Color.white.opacity(0.9) : RundownChrome.mutedLabel)
                 .frame(width: 64, alignment: .trailing)
-            Text(RundownFormat.duration(block.plannedDurationSeconds))
-                .font(DeskType.mono)
-                .foregroundStyle(quiet)
-                .frame(width: 72, alignment: .trailing)
+            Group {
+                if isActive {
+                    RundownLiveCountdown(clock: clock, font: DeskType.mono, color: Color.white)
+                } else {
+                    Text(RundownFormat.duration(block.plannedDurationSeconds))
+                        .font(DeskType.mono)
+                        .foregroundStyle(quiet)
+                }
+            }
+            .frame(width: 72, alignment: .trailing)
             Group {
                 if block.linkedPresentationSlideID != nil {
                     Image(systemName: "link")
@@ -474,10 +481,29 @@ struct RundownWorkspaceView: View {
                     clock.stopShow()
                     controller.refreshRundownTick()
                 }
-                rundownIcon("forward.end.fill", label: "Next block", shortcut: .space) {
-                    controller.advanceRundownBlock()
-                    if let next = clock.activeBlockIndex { selectedBlockIndex = next }
+                rundownIcon(clock.isHeld ? "play.circle" : "pause.circle", label: clock.isHeld ? "Resume" : "Hold", active: clock.isHeld) {
+                    controller.toggleRundownHold()
                 }
+                rundownIcon("goforward.30", label: "Add 30 seconds") {
+                    controller.extendRundownBlock()
+                }
+                rundownIcon("forward.end.fill", label: "Next block") {
+                    controller.advanceRundownBlock()
+                }
+                // Space: resume a Hold, otherwise Next.
+                Button("") { controller.rundownSpaceAction() }
+                    .keyboardShortcut(.space, modifiers: [])
+                    .buttonStyle(.plain)
+                    .frame(width: 0, height: 0)
+                    .opacity(0)
+                    .accessibilityHidden(true)
+            }
+            rundownIcon(
+                controller.rundownAutoAdvance ? "a.circle.fill" : "a.circle",
+                label: controller.rundownAutoAdvance ? "Auto on" : "Auto off",
+                active: controller.rundownAutoAdvance
+            ) {
+                controller.toggleRundownAutoAdvance()
             }
 
             Spacer()
@@ -569,6 +595,22 @@ struct RundownWorkspaceView: View {
         }
     }
     #endif
+}
+
+/// The live item's countdown. Its own view, so only this text redraws as the clock ticks.
+struct RundownLiveCountdown: View {
+    let clock: RundownClockEngine
+    var font: Font
+    var color: Color
+
+    var body: some View {
+        let text = clock.liveCountdownText
+        Text(text)
+            .font(font)
+            .monospacedDigit()
+            .foregroundStyle(clock.activeBlockRemainingSeconds < 0 || clock.isHeld ? ProShowTheme.liveRed : color)
+            .accessibilityLabel(clock.isHeld ? "Held, \(text)" : "Remaining \(text)")
+    }
 }
 
 private struct RundownKeyShortcut: ViewModifier {

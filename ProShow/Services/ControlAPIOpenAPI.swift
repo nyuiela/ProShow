@@ -104,10 +104,14 @@ enum ControlAPIOpenAPI {
         <li><code>clear_layer</code> — GET /v1/clear/layer/{layer}</li>
         <li><code>switch_scene</code> — POST /v1/scenes/{id}/trigger</li>
         <li><code>trigger_macro</code> — GET /v1/macro/{id}/trigger</li>
+        <li><code>program_next</code>, <code>program_prev</code>, <code>program_hold</code>, <code>program_extend</code>: POST /v1/program/next, /prev, /hold, /extend</li>
+        <li><code>program_auto</code>: POST /v1/program/auto with {"enabled": true} or no body to toggle</li>
+        <li>OSC /proshow/program/next, /prev, /hold, /extend, /auto [0|1]. MIDI note on 62 next, 63 prev, 64 hold, 65 +30 s</li>
         </ul>
         <strong>Feedback</strong>
         <ul>
         <li><code>is_streaming</code> · <code>is_recording</code> · <code>active_slide_index</code> via GET /v1/status</li>
+        <li><code>remaining</code> · <code>held</code> · <code>auto</code> · <code>stopped_at_item</code> via GET /v1/program/status</li>
         <li><code>preflight</code> — GET /v1/preflight · <code>slide_next</code> — POST /v1/slide/next</li>
         </ul>
         </div>
@@ -139,6 +143,12 @@ enum ControlAPIOpenAPI {
             "/v1/ai/agent/tools": get("Agent tool catalog. Operator-gated tools never run."),
             "/v1/ai/agent/events": get("Last 100 agent events with seq for the desk."),
             "/v1/slides/trigger": post("trigger_slide_index — body {presentation_id, index}", "TriggerSlide"),
+            "/v1/program/next": post("Program outline: Next (skip to the next item now, held or not)."),
+            "/v1/program/prev": post("Program outline: Previous item on air."),
+            "/v1/program/hold": post("Program outline: Hold toggle. Freezes the item clock and auto-advance. 409 when the show is not running."),
+            "/v1/program/extend": post("Program outline: add 30 s to the live item. 409 when the show is not running."),
+            "/v1/program/auto": post("Program outline: Auto on or off. Body {enabled: true|false}; no body toggles."),
+            "/v1/program/status": get("Program outline clock: active item, remaining, held, auto, stop item, prompter, last cuts with due and cut times."),
             "/v1/clear/layer/{layer}": get("clear_layer — slide, media, props, all, …"),
             "/v1/scenes": get("List scenes."),
             "/v1/scenes/{scene_id}/trigger": [

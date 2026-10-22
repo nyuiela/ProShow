@@ -100,6 +100,26 @@ extension ShowController {
         session.loadProgramItem(script: block.scriptBody, settings: .shared, keepRolling: keepRolling)
     }
 
+    private func noteRundownCut(block: RundownBlock, cutAt: Date) {
+        let doc = rundownClock.program ?? programDocument
+        var entry: [String: Any] = [
+            "index": doc.rundownBlocks.firstIndex(where: { $0.id == block.id }) as Any? ?? NSNull(),
+            "title": block.title,
+            "cut_at": cutAt.timeIntervalSince1970,
+            "prompter_running": TeleprompterSession.shared.isRunning,
+        ]
+        if let last = rundownClock.lastAdvance, last.toIndex == entry["index"] as? Int {
+            entry["reason"] = last.reason.rawValue
+            entry["fired_at"] = last.firedAt.timeIntervalSince1970
+            if let due = last.dueAt {
+                entry["due_at"] = due.timeIntervalSince1970
+                entry["cut_late_ms"] = (cutAt.timeIntervalSince(due) * 1000).rounded()
+            }
+        }
+        rundownCutLog.append(entry)
+        if rundownCutLog.count > 64 { rundownCutLog.removeFirst(rundownCutLog.count - 64) }
+    }
+
     /// Decodes the next item's design images so its cut does not wait on disk. Pages are prefetched
     /// by `prefetchRundownPageFrames`. Media and cameras are not preloaded (they start capture and audio).
     func preloadNextRundownItem(after block: RundownBlock) {
@@ -372,7 +392,9 @@ extension ShowController {
         }
 
         applyRundownPicture(block)
-        rundownLastCutAt = Date()
+        let cutAt = Date()
+        rundownLastCutAt = cutAt
+        noteRundownCut(block: block, cutAt: cutAt)
         prefetchRundownPageFrames(after: block)
         preloadNextRundownItem(after: block)
         StageCueController.syncStageRundownOverlay(controller: self)

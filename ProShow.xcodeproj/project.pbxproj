@@ -392,6 +392,7 @@
 		C7R100000000000000000003 /* ProgramAudioMonitorBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7R200000000000000000003 /* ProgramAudioMonitorBridge.swift */; };
 		C8F100000000000000000001 /* OutlineScriptCompiler.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F200000000000000000001 /* OutlineScriptCompiler.swift */; };
 		C8F100000000000000000002 /* OutlineScriptCompilerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F200000000000000000002 /* OutlineScriptCompilerTests.swift */; };
+		AA0D0A000000000000000001 /* AutoAdvanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0D0A000000000000000002 /* AutoAdvanceTests.swift */; };
 		C8F311000000000000000001 /* PromptColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F321000000000000000001 /* PromptColor.swift */; };
 		C8F311000000000000000002 /* ScriptPauseKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F321000000000000000002 /* ScriptPauseKind.swift */; };
 		C8F311000000000000000003 /* VocalStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F321000000000000000003 /* VocalStyle.swift */; };
@@ -820,6 +821,7 @@
 		C7R200000000000000000003 /* ProgramAudioMonitorBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramAudioMonitorBridge.swift; sourceTree = "<group>"; };
 		C8F200000000000000000001 /* OutlineScriptCompiler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutlineScriptCompiler.swift; sourceTree = "<group>"; };
 		C8F200000000000000000002 /* OutlineScriptCompilerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutlineScriptCompilerTests.swift; sourceTree = "<group>"; };
+		AA0D0A000000000000000002 /* AutoAdvanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoAdvanceTests.swift; sourceTree = "<group>"; };
 		C8F321000000000000000001 /* PromptColor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Teleprompter/PromptColor.swift; sourceTree = "<group>"; };
 		C8F321000000000000000002 /* ScriptPauseKind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Teleprompter/ScriptPauseKind.swift; sourceTree = "<group>"; };
 		C8F321000000000000000003 /* VocalStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Teleprompter/VocalStyle.swift; sourceTree = "<group>"; };
@@ -1341,6 +1343,7 @@
 				A2T00000000000000000000B /* StreamingEngineTests.swift */,
 				C7E4B2000000000000000001 /* EncoderPresetStoreTests.swift */,
 				C8F200000000000000000002 /* OutlineScriptCompilerTests.swift */,
+				AA0D0A000000000000000002 /* AutoAdvanceTests.swift */,
 				C8F32100000000000000000F /* ScriptTokenizerTests.swift */,
 				A2T00000000000000000000C /* PresentationImportTests.swift */,
 				A2T00000000000000000000D /* ParityTests.swift */,
@@ -1895,6 +1898,7 @@
 				A1T00000000000000000000B /* StreamingEngineTests.swift in Sources */,
 				C7E4B1000000000000000001 /* EncoderPresetStoreTests.swift in Sources */,
 				C8F100000000000000000002 /* OutlineScriptCompilerTests.swift in Sources */,
+				AA0D0A000000000000000001 /* AutoAdvanceTests.swift in Sources */,
 				C8F31100000000000000000F /* ScriptTokenizerTests.swift in Sources */,
 				A1T00000000000000000000C /* PresentationImportTests.swift in Sources */,
 				A1T00000000000000000000D /* ParityTests.swift in Sources */,
@@ -2007,7 +2011,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = ProShow/ProShow.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -2034,7 +2038,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.5.2;
+				MARKETING_VERSION = 0.5.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.kaleel.proshow;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -2056,7 +2060,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = ProShow/ProShow.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -2083,7 +2087,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.5.2;
+				MARKETING_VERSION = 0.5.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.kaleel.proshow;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -2106,7 +2110,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.5.2;
+				MARKETING_VERSION = 0.5.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.kaleel.proshow.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -2126,7 +2130,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.5.2;
+				MARKETING_VERSION = 0.5.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.kaleel.proshow.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;

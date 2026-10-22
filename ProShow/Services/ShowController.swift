@@ -320,6 +320,8 @@ final class ShowController {
     @ObservationIgnored var rundownPreloadedBlockID: UUID?
     /// When the last program cut was taken (clock advance, Next or jump).
     @ObservationIgnored var rundownLastCutAt: Date?
+    /// Last program cuts (newest last, at most 64) for GET /v1/program/status.
+    @ObservationIgnored var rundownCutLog: [[String: Any]] = []
     var isGoLiveSetupPresented = false
     var isProvisioningStreams = false
     var broadcastMetadata = BroadcastMetadata.default

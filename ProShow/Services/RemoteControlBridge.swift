@@ -10,6 +10,13 @@ enum RemoteControlCommand: Hashable, Sendable {
     case switchCamera(sourceID: String)
     case preflight
     case status
+    /// `.program` outline: Next (skip), Previous, Hold toggle, +30 s, Auto on/off/toggle, state.
+    case programNext
+    case programPrevious
+    case programHold
+    case programExtend
+    case programAuto(Bool?)
+    case programStatus
 }
 
 struct MIDIControlBinding: Hashable, Codable, Sendable {
@@ -25,6 +32,10 @@ struct MIDIControlMap: Hashable, Codable, Sendable {
         MIDIControlBinding(status: 0x90, data1: 60, command: "slide.next"),
         MIDIControlBinding(status: 0x90, data1: 61, command: "slide.prev"),
         MIDIControlBinding(status: 0xB0, data1: 7, command: "audio.mute"),
+        MIDIControlBinding(status: 0x90, data1: 62, command: "program.next"),
+        MIDIControlBinding(status: 0x90, data1: 63, command: "program.prev"),
+        MIDIControlBinding(status: 0x90, data1: 64, command: "program.hold"),
+        MIDIControlBinding(status: 0x90, data1: 65, command: "program.extend"),
     ])
 }
 
@@ -52,6 +63,18 @@ enum RemoteControlBridge {
             return .preflight
         case "status":
             return .status
+        case "program/next":
+            return .programNext
+        case "program/prev", "program/previous":
+            return .programPrevious
+        case "program/hold":
+            return .programHold
+        case "program/extend":
+            return .programExtend
+        case "program/auto":
+            return .programAuto(arguments.first.flatMap(Self.flag))
+        case "program/status":
+            return .programStatus
         default:
             break
         }
@@ -78,6 +101,14 @@ enum RemoteControlBridge {
             return .muteAudio(channel: nil, muted: data2 < 64)
         case "preflight":
             return data2 > 0 ? .preflight : nil
+        case "program.next":
+            return data2 > 0 ? .programNext : nil
+        case "program.prev":
+            return data2 > 0 ? .programPrevious : nil
+        case "program.hold":
+            return data2 > 0 ? .programHold : nil
+        case "program.extend":
+            return data2 > 0 ? .programExtend : nil
         default:
             return nil
         }
@@ -97,6 +128,19 @@ enum RemoteControlBridge {
             }
             if parts == ["v1", "telemetry"] || parts == ["v1", "ws"] {
                 return .status
+            }
+            if parts == ["v1", "program", "status"] {
+                return .programStatus
+            }
+        }
+        if method == "POST" {
+            switch parts {
+            case ["v1", "program", "next"]: return .programNext
+            case ["v1", "program", "prev"], ["v1", "program", "previous"]: return .programPrevious
+            case ["v1", "program", "hold"]: return .programHold
+            case ["v1", "program", "extend"]: return .programExtend
+            case ["v1", "program", "auto"]: return .programAuto(body["enabled"].flatMap(Self.flag))
+            default: break
             }
         }
         if method == "POST", parts == ["v1", "audio", "mute"] {
@@ -142,7 +186,82 @@ enum RemoteControlBridge {
             return (200, ControlJSON.encode(report.jsonObject))
         case .status:
             return (200, ControlJSON.encode(telemetryJSON(controller)))
+        case .programNext:
+            controller.takeAdjacentRundownBlockLive(by: 1)
+            return (200, ControlJSON.encode(programJSON(controller, action: "program_next")))
+        case .programPrevious:
+            controller.takeAdjacentRundownBlockLive(by: -1)
+            return (200, ControlJSON.encode(programJSON(controller, action: "program_prev")))
+        case .programHold:
+            guard controller.rundownClock.isShowRunning else {
+                return (409, ControlJSON.encode(programJSON(controller, action: "program_hold", ok: false)))
+            }
+            controller.toggleRundownHold()
+            return (200, ControlJSON.encode(programJSON(controller, action: "program_hold")))
+        case .programExtend:
+            guard controller.rundownClock.isShowRunning else {
+                return (409, ControlJSON.encode(programJSON(controller, action: "program_extend", ok: false)))
+            }
+            controller.extendRundownBlock()
+            return (200, ControlJSON.encode(programJSON(controller, action: "program_extend")))
+        case .programAuto(let enabled):
+            controller.rundownAutoAdvance = enabled ?? !controller.rundownAutoAdvance
+            return (200, ControlJSON.encode(programJSON(controller, action: "program_auto")))
+        case .programStatus:
+            return (200, ControlJSON.encode(programJSON(controller, action: "program_status")))
         }
+    }
+
+    static func flag(_ raw: String) -> Bool? {
+        switch raw.lowercased() {
+        case "1", "true", "on", "yes": true
+        case "0", "false", "off", "no": false
+        default: nil
+        }
+    }
+
+    /// Read-only `.program` clock state for remotes and tests. Times are Unix seconds.
+    @MainActor
+    static func programJSON(_ controller: ShowController, action: String, ok: Bool = true) -> [String: Any] {
+        let clock = controller.rundownClock
+        var out: [String: Any] = [
+            "ok": ok,
+            "action": action,
+            "running": clock.isShowRunning,
+            "auto": clock.autoAdvanceEnabled,
+            "held": clock.isHeld,
+            "stopped_at_item": clock.isStoppedAtItem,
+            "waiting_on_script": clock.isWaitingOnScript,
+            "active_index": clock.activeBlockIndex as Any? ?? NSNull(),
+            "active_title": clock.activeBlock?.title ?? NSNull(),
+            "elapsed": clock.activeBlockElapsedSeconds,
+            "remaining": clock.activeBlockRemainingSeconds,
+            "extension": clock.activeBlockExtensionSeconds,
+            "stage_message": clock.currentStageMessage ?? NSNull(),
+            "prompter_running": TeleprompterSession.shared.isRunning,
+            "prompter_word": TeleprompterSession.shared.engine.activeIndex,
+            "prompter_words": TeleprompterSession.shared.engine.words.count,
+            "prompter_wpm": TeleprompterSession.shared.effectiveWPM(
+                for: TeleprompterSession.shared.script,
+                settings: .shared
+            ),
+            "live_slide_id": controller.liveSlideID?.uuidString ?? NSNull(),
+            "last_cut_at": controller.rundownLastCutAt?.timeIntervalSince1970 ?? NSNull(),
+        ]
+        if let last = clock.lastAdvance {
+            out["last_advance"] = [
+                "from": last.fromIndex,
+                "to": last.toIndex as Any? ?? NSNull(),
+                "reason": last.reason.rawValue,
+                "due_at": last.dueAt?.timeIntervalSince1970 ?? NSNull(),
+                "fired_at": last.firedAt.timeIntervalSince1970,
+            ] as [String: Any]
+        }
+        out["cuts"] = controller.rundownCutLog
+        if let program = clock.program, let idx = clock.activeBlockIndex {
+            out["stop_item"] = RundownAutoAdvanceRules.isStopItem(at: idx, in: program.rundownBlocks)
+        }
+        return out
     }
 
     @MainActor
