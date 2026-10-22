@@ -54,3 +54,7 @@ A cue offset is seconds before the end, whatever its sign (older files stored -6
 ## Preload
 
 When an item starts, the next item's design images are decoded in the background and its page frames are prefetched. If a different item starts, the unused images are dropped from the cache. Media and cameras are not preloaded: that path starts capture and audio.
+
+## Known issue
+
+Any take to air (a program cut, Next, or a plain slide take) redraws the main window, and the main thread is busy for about 0.6 to 1 s afterwards. The cut itself is applied in under 40 ms, but on the stream the camera well can show blank and part of the new slide can complete up to about 1 s later. Build 11 behaves the same. The prompter catches up after the redraw, so reads still end on pace.
