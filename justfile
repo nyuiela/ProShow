@@ -23,7 +23,7 @@ resolve:
         -derivedDataPath {{derived}} \
         -resolvePackageDependencies
 
-# Debug build, then pin /Applications/ProShow.app
+# Debug build. Pins /Applications/ProShow.app only with PROSHOW_PIN_DEBUG_APP=1
 build: resolve
     xcodebuild \
         -project {{project}} \
@@ -34,7 +34,7 @@ build: resolve
         build
     ./scripts/pin_debug_app.sh "{{debug_product}}"
 
-# Build, pin, and launch the stable Debug app
+# Build and launch the stable Debug app (pin it first with PROSHOW_PIN_DEBUG_APP=1)
 start: build
     #!/usr/bin/env zsh
     set -euo pipefail

@@ -39,11 +39,11 @@ just build
 just start
 ```
 
-Every Debug build is copied to **`/Applications/ProShow.app`**. Grant Camera, Microphone, and Screen Recording to that one app. Xcode Run and `just start` both launch it, so permissions survive rebuilds. DerivedData is only a compile cache.
+Debug builds can be copied to **`/Applications/ProShow.app`** so Camera, Microphone, and Screen Recording grants survive rebuilds. This is off by default: set `PROSHOW_PIN_DEBUG_APP=1` (or `PROSHOW_STABLE_APP=/other/path.app`) to pin. The existing app goes to the Trash, and a signed Release install is never replaced. DerivedData is only a compile cache.
 
 ```bash
 just              # list recipes
-just build        # Debug build → /Applications/ProShow.app
+just build        # Debug build (PROSHOW_PIN_DEBUG_APP=1 pins /Applications/ProShow.app)
 just start        # build + launch that app
 just test         # unit tests
 just clean        # wipe DerivedData (keeps /Applications/ProShow.app)

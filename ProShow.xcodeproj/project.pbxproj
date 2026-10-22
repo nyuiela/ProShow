@@ -1522,7 +1522,6 @@
 			outputFileListPaths = (
 			);
 			outputPaths = (
-				/Applications/ProShow.app,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/zsh;
