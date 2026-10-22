@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.2 build 11 (2026-10-22)
+
+- Camera rows in a .program keep the stream background they were designed with. Before, every reopen set the row's background off, so the stream dropped the full-frame background image and colour and showed the camera through the slide, while the editor and Phone canvas still looked right.
+- Reopening a .program restores the background on rows an earlier reopen switched off and saves the repaired file.
+- The .program show always goes on air from the repaired program file. Before, the project could open with an older saved copy of that show as the active show and send it to the stream.
+- Stream and Phone audio and the mixer are unchanged.
+
 ## 0.5.2 build 10 (2026-10-21)
 
 - Previews show each well's own source, the same as the stream. The editor, slide thumbnails, the right pane (Preview, Live and Phone view) and the ProShow Phone window resolve every well's placeholder or device first. Before, one input per slide was painted into every well, so a camera window could show the screen share.

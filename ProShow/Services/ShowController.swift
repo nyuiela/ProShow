@@ -6856,6 +6856,25 @@ final class ShowController {
         syncLibraryItems()
     }
 
+    /// The project can open with the library's saved `.program` show as the active show. That copy
+    /// predates the repair, so swap in the show built from the repaired document before anything
+    /// syncs the old copy back or puts it on air.
+    func replaceStaleProgramShow() {
+        guard show.id == ProgramOutlinePresentation.showID else { return }
+        let current = ProgramOutlinePresentation.currentShow(for: show, document: rundownClock.program ?? programDocument)
+        guard current != show else { return }
+        show = current
+        if let index = libraryShows.firstIndex(where: { $0.id == current.id }) {
+            libraryShows[index] = current
+        }
+        if selectedSlideID.map({ current.slide(id: $0) == nil }) ?? true {
+            selectedSlideID = current.allSlides.first?.id
+        }
+        if editors.kind == .presentation {
+            editors.syncPresentation(from: show, selectedSlideID: selectedSlideID)
+        }
+    }
+
     func loadProgramOutlinePresentation() {
         if show.id == ProgramOutlinePresentation.showID {
             syncProgramOutlineFromActiveShowIfNeeded()

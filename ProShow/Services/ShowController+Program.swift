@@ -31,6 +31,7 @@ extension ShowController {
         } else {
             programDocumentURL = nil
         }
+        replaceStaleProgramShow()
         refreshProgramOutlinePresentationIfSelected()
     }
 
@@ -51,6 +52,7 @@ extension ShowController {
             try saveProgramDocument(to: url)
         }
         bindUnassignedProgramCameras()
+        replaceStaleProgramShow()
         refreshProgramOutlinePresentationIfSelected()
     }
 
@@ -91,6 +93,7 @@ extension ShowController {
                 try? saveProgramDocument(to: url)
             }
             bindUnassignedProgramCameras()
+            replaceStaleProgramShow()
             refreshProgramOutlinePresentationIfSelected()
         } catch {
             mediaAlert = "Couldn’t reopen the program file. \(error.localizedDescription)"
