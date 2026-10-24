@@ -244,8 +244,8 @@ extension ShowController {
 
 #if canImport(CoreVideo)
 /// Keeps the record-only 16:9 file at a constant rate on the shared clock. Real frames pass
-/// straight through; when none arrives for 1.2 frame periods the last one is repeated, stamped
-/// now. Stamps never go backwards, so a late composite after a repeat is moved just past it.
+/// straight through; when none arrives for 1.15 frame periods the last one is repeated one
+/// period after the previous stamp. Stamps never go backwards, so a late composite after a repeat is moved just past it.
 /// Video only: audio keeps its own pump and clock.
 final class RecordOnlyFramePacer: @unchecked Sendable {
     static let shared = RecordOnlyFramePacer()
@@ -303,7 +303,9 @@ final class RecordOnlyFramePacer: @unchecked Sendable {
         timer?.cancel()
         period = newPeriod
         let source = DispatchSource.makeTimerSource(queue: queue)
-        source.schedule(deadline: .now() + newPeriod, repeating: newPeriod, leeway: .milliseconds(2))
+        // Check 8 times a frame so a repeat lands within a few ms of the missed slot.
+        let check = newPeriod / 8
+        source.schedule(deadline: .now() + check, repeating: check, leeway: .milliseconds(1))
         source.setEventHandler { [weak self] in self?.tick() }
         source.resume()
         timer = source
@@ -318,8 +320,9 @@ final class RecordOnlyFramePacer: @unchecked Sendable {
             stop()
             return
         }
-        guard now - lastStamp >= period * 1.2 else { lock.unlock(); return }
-        let stamp = max(now, lastStamp + period * 0.6)
+        guard now - lastStamp >= period * 1.15 else { lock.unlock(); return }
+        // One period after the last frame; after a long stall, catch up to now.
+        let stamp = now - lastStamp > period * 3 ? now : lastStamp + period
         lastStamp = stamp
         repeatedFrames += 1
         let host = Self.host(CMClockGetTime(CMClockGetHostTimeClock()), shiftedBy: stamp - now)
