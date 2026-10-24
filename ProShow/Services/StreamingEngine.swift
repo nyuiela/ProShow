@@ -521,6 +521,7 @@ final class StreamingEngine {
         #if canImport(AVFoundation)
         if let recorder = ProgramRecordingAudioBridge.activeProgramRecorder, recorder.isPassthrough {
             state = .idle
+            hardwareEncoder.openHostTimedFeed()
             ProgramRecordingAudioPump.start(recorder: recorder)
             return
         }

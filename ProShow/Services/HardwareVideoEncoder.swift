@@ -104,6 +104,15 @@ final class HardwareVideoEncoder: @unchecked Sendable {
     /// Phone lane only: subtracted from the PTS before the FLV timestamp, so a lane that started
     /// on the local clock (9:16 recording) still sends stream-clock timestamps. Zero for Stream.
     private var rtmpTimestampShift: CMTime = .zero
+    /// Session queue only. True while a passthrough recording outlives the stream and the record-only
+    /// pacer feeds host-timed frames. Any new stream session closes it, so a late pacer frame can never
+    /// stamp a restarted stream with host time.
+    private var hostTimedFeedOpen = false
+
+    /// Called once the stream has stopped and the passthrough recorder keeps this encoder.
+    func openHostTimedFeed() {
+        sessionQueue.async { [weak self] in self?.hostTimedFeedOpen = true }
+    }
 
     func setRTMPTimestampShift(_ shift: CMTime) {
         depthLock.lock()
@@ -266,12 +275,14 @@ final class HardwareVideoEncoder: @unchecked Sendable {
         let forceKey = !sentSequenceHeader
         sessionQueue.async { [weak self] in
             guard let self, let session = self.compressionSession else { return }
+            let hostTimed = hostTime.isValid && hostTime.isNumeric
+            if hostTimed, !self.hostTimedFeedOpen { return }
             let index = self.frameCount
             self.frameCount += 1
             // Live callers pass no host time and keep the CFR index. The record-only feed after a
             // stream stop passes the frame's host time, so the passthrough file tracks the wall
             // clock instead of a 30 fps index fed at a lower rate (that drift forced 2 s re-anchors).
-            let pts = hostTime.isValid && hostTime.isNumeric
+            let pts = hostTimed
                 ? CMTimeConvertScale(hostTime, timescale: 600, method: .roundHalfAwayFromZero)
                 : StreamVideoCFRClock.presentationTime(frameIndex: index, fps: self.targetFps)
             let duration = StreamVideoCFRClock.frameDuration(fps: self.targetFps)
@@ -327,6 +338,7 @@ final class HardwareVideoEncoder: @unchecked Sendable {
             frameCount = 0
             targetFps = 30
             lastRTMPTimestampMs = 0
+            hostTimedFeedOpen = false
             setRTMPTimestampShift(.zero)
         }
         if sessionQueue === ProShowQueues.encoderQueue, ProShowQueues.isOnEncoderQueue {
