@@ -368,6 +368,11 @@ final class ProgramVideoFileRecorder {
         siblingLock.lock()
         sibling = writer
         siblingLock.unlock()
+        // Attached after this file already started: the 9:16 file keeps its own start.
+        guard let writer else { return }
+        queue.async { [self] in
+            if sessionStarted { writer.mainTimelineStarted(at: nil) }
+        }
     }
 
     private func currentSibling() -> PhoneRecordingFileWriter? {
@@ -455,6 +460,7 @@ final class ProgramVideoFileRecorder {
             sessionStarted = true
             sessionStartPTS = pts
             sessionStartHost = CMTimeGetSeconds(CMClockGetTime(CMClockGetHostTimeClock()))
+            currentSibling()?.mainTimelineStarted(at: pts)
             let queued = pendingAudio.filter { CMTimeCompare($0.pts, pts) >= 0 }
             pendingAudio.removeAll(keepingCapacity: false)
             for item in queued {
@@ -849,10 +855,17 @@ final class PhoneRecordingFileWriter: @unchecked Sendable {
     private var skippedLeadingFrames = 0
     private var rejectedAppends = 0
     private var failureMessage: String?
+    /// Passthrough 16:9: both files start at the 16:9 file's first keyframe, so they share time zero.
+    private var alignResolved: Bool
+    private var timelineStart: CMTime = .invalid
+    private var heldVideo: [CMSampleBuffer] = []
+    private var replaying = false
+    private static let maxHeldVideo = 150
 
     init?(url: URL, audioMode: AudioMode) {
         self.url = url
         self.audioMode = audioMode
+        alignResolved = audioMode != .aac
         let folder = url.deletingLastPathComponent()
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -876,6 +889,32 @@ final class PhoneRecordingFileWriter: @unchecked Sendable {
     }
 
     // MARK: Producers (any thread, never block)
+
+    /// The 16:9 file opened its session at `start` (nil: it was already running when this file attached).
+    func mainTimelineStarted(at start: CMTime?) {
+        queue.async { [self] in
+            guard !alignResolved else { return }
+            alignResolved = true
+            if let start, start.isValid { timelineStart = start }
+            replayHeldVideo()
+        }
+    }
+
+    private func replayHeldVideo() {
+        var held = heldVideo
+        heldVideo.removeAll()
+        if timelineStart.isValid,
+           let lastSyncAtStart = held.lastIndex(where: {
+               ProgramVideoFileRecorder.isSyncSample($0)
+                   && CMTimeCompare(CMSampleBufferGetPresentationTimeStamp($0), timelineStart) <= 0
+           }) {
+            held.removeFirst(lastSyncAtStart)
+        }
+        // Held frames are older than the clock; skip the wall-drift check while writing them.
+        replaying = true
+        for sample in held { appendVideoOnQueue(sample) }
+        replaying = false
+    }
 
     func appendEncodedVideoSample(_ sample: CMSampleBuffer) {
         enqueue(video: true) { [self] in appendVideoOnQueue(sample) }
@@ -946,6 +985,15 @@ final class PhoneRecordingFileWriter: @unchecked Sendable {
 
     private func appendVideoOnQueue(_ sample: CMSampleBuffer) {
         guard failureMessage == nil, CMSampleBufferDataIsReady(sample) else { return }
+        if !alignResolved {
+            heldVideo.append(sample)
+            if heldVideo.count > Self.maxHeldVideo {
+                // The 16:9 file never started; keep this file's own start.
+                alignResolved = true
+                replayHeldVideo()
+            }
+            return
+        }
         gate.lock()
         if resyncVideo {
             resyncVideo = false
@@ -985,15 +1033,18 @@ final class PhoneRecordingFileWriter: @unchecked Sendable {
             offset: &videoOffset,
             lastOut: lastVideoOut,
             step: CMTime(value: 1, timescale: Self.frameRate),
-            wall: wallTimelinePosition(),
+            wall: replaying ? .invalid : wallTimelinePosition(),
             rebases: &timelineRebases
         )
         guard let out = ProgramVideoFileRecorder.retimed(sample, shift: CMTimeSubtract(pts, source)) else { return }
         if !sessionStarted {
-            writer.startSession(atSourceTime: pts)
+            let start = timelineStart.isValid ? timelineStart : pts
+            writer.startSession(atSourceTime: start)
             sessionStarted = true
-            sessionStartPTS = pts
-            sessionStartHost = PhoneMediaClock.hostSeconds()
+            sessionStartPTS = start
+            let host = PhoneMediaClock.hostSeconds()
+            let lead = timelineStart.isValid ? PhoneMediaClock.seconds(atHost: host) - CMTimeGetSeconds(start) : 0
+            sessionStartHost = host - (lead.isFinite ? max(0, lead) : 0)
         }
         if input.append(out) {
             framesWritten += 1
@@ -1004,7 +1055,7 @@ final class PhoneRecordingFileWriter: @unchecked Sendable {
             return
         }
         if !pendingAAC.isEmpty || !pendingPCM.isEmpty {
-            flushPendingAudio(start: pts)
+            flushPendingAudio(start: sessionStartPTS)
         }
     }
 
@@ -1143,6 +1194,7 @@ final class PhoneRecordingFileWriter: @unchecked Sendable {
             audioInput = nil
             pendingAAC.removeAll()
             pendingPCM.removeAll()
+            heldVideo.removeAll()
             guard let pending, pending.status == .writing else {
                 completion(pending?.status ?? .unknown, frames, failureMessage)
                 return
@@ -1169,6 +1221,7 @@ final class PhoneRecordingFileWriter: @unchecked Sendable {
                 "skippedLeading": skippedLeadingFrames,
                 "rebases": timelineRebases,
                 "rejected": rejectedAppends,
+                "alignedStart": timelineStart.isValid ? CMTimeGetSeconds(timelineStart) : -1,
                 "backlog": counts.0,
                 "droppedVideo": counts.1,
                 "droppedAudio": counts.2,
