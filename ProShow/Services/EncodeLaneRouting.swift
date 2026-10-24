@@ -441,6 +441,7 @@ final class PhoneEncodeLane: @unchecked Sendable {
         link = transport
         audioTapID = tap
         forceNextKeyframe = true
+        encoder.resetRTMPTimeline()
         linkLock.unlock()
         queue.async { [weak self] in self?.sentWhileReady = false }
         failed = false

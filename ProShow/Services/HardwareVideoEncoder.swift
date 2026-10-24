@@ -114,16 +114,31 @@ final class HardwareVideoEncoder: @unchecked Sendable {
         sessionQueue.async { [weak self] in self?.hostTimedFeedOpen = true }
     }
 
+    /// Set when the FLV timeline starts over (new shift or a new Phone transport). The next encoded
+    /// frame clears the monotonic floor, so frames stamped on the local clock while only the 9:16 file
+    /// was open cannot hold the stream's video timestamps far ahead of its audio.
+    private var rtmpTimelineResetPending = false
+
     func setRTMPTimestampShift(_ shift: CMTime) {
         depthLock.lock()
+        if CMTimeCompare(shift, rtmpTimestampShift) != 0 { rtmpTimelineResetPending = true }
         rtmpTimestampShift = shift
         depthLock.unlock()
     }
 
-    private func currentRTMPTimestampShift() -> CMTime {
+    /// A new Phone RTMP transport attached to the running encoder.
+    func resetRTMPTimeline() {
+        depthLock.lock()
+        rtmpTimelineResetPending = true
+        depthLock.unlock()
+    }
+
+    private func takeRTMPTimelineState() -> (shift: CMTime, reset: Bool) {
         depthLock.lock()
         defer { depthLock.unlock() }
-        return rtmpTimestampShift
+        let reset = rtmpTimelineResetPending
+        rtmpTimelineResetPending = false
+        return (rtmpTimestampShift, reset)
     }
 
     /// Changes the bitrate on the running session (no new session, no new keyframe).
@@ -383,7 +398,8 @@ final class HardwareVideoEncoder: @unchecked Sendable {
         }
         guard let avcc = Self.avccPayload(from: sample) else { return }
         let samplePTS = CMSampleBufferGetPresentationTimeStamp(sample)
-        let shift = currentRTMPTimestampShift()
+        let (shift, resetTimeline) = takeRTMPTimelineState()
+        if resetTimeline { lastRTMPTimestampMs = 0 }
         let pts = CMTimeCompare(shift, .zero) == 0 ? samplePTS : CMTimeSubtract(samplePTS, shift)
         let timestampMs = rtmpTimestampMs(for: pts)
         encodedFrameCount += 1
