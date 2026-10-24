@@ -760,7 +760,7 @@ final class ShowController {
             if ProShowFeatureFlags.multiDestinationRoutingV1 {
                 // The Phone lane follows the live slide's Phone canvas; none falls back to Fit from Stream.
                 streaming.notePhoneCanvas(prepareSlideForProgramCue(slide).editorCanvases)
-                if isoRecorder.isRecording { syncPhoneRecording() }
+                if isoRecorder.isRecording, !isoRecorder.isRecordingPhone { syncPhoneRecording() }
             }
         }
         applyMediaLayerDecision(decision)
@@ -1699,7 +1699,7 @@ final class ShowController {
         )
         if ProShowFeatureFlags.multiDestinationRoutingV1 {
             streaming.notePhoneCanvas(prepared.editorCanvases)
-            if isoRecorder.isRecording { syncPhoneRecording() }
+            if isoRecorder.isRecording, !isoRecorder.isRecordingPhone { syncPhoneRecording() }
         }
         let incoming = resolvedAssociatedMedia(for: cleaned)
         let decision = MediaActionEvaluator.evaluate(

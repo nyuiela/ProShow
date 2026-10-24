@@ -1238,17 +1238,13 @@ final class IsoRecorder {
         PhoneRecordingBridge.set(nil)
         phoneFileWriter = nil
         isRecordingPhone = false
-        let waiter = DispatchSemaphore(value: 0)
+        // Finishes on the writer's own queue. Never waits on the main thread (a take must not stall).
         writer.finish { [weak self] status, frames, error in
             Task { @MainActor in
                 if status == .failed || frames == 0 {
                     self?.lastPhoneRecordingNote = error ?? "The 9:16 file has no frames."
                 }
             }
-            waiter.signal()
-        }
-        if waiter.wait(timeout: .now() + 10) == .timedOut {
-            NSLog("ProShow 9:16 recording finish is taking longer than 10 s; continuing.")
         }
         #endif
     }

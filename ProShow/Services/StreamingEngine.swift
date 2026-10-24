@@ -72,8 +72,9 @@ final class StreamingEngine {
         }
         phoneRecordingRefusal = nil
         if let lane = phoneLane, lane.isEncoding {
+            // Already feeding the file: no extra keyframe on every take.
+            if !phoneRecordingActive { lane.requestKeyframe() }
             phoneRecordingActive = true
-            lane.requestKeyframe()
             return true
         }
         if state == .live || state == .starting, let plan = routingPlan, plan.phoneLane == nil,
