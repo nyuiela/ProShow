@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.5 build 14 (2026-10-24)
+
+- Recording now also writes a 9:16 file beside the 16:9 file, named `<name>_Phone.mov`, while a Phone destination is live or the project has a Phone canvas. The Record menu and the record button show "Recording 16:9 + 9:16".
+- While live, the 9:16 file starts on the same frame as the 16:9 file and carries the same AAC audio packets, so the two files line up sample for sample. Before this fix in testing, the 9:16 file could start up to one keyframe interval (about 0.4 s) early.
+- Record-only (not live), the 9:16 file gets its own encode of the same program audio.
+- The 9:16 file keeps going when the Phone stream drops, when the stream stops, and when Phone is removed or added by restarting the stream. Adding the Phone destination mid-recording opens the 9:16 file then.
+- Closing the 9:16 file never waits on the main thread, and takes do not force a keyframe in it.
+- Known, unchanged from 0.5.4: in a record-only 16:9 file the video runs at about 19 fps and slide changes land 1 to 2 s late, and after the stream stops mid-recording the 16:9 file has gaps of about 2 s every few seconds. The 9:16 file is not affected.
+- Stream and Phone audio, the mixer and the AAC encoder are unchanged.
+
 ## 0.5.4 build 13 (2026-10-22)
 
 - Takes no longer stall the app. After a program cut, Next or a slide take the main thread was busy for 0.6 to 1 s, so the stream held the old or a half-drawn slide and the slide completed late. Now the longest main-thread wait after a take is under 90 ms and the new slide starts on the stream within about 40 ms.
