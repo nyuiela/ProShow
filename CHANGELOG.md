@@ -7,7 +7,11 @@
 - Record-only (not live), the 9:16 file gets its own encode of the same program audio.
 - The 9:16 file keeps going when the Phone stream drops, when the stream stops, and when Phone is removed or added by restarting the stream. Adding the Phone destination mid-recording opens the 9:16 file then.
 - Closing the 9:16 file never waits on the main thread, and takes do not force a keyframe in it.
-- Known, unchanged from 0.5.4: in a record-only 16:9 file the video runs at about 19 fps and slide changes land 1 to 2 s late, and after the stream stops mid-recording the 16:9 file has gaps of about 2 s every few seconds. The 9:16 file is not affected.
+- Record-only 16:9 files now run at the project rate, capped at 30 fps. Before, they ran at about 19 fps and slide changes landed 1 to 2 s late. In testing, a 37.6 s recording has 1130 frames, all but 2 of them 33 ms apart, and slide changes land within about a frame of the take. When the program stalls, the last frame is repeated, and a late burst of frames never adds extra frames.
+- After the stream stops mid-recording, the 16:9 file keeps a steady 30 fps. Before, it had gaps of about 2 s every few seconds. In testing, the stop itself shows at most one missing frame, and no other interval is over 40 ms.
+- Fixed in testing before release: after record-only then Go Live, or after restarting the stream mid-recording, the Phone stream's video started seconds ahead of its audio (up to 767 s), and a restarted main stream could start its video at the Mac's clock time. Both now start their video and audio within 0.1 s of 0.
+- Known: record-only, the 16:9 file's audio is about 30 ms later than the 9:16 file's (the same audio, under one frame). This is in the audio path and is unchanged.
+- Known, unchanged: in a recording started before going live, the 16:9 file can miss single frames while live (about one every 2 s in some runs).
 - Stream and Phone audio, the mixer and the AAC encoder are unchanged.
 
 ## 0.5.4 build 13 (2026-10-22)
