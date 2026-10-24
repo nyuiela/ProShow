@@ -118,6 +118,7 @@ final class RundownFloatController: NSObject, NSWindowDelegate {
             panel.minSize = RundownFloatWindowLayout.minimumSize
             panel.maxSize = RundownFloatWindowLayout.maximumSize
             hosting.view.autoresizingMask = [.width, .height]
+            FloatingPanelTransparency.apply(to: panel, hosting: hosting)
             if let hostingView = hosting.view as? NSHostingView<RundownFloatRoot> {
                 hostingView.safeAreaRegions = []
             }
@@ -132,6 +133,7 @@ final class RundownFloatController: NSObject, NSWindowDelegate {
             panel?.setFrame(NSRect(origin: origin, size: defaultSize), display: true)
         }
         panel?.orderFrontRegardless()
+        if let p = panel as NSWindow? { FloatingPanelTransparency.clearChain(p) }
         isOpen = true
     }
 
@@ -310,7 +312,7 @@ struct RundownMiniOutlinePanel: View {
     }
 
     private var itemRunTimeRow: some View {
-        TimelineView(.periodic(from: .now, by: 0.25)) { _ in
+        TimelineView(.periodic(from: TimelineAnchor.start, by: 0.25)) { _ in
             HStack(alignment: .firstTextBaseline) {
                 Text("Item run time")
                     .font(.system(size: 10, weight: .bold))
@@ -378,9 +380,16 @@ struct RundownMiniOutlinePanel: View {
             }
             Spacer(minLength: 0)
             if isLive {
-                Text(ProShowCopy.Status.live)
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(ProShowTheme.liveRed)
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(ProShowCopy.Status.live)
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(ProShowTheme.liveRed)
+                    RundownLiveCountdown(
+                        clock: clock,
+                        font: .system(size: 12, weight: .semibold, design: .monospaced),
+                        color: Color.white
+                    )
+                }
             }
         }
         .padding(.horizontal, 10)
@@ -417,6 +426,21 @@ struct RundownMiniOutlinePanel: View {
                 _ = controller.clearLayer(named: "slide")
             }
             if clock.isShowRunning {
+                miniTransport(clock.isHeld ? "play.circle" : "pause.circle", label: clock.isHeld ? "Resume" : "Hold", active: clock.isHeld) {
+                    controller.toggleRundownHold()
+                }
+                miniTransport("goforward.30", label: "Add 30 seconds") {
+                    controller.extendRundownBlock()
+                }
+            }
+            miniTransport(
+                controller.rundownAutoAdvance ? "a.circle.fill" : "a.circle",
+                label: controller.rundownAutoAdvance ? "Auto on" : "Auto off",
+                active: controller.rundownAutoAdvance
+            ) {
+                controller.toggleRundownAutoAdvance()
+            }
+            if clock.isShowRunning {
                 miniTransport("stop.circle", label: "Stop show") {
                     clock.stopShow()
                     controller.refreshRundownTick()
@@ -430,10 +454,11 @@ struct RundownMiniOutlinePanel: View {
         .padding(.vertical, 8)
     }
 
-    private func miniTransport(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
+    private func miniTransport(_ symbol: String, label: String, active: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(active ? ProShowTheme.accent : ProShowTheme.primaryLabel)
                 .frame(width: 32, height: 32)
         }
         .buttonStyle(PromptGlassButtonStyle())

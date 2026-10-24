@@ -153,17 +153,9 @@ struct SlideWorkspaceView: View {
             ScrollView {
                 LazyVGrid(columns: columns, alignment: .leading, spacing: slideGridGap) {
                     ForEach(controller.indexedCues) { cue in
-                        SlideThumbnailCard(
-                            index: cue.number,
-                            slide: cue.slide,
-                            groupName: cue.group.name,
-                            groupColor: cue.group.colorHex,
-                            isSelected: cue.slide.id == controller.selectedSlideID,
-                            isLive: controller.liveStack.isSlideActive(slideID: cue.slide.id),
-                            mediaProjectRoot: controller.mediaProjectRoot,
-                            controller: controller
-                        )
-                        .equatable()
+                        // Selection and live state are read inside the cell, so a take only updates the
+                        // cells, not the grid container (which re-laid out all 37 tiles on every take).
+                        SlideGridCell(controller: controller, cue: cue)
                         .frame(width: width, alignment: .topLeading)
                         .contentShape(Rectangle())
                         .contextMenu { SlideContextMenu(controller: controller, slideID: cue.slide.id) }
@@ -373,6 +365,26 @@ struct SlideWorkspaceView: View {
             Spacer()
         }
         .padding(16)
+    }
+}
+
+/// One slide grid tile. Owns the reads of the selection and the live stack (isolated live state).
+private struct SlideGridCell: View {
+    let controller: ShowController
+    let cue: IndexedCue
+
+    var body: some View {
+        SlideThumbnailCard(
+            index: cue.number,
+            slide: cue.slide,
+            groupName: cue.group.name,
+            groupColor: cue.group.colorHex,
+            isSelected: cue.slide.id == controller.selectedSlideID,
+            isLive: controller.liveStack.isSlideActive(slideID: cue.slide.id),
+            mediaProjectRoot: controller.mediaProjectRoot,
+            controller: controller
+        )
+        .equatable()
     }
 }
 

@@ -54,8 +54,14 @@ struct UserCompositionPanelView: View {
         }
     }
 
-    @ViewBuilder
     private var elementStack: some View {
+        // Build the list once per body. Before, `elements` (all program layer rows, thumbnails included)
+        // was rebuilt for the empty check, for the ForEach, and again inside every row for the divider.
+        elementStack(elements)
+    }
+
+    @ViewBuilder
+    private func elementStack(_ elements: [UserVisibleElement]) -> some View {
         if elements.isEmpty {
             Text("Nothing on program.")
                 .font(DeskType.micro)
@@ -64,7 +70,9 @@ struct UserCompositionPanelView: View {
                 .padding(.vertical, 4)
         } else {
             ScrollView {
-                VStack(spacing: 0) {
+                // Lazy: a take replaces most rows (new slide objects), and building all ~40 rows with their
+                // buttons at once was a large part of the post-take main-thread stall. Only visible rows build.
+                LazyVStack(spacing: 0) {
                     ForEach(Array(elements.enumerated()), id: \.element.id) { index, item in
                         UserLayerRowView(
                             controller: controller,

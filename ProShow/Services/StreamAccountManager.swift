@@ -41,7 +41,8 @@ final class StreamAccountManager {
         for platform: StreamPlatform,
         verifier: String,
         redirectURI: URL = StreamOAuthConfiguration.callbackURL,
-        state: String? = nil
+        state: String? = nil,
+        scopes: String? = nil
     ) throws -> URL {
         guard let clientID = StreamOAuthConfiguration.clientID(for: platform) else {
             throw StreamOAuthError.missingClientID
@@ -73,7 +74,7 @@ final class StreamAccountManager {
                 URLQueryItem(name: "client_id", value: clientID),
                 URLQueryItem(name: "redirect_uri", value: redirect),
                 URLQueryItem(name: "response_type", value: "code"),
-                URLQueryItem(name: "scope", value: StreamOAuthConfiguration.xUserScopes),
+                URLQueryItem(name: "scope", value: scopes ?? StreamOAuthConfiguration.xUserScopes),
             ]
         case .linkedin:
             components = URLComponents(string: "https://www.linkedin.com/oauth/v2/authorization")!
@@ -101,7 +102,8 @@ final class StreamAccountManager {
     func authenticate(
         platform: StreamPlatform,
         existing: StreamAccount? = nil,
-        redirectURI: URL? = nil
+        redirectURI: URL? = nil,
+        scopes: String? = nil
     ) async throws -> StreamAccount {
         if StreamOAuthConfiguration.requiresClientSecret(for: platform),
            !StreamOAuthConfiguration.hasClientSecret(for: platform) {
@@ -118,10 +120,11 @@ final class StreamAccountManager {
                 redirectURI: redirectURI ?? StreamOAuthConfiguration.resolvedLoopbackRedirect(
                     preferred: nil,
                     platform: platform
-                )
+                ),
+                scopes: scopes
             )
         }
-        let url = try authorizationURL(for: platform, verifier: verifier, state: state)
+        let url = try authorizationURL(for: platform, verifier: verifier, state: state, scopes: scopes)
         let callback = try await openSession(url: url)
         try StreamPKCE.validate(state: state, in: callback)
         let code = try StreamPKCE.authorizationCode(from: callback)
@@ -138,7 +141,8 @@ final class StreamAccountManager {
         verifier: String,
         state: String,
         existing: StreamAccount?,
-        redirectURI: URL
+        redirectURI: URL,
+        scopes: String? = nil
     ) async throws -> StreamAccount {
         let server = OAuthLoopbackServer(redirect: redirectURI)
         try server.start()
@@ -149,7 +153,8 @@ final class StreamAccountManager {
             for: platform,
             verifier: verifier,
             redirectURI: redirect,
-            state: state
+            state: state,
+            scopes: scopes
         )
         try openBrowser(url)
         let callback = try await server.waitForCallback()

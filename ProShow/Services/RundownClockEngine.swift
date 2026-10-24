@@ -1,24 +1,87 @@
 import Foundation
 import Observation
 
-/// Live rundown clock: block timing, schedule drift, and stage cue evaluation (10 Hz).
+/// What the prompter says about the live item's script, for the auto-advance guard.
+enum RundownScriptState: Equatable, Sendable {
+    /// No script, or the prompter is not following this item. The item runs on its duration.
+    case none
+    /// The prompter is still reading this item (running or paused part way).
+    case reading
+    /// The prompter reached the end of this item's script at this time.
+    case finished(at: Date)
+}
+
+enum RundownAdvanceReason: String, Codable, Sendable {
+    case manual
+    case jump
+    case clock
+    case scriptEnd
+    case scriptCap
+}
+
+struct RundownAdvanceRecord: Equatable, Sendable {
+    var fromIndex: Int
+    var toIndex: Int?
+    var reason: RundownAdvanceReason
+    /// When the cut was due (clock boundary, script end plus tail, or the cap). Nil for manual.
+    var dueAt: Date?
+    var firedAt: Date
+}
+
+/// Live rundown clock: block timing, schedule drift, stage cues, Hold, +30 s and auto-advance.
 @MainActor
 @Observable
 final class RundownClockEngine {
+    /// Wait this long after the prompter finishes before the auto cut.
+    static let scriptTailSeconds: TimeInterval = 0.75
+    /// Never hold an auto cut more than this past the planned end, even if the script is unread.
+    static let scriptCapSeconds: TimeInterval = 12
+    static let extendStepSeconds: TimeInterval = 30
+    static let tickInterval: TimeInterval = 0.1
+
     private(set) var program: ProgramDocumentModel?
     private(set) var activeBlockIndex: Int?
     private(set) var activeBlockElapsedSeconds: TimeInterval = 0
     private(set) var activeBlockRemainingSeconds: TimeInterval = 0
+    /// Seconds added to the live item with +30 s.
+    private(set) var activeBlockExtensionSeconds: TimeInterval = 0
     private(set) var cumulativeDriftSeconds: TimeInterval = 0
     private(set) var currentStageMessage: String?
     private(set) var upcomingTalentCueText: String?
     private(set) var isShowRunning = false
+    /// Hold freezes the item clock and auto-advance.
+    private(set) var isHeld = false
+    /// Auto mode reached the end of a stop item and is waiting for Next.
+    private(set) var isStoppedAtItem = false
+    /// Auto mode is past the planned end and waiting for the prompter to finish.
+    private(set) var isWaitingOnScript = false
+    private(set) var lastAdvance: RundownAdvanceRecord?
+
+    var autoAdvanceEnabled = false {
+        didSet {
+            if !autoAdvanceEnabled {
+                isWaitingOnScript = false
+                isStoppedAtItem = false
+                cancelPreciseCut()
+            }
+        }
+    }
 
     var onStageCue: ((String, Bool) -> Void)?
     var onBlockStarted: ((RundownBlock) -> Void)?
+    /// Reports the prompter state for the live item. Nil means no prompter: the duration rules.
+    @ObservationIgnored var scriptStateProvider: ((RundownBlock) -> RundownScriptState)?
+    /// Tests drive `tick(now:)` themselves.
+    @ObservationIgnored var usesLiveTimer = true
 
     @ObservationIgnored private var timer: Timer?
+    @ObservationIgnored private var preciseCut: DispatchWorkItem?
     @ObservationIgnored private var firedCueKeys: Set<String> = []
+    @ObservationIgnored private var lastTickAt: Date?
+    @ObservationIgnored private var previousRemaining: TimeInterval?
+    /// Longest gap between clock ticks on the live item (a main-thread stall shows up here).
+    @ObservationIgnored private(set) var maxTickGapSeconds: TimeInterval = 0
+    @ObservationIgnored private(set) var maxTickGapAtElapsed: TimeInterval = 0
 
     func loadProgram(_ program: ProgramDocumentModel) {
         stopShow(resetBlocks: false)
@@ -27,6 +90,10 @@ final class RundownClockEngine {
         cumulativeDriftSeconds = program.runState.cumulativeDriftSeconds
         isShowRunning = program.runState.isShowRunning
         if isShowRunning {
+            if let idx = activeBlockIndex, let start = program.rundownBlocks[safe: idx]?.actualStartTime {
+                activeBlockElapsedSeconds = max(0, Date().timeIntervalSince(start))
+            }
+            lastTickAt = Date()
             startTimer()
         }
     }
@@ -40,10 +107,14 @@ final class RundownClockEngine {
         return program.rundownBlocks[idx]
     }
 
-    func startShow(at index: Int = 0) {
+    /// Planned length of the live item including +30 s extensions.
+    var activeBlockPlannedSeconds: TimeInterval {
+        (activeBlock?.plannedDurationSeconds ?? 0) + activeBlockExtensionSeconds
+    }
+
+    func startShow(at index: Int = 0, now: Date = Date()) {
         guard var program, !program.rundownBlocks.isEmpty else { return }
         let clamped = min(max(0, index), program.rundownBlocks.count - 1)
-        let now = Date()
         program.runState.isShowRunning = true
         if program.runState.showStartedAt == nil {
             program.runState.showStartedAt = now
@@ -54,8 +125,7 @@ final class RundownClockEngine {
         self.program = program
         activeBlockIndex = clamped
         isShowRunning = true
-        firedCueKeys.removeAll()
-        currentStageMessage = nil
+        resetItemState(now: now)
         startTimer()
         if let block = activeBlock {
             onBlockStarted?(block)
@@ -65,6 +135,7 @@ final class RundownClockEngine {
     func stopShow(resetBlocks: Bool = true) {
         timer?.invalidate()
         timer = nil
+        cancelPreciseCut()
         isShowRunning = false
         if resetBlocks, var program {
             program.runState = ProgramRunEngineState()
@@ -78,38 +149,25 @@ final class RundownClockEngine {
         activeBlockIndex = program?.runState.activeBlockIndex
         activeBlockElapsedSeconds = 0
         activeBlockRemainingSeconds = 0
+        activeBlockExtensionSeconds = 0
         currentStageMessage = nil
         upcomingTalentCueText = nil
+        isHeld = false
+        isStoppedAtItem = false
+        isWaitingOnScript = false
         firedCueKeys.removeAll()
+        previousRemaining = nil
+        lastTickAt = nil
     }
 
-    func advanceToNextBlock() {
-        guard var program, let currentIdx = activeBlockIndex else { return }
-        let now = Date()
-        program.rundownBlocks[currentIdx].actualEndTime = now
-        program.rundownBlocks[currentIdx].isCompleted = true
-
-        let nextIdx = currentIdx + 1
-        if nextIdx < program.rundownBlocks.count {
-            program.rundownBlocks[nextIdx].actualStartTime = now
-            program.rundownBlocks[nextIdx].isCompleted = false
-            program.runState.activeBlockIndex = nextIdx
-            activeBlockIndex = nextIdx
-            currentStageMessage = nil
-            firedCueKeys.removeAll()
-            self.program = program
-            onBlockStarted?(program.rundownBlocks[nextIdx])
-        } else {
-            program.runState.isShowRunning = false
-            program.runState.activeBlockIndex = nil
-            self.program = program
-            stopShow(resetBlocks: false)
-        }
+    /// Next (Skip). Moves on now, held or not.
+    func advanceToNextBlock(now: Date = Date()) {
+        advance(reason: .manual, dueAt: nil, now: now)
     }
 
-    func jumpToBlock(index: Int) {
+    func jumpToBlock(index: Int, now: Date = Date()) {
         guard var program, program.rundownBlocks.indices.contains(index) else { return }
-        let now = Date()
+        let from = activeBlockIndex
         if let currentIdx = activeBlockIndex, program.rundownBlocks.indices.contains(currentIdx) {
             program.rundownBlocks[currentIdx].actualEndTime = now
             program.rundownBlocks[currentIdx].isCompleted = true
@@ -120,36 +178,131 @@ final class RundownClockEngine {
         program.runState.isShowRunning = true
         activeBlockIndex = index
         isShowRunning = true
-        firedCueKeys.removeAll()
-        currentStageMessage = nil
         self.program = program
+        lastAdvance = RundownAdvanceRecord(fromIndex: from ?? index, toIndex: index, reason: .jump, dueAt: nil, firedAt: now)
+        resetItemState(now: now)
         startTimer()
         onBlockStarted?(program.rundownBlocks[index])
     }
 
+    /// Hold freezes the item clock and auto-advance. Press again to resume.
+    func toggleHold(now: Date = Date()) {
+        setHeld(!isHeld, now: now)
+    }
+
+    func setHeld(_ held: Bool, now: Date = Date()) {
+        guard isShowRunning, held != isHeld else { return }
+        // Bank the time up to this moment before freezing or resuming.
+        tick(now: now)
+        isHeld = held
+        if held {
+            cancelPreciseCut()
+            isWaitingOnScript = false
+        }
+        lastTickAt = now
+    }
+
+    /// +30 s on the live item.
+    func extendActiveBlock(by seconds: TimeInterval = RundownClockEngine.extendStepSeconds, now: Date = Date()) {
+        guard isShowRunning, activeBlock != nil else { return }
+        tick(now: now)
+        activeBlockExtensionSeconds += seconds
+        isStoppedAtItem = false
+        isWaitingOnScript = false
+        cancelPreciseCut()
+        activeBlockRemainingSeconds = activeBlockPlannedSeconds - activeBlockElapsedSeconds
+        // A later cue may cross again after the extension, but each still fires once per item.
+        previousRemaining = activeBlockRemainingSeconds
+    }
+
+    /// Countdown for the live row and the stage: "0:12", "+0:05" past the end, "HOLD 0:12" while held.
+    var liveCountdownText: String {
+        Self.countdownText(remaining: activeBlockRemainingSeconds, held: isHeld)
+    }
+
+    static func countdownText(remaining: TimeInterval, held: Bool) -> String {
+        let over = remaining < 0
+        // Count up past the end; round the countdown up so 0:00 is the cut.
+        let seconds = over ? Int((-remaining).rounded(.down)) : Int(remaining.rounded(.up))
+        let body = String(format: "%d:%02d", seconds / 60, seconds % 60)
+        let text = over ? "+" + body : body
+        return held ? "HOLD " + text : text
+    }
+
+    // MARK: - Clock
+
+    private func advance(reason: RundownAdvanceReason, dueAt: Date?, now: Date) {
+        guard var program, let currentIdx = activeBlockIndex else { return }
+        cancelPreciseCut()
+        program.rundownBlocks[currentIdx].actualEndTime = now
+        program.rundownBlocks[currentIdx].isCompleted = true
+
+        let nextIdx: Int? = reason == .manual
+            ? (currentIdx + 1 < program.rundownBlocks.count ? currentIdx + 1 : nil)
+            : RundownAutoAdvanceRules.nextAutoIndex(after: currentIdx, in: program.rundownBlocks)
+        lastAdvance = RundownAdvanceRecord(fromIndex: currentIdx, toIndex: nextIdx, reason: reason, dueAt: dueAt, firedAt: now)
+        if let nextIdx {
+            program.rundownBlocks[nextIdx].actualStartTime = now
+            program.rundownBlocks[nextIdx].isCompleted = false
+            program.runState.activeBlockIndex = nextIdx
+            activeBlockIndex = nextIdx
+            self.program = program
+            resetItemState(now: now)
+            onBlockStarted?(program.rundownBlocks[nextIdx])
+        } else {
+            program.runState.isShowRunning = false
+            program.runState.activeBlockIndex = nil
+            self.program = program
+            stopShow(resetBlocks: false)
+        }
+    }
+
+    private func resetItemState(now: Date) {
+        activeBlockElapsedSeconds = 0
+        activeBlockExtensionSeconds = 0
+        activeBlockRemainingSeconds = activeBlock?.plannedDurationSeconds ?? 0
+        previousRemaining = nil
+        lastTickAt = now
+        maxTickGapSeconds = 0
+        maxTickGapAtElapsed = 0
+        isHeld = false
+        isStoppedAtItem = false
+        isWaitingOnScript = false
+        currentStageMessage = nil
+        firedCueKeys.removeAll()
+    }
+
     private func startTimer() {
+        guard usesLiveTimer else { return }
         timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.tickClock() }
+        timer = Timer.scheduledTimer(withTimeInterval: Self.tickInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.tick() }
         }
         if let timer { RunLoop.main.add(timer, forMode: .common) }
     }
 
-    private func tickClock() {
-        guard var program, let idx = activeBlockIndex, program.rundownBlocks.indices.contains(idx) else { return }
+    /// One clock step. The live timer calls this at 10 Hz (cuts land on time through a one-shot); tests call it with their own times.
+    func tick(now: Date = Date()) {
+        guard isShowRunning, var program, let idx = activeBlockIndex, program.rundownBlocks.indices.contains(idx) else { return }
         let block = program.rundownBlocks[idx]
-        guard let startTime = block.actualStartTime else { return }
-        let now = Date()
-        let elapsed = now.timeIntervalSince(startTime)
-        let remaining = block.plannedDurationSeconds - elapsed
-
-        activeBlockElapsedSeconds = max(0, elapsed)
+        guard block.actualStartTime != nil else { return }
+        let delta = lastTickAt.map { max(0, now.timeIntervalSince($0)) } ?? 0
+        lastTickAt = now
+        if delta > maxTickGapSeconds {
+            maxTickGapSeconds = delta
+            maxTickGapAtElapsed = activeBlockElapsedSeconds
+        }
+        if !isHeld {
+            activeBlockElapsedSeconds += delta
+        }
+        let remaining = activeBlockPlannedSeconds - activeBlockElapsedSeconds
         activeBlockRemainingSeconds = remaining
 
-        evaluateStageCues(for: block, remainingSeconds: remaining)
+        evaluateStageCues(for: block, previous: previousRemaining, current: remaining)
+        previousRemaining = remaining
 
         let priorPlanned = program.rundownBlocks.prefix(idx).reduce(0.0) { $0 + $1.plannedDurationSeconds }
-        let expectedElapsedTotal = priorPlanned + elapsed
+        let expectedElapsedTotal = priorPlanned + activeBlockElapsedSeconds
         let wallClockElapsedTotal = now.timeIntervalSince(program.hardStartTime)
         cumulativeDriftSeconds = wallClockElapsedTotal - expectedElapsedTotal
         program.runState.cumulativeDriftSeconds = cumulativeDriftSeconds
@@ -166,21 +319,97 @@ final class RundownClockEngine {
         } else {
             upcomingTalentCueText = nil
         }
+
+        evaluateAutoAdvance(block: block, index: idx, remaining: remaining, now: now)
     }
 
-    private func evaluateStageCues(for block: RundownBlock, remainingSeconds: TimeInterval) {
+    /// Cue offsets are seconds before the end, whatever their sign (older files stored -60).
+    /// A cue fires when the countdown crosses it: previous > t >= current. Once per item, so holds,
+    /// +30 s and stalls never repeat or skip it.
+    private func evaluateStageCues(for block: RundownBlock, previous: TimeInterval?, current: TimeInterval) {
         let triggers = block.customCueTriggers.isEmpty
             ? (program?.defaultStageCueTriggers ?? [])
             : block.customCueTriggers
-        for cue in triggers {
-            let targetRemaining = TimeInterval(cue.triggerOffsetSeconds)
+        // The first tick of an item starts at its planned length, so a cue at exactly that time fires.
+        let previous = previous ?? (current + 0.000_1)
+        guard previous > current else { return }
+        let crossed = triggers
+            .filter { cue in
+                let t = TimeInterval(abs(cue.triggerOffsetSeconds))
+                return previous > t && t >= current
+            }
+            .sorted { abs($0.triggerOffsetSeconds) > abs($1.triggerOffsetSeconds) }
+        for cue in crossed {
             let key = "\(block.id.uuidString)-\(cue.id.uuidString)"
-            if abs(remainingSeconds - targetRemaining) < 0.25, !firedCueKeys.contains(key) {
-                firedCueKeys.insert(key)
-                currentStageMessage = cue.stageMessage
-                onStageCue?(cue.stageMessage, cue.flashScreen)
+            guard !firedCueKeys.contains(key) else { continue }
+            firedCueKeys.insert(key)
+            currentStageMessage = cue.stageMessage
+            onStageCue?(cue.stageMessage, cue.flashScreen)
+        }
+    }
+
+    private func evaluateAutoAdvance(block: RundownBlock, index: Int, remaining: TimeInterval, now: Date) {
+        guard autoAdvanceEnabled, !isHeld, isShowRunning else {
+            isWaitingOnScript = false
+            return
+        }
+        guard let program else { return }
+        let stopItem = RundownAutoAdvanceRules.isStopItem(at: index, in: program.rundownBlocks)
+        if stopItem {
+            isStoppedAtItem = remaining <= 0
+            isWaitingOnScript = false
+            return
+        }
+        // Item time past the planned end (holds excluded). Negative: still before the end.
+        let over = -remaining
+        // How far past the end the cut is due, in item time.
+        let dueOver: TimeInterval
+        let reason: RundownAdvanceReason
+        switch scriptStateProvider?(block) ?? .none {
+        case .none:
+            dueOver = 0
+            reason = .clock
+        case .finished(let at):
+            let finishedOver = over - max(0, now.timeIntervalSince(at))
+            if finishedOver <= 0 {
+                dueOver = 0
+                reason = .clock
+            } else {
+                let tailed = finishedOver + Self.scriptTailSeconds
+                dueOver = min(tailed, Self.scriptCapSeconds)
+                reason = tailed > Self.scriptCapSeconds ? .scriptCap : .scriptEnd
+            }
+        case .reading:
+            dueOver = Self.scriptCapSeconds
+            reason = .scriptCap
+        }
+        let wait = dueOver - over
+        isWaitingOnScript = over >= 0 && dueOver > 0 && wait > 0
+        let dueAt = now.addingTimeInterval(wait)
+        if wait <= 0 {
+            advance(reason: reason, dueAt: dueAt, now: now)
+        } else if wait <= Self.tickInterval * 2 {
+            schedulePreciseCut(at: dueAt)
+        }
+    }
+
+    /// Lands the cut on the due time instead of the next 50 ms tick.
+    private func schedulePreciseCut(at dueAt: Date) {
+        guard usesLiveTimer, preciseCut == nil else { return }
+        let item = DispatchWorkItem { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                self.preciseCut = nil
+                self.tick(now: max(Date(), dueAt))
             }
         }
+        preciseCut = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(0, dueAt.timeIntervalSinceNow), execute: item)
+    }
+
+    private func cancelPreciseCut() {
+        preciseCut?.cancel()
+        preciseCut = nil
     }
 
     func projectedDrift(forBlockAt index: Int, assumingOnScheduleAfter activeIdx: Int) -> TimeInterval? {
@@ -195,6 +424,106 @@ final class RundownClockEngine {
             return actual - block.plannedDurationSeconds
         }
         return nil
+    }
+}
+
+/// Prompter words per minute that fit an item's script into its planned duration.
+enum ProgramPromptPacing {
+    /// Nil keeps the prompter's own speed (no script, no duration, or the item asks for it).
+    static func wpm(for block: RundownBlock, plannedSeconds: TimeInterval, baseWPM: Int, pacing: ScriptPacing) -> Int? {
+        guard (block.promptPacing ?? .defaultMode) == .fitDuration else { return nil }
+        return fittedWPM(script: block.scriptBody, plannedSeconds: plannedSeconds, pacing: pacing)
+    }
+
+    /// The slowest whole WPM in 120...240 whose real read time (same tokenizer and pacing the
+    /// prompter plays) fits the planned duration. Read time falls as WPM rises, so a binary search.
+    static func fittedWPM(script: String, plannedSeconds: TimeInterval, pacing: ScriptPacing) -> Int? {
+        guard plannedSeconds > 0, !script.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        let key = "\(plannedSeconds)|\(String(describing: pacing))|\(script)"
+        if let cached = cache[key] { return cached }
+        let range = PromptPacingMode.wpmRange
+        let result: Int
+        if total(script, wpm: range.upperBound, pacing: pacing) > plannedSeconds {
+            result = range.upperBound
+        } else if total(script, wpm: range.lowerBound, pacing: pacing) <= plannedSeconds {
+            result = range.lowerBound
+        } else {
+            var slow = range.lowerBound   // too long
+            var fast = range.upperBound   // fits
+            while fast - slow > 1 {
+                let mid = (slow + fast) / 2
+                if total(script, wpm: mid, pacing: pacing) <= plannedSeconds { fast = mid } else { slow = mid }
+            }
+            result = fast
+        }
+        if cache.count > 256 { cache.removeAll() }
+        cache[key] = result
+        return result
+    }
+
+    // Main-thread callers only (prompter load and status).
+    nonisolated(unsafe) private static var cache: [String: Int] = [:]
+
+    static func total(_ script: String, wpm: Int, pacing: ScriptPacing) -> TimeInterval {
+        ScriptTokenizer.tokenize(script, baseWPM: wpm, pacing: pacing).reduce(0) { $0 + $1.totalDuration }
+    }
+}
+
+/// Which items auto-advance stops at, and which ones it skips over.
+enum RundownAutoAdvanceRules {
+    /// Explicit `stopHere` wins. Otherwise auto stops at:
+    /// the first item when it is a waiting slate (Starting soon, Pre-show, Countdown, Waiting room),
+    /// STANDBY or BRB items, an Outro, and the last item.
+    static func isStopItem(at index: Int, in blocks: [RundownBlock]) -> Bool {
+        guard blocks.indices.contains(index) else { return false }
+        let block = blocks[index]
+        if let explicit = block.stopHere { return explicit }
+        return derivedStop(at: index, in: blocks)
+    }
+
+    static func derivedStop(at index: Int, in blocks: [RundownBlock]) -> Bool {
+        guard blocks.indices.contains(index) else { return false }
+        let block = blocks[index]
+        if index == blocks.count - 1 { return true }
+        if index == 0, isWaitingSlate(block) { return true }
+        if isStandby(block) { return true }
+        if isOutro(block) { return true }
+        return false
+    }
+
+    /// Auto never cuts into an only-if-needed standby item (STANDBY or BRB without an explicit
+    /// `stopHere`); it goes to the next item instead. Manual Next still takes it. Nil when nothing is left.
+    static func nextAutoIndex(after index: Int, in blocks: [RundownBlock]) -> Int? {
+        var probe = index + 1
+        while blocks.indices.contains(probe) {
+            if !isStandby(blocks[probe]) || blocks[probe].stopHere != nil { return probe }
+            probe += 1
+        }
+        return nil
+    }
+
+    static func isWaitingSlate(_ block: RundownBlock) -> Bool {
+        let title = normalized(block.title)
+        return ["starting soon", "pre show", "preshow", "countdown", "waiting room", "stream starting"]
+            .contains { title.contains($0) }
+    }
+
+    static func isStandby(_ block: RundownBlock) -> Bool {
+        let words = Set(normalized(block.title).split(separator: " ").map(String.init))
+        return words.contains("standby") || words.contains("brb") || normalized(block.title).contains("be right back")
+    }
+
+    static func isOutro(_ block: RundownBlock) -> Bool {
+        let title = normalized(block.title)
+        return title.hasPrefix("outro") || title.contains(" outro") || title.hasPrefix("end slate")
+    }
+
+    private static func normalized(_ text: String) -> String {
+        text.lowercased()
+            .map { $0.isLetter || $0.isNumber ? $0 : " " }
+            .reduce(into: "") { $0.append($1) }
+            .split(separator: " ")
+            .joined(separator: " ")
     }
 }
 

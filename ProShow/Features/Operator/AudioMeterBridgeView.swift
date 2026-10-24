@@ -27,7 +27,7 @@ struct AudioMeterBridgeView: View {
         #if os(macOS)
         AudioMeterBridgeRepresentable(orientation: orientation, sample: sample)
         #else
-        TimelineView(.periodic(from: .now, by: 1.0 / 15.0)) { _ in
+        TimelineView(.periodic(from: TimelineAnchor.start, by: 1.0 / 15.0)) { _ in
             let channels = sample()
             VStack(spacing: 4) {
                 ForEach(channels, id: \.id) { channel in
@@ -115,6 +115,8 @@ final class AudioMeterBridgeNSView: NSView {
     func start() {
         guard link == nil else { return }
         let link = displayLink(target: self, selector: #selector(step))
+        // Perf: every main-thread CA commit runs a window layout pass; meters don't need vsync rate.
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: 10, maximum: 20, preferred: 20)
         link.add(to: .main, forMode: .common)
         self.link = link
     }

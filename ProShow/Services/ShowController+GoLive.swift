@@ -23,6 +23,8 @@ extension ShowController {
 
     func stopBroadcast() {
         streaming.stop()
+        syncPhoneRecording()
+        chatIngest?.stopAutoStarted()
         isProvisioningStreams = false
         lastBroadcastError = nil
         evaluateProgramClockState()
@@ -66,9 +68,13 @@ extension ShowController {
             if streaming.isLive {
                 return max(1, streaming.config.framerate)
             }
-            return min(30, projectSettings.frameRate.encoderFPS)
+            return recordOnlyFrameRate
         }()
-        let writerResult: Result<ProgramVideoFileRecorder, ProgramRecordingSetupFailure> = streaming.isLive
+        // Passthrough copies the Stream encode. Phone-only live has no Stream encode, so the
+        // 16:9 file encodes its own frames and takes audio from the Phone transport pump.
+        let phoneOnlyLive = streaming.isLive && streaming.routingPlan?.encodesStream == false
+        let passthrough = streaming.isLive && !phoneOnlyLive
+        let writerResult: Result<ProgramVideoFileRecorder, ProgramRecordingSetupFailure> = passthrough
             ? ProgramVideoFileRecorder.makePassthrough(
                 url: fileURL,
                 width: dims.width,
@@ -104,6 +110,7 @@ extension ShowController {
         #else
         return false
         #endif
+        syncPhoneRecording()
         evaluateProgramClockState()
         #if os(macOS)
         prefetchUpcomingRundownBrowserPages()
@@ -111,8 +118,38 @@ extension ShowController {
         return isoRecorder.isRecording
     }
 
+    /// True when this project has a Phone canvas, so recording also writes a 9:16 file.
+    var projectHasPhoneCanvas: Bool {
+        show.allSlides.contains { phoneCanvasBoard(on: $0) != nil }
+    }
+
+    /// Opens or closes the 9:16 file beside the 16:9 recording. It runs while recording and either a
+    /// Phone destination is live or the project has a Phone canvas. Never touches audio routing.
+    func syncPhoneRecording() {
+        #if canImport(AVFoundation)
+        guard ProShowFeatureFlags.multiDestinationRoutingV1 else { return }
+        let wanted = isoRecorder.isRecording && (streaming.phoneDestinationAttached || projectHasPhoneCanvas)
+        if wanted {
+            let wasActive = streaming.phoneRecordingActive
+            guard streaming.setPhoneRecording(true) else {
+                isoRecorder.lastPhoneRecordingNote = streaming.phoneRecordingRefusal
+                isoRecorder.stopPhoneFile()
+                return
+            }
+            if !wasActive { publishCurrentPhoneCanvas() }
+            if !isoRecorder.isRecordingPhone, !isoRecorder.startPhoneFile() {
+                streaming.setPhoneRecording(false)
+            }
+        } else {
+            isoRecorder.stopPhoneFile()
+            if streaming.phoneRecordingActive { streaming.setPhoneRecording(false) }
+        }
+        #endif
+    }
+
     func stopProgramRecording() {
         isoRecorder.stop()
+        syncPhoneRecording()
         if !streaming.isLive {
             streaming.releaseEncoderIfIdle()
         }
@@ -236,6 +273,7 @@ extension ShowController {
         }
         let accepted = streaming.start(ingestPolicies: ingestPolicies)
         publishCurrentPhoneCanvas()
+        syncPhoneRecording()
         if !accepted {
             isProvisioningStreams = false
             lastBroadcastError = streaming.lastError ?? "Encoder failed to start."
@@ -256,6 +294,8 @@ extension ShowController {
         Task {
             let listingIngests = await prepareXBroadcasts(ingests, metadata: metadata, api: api)
             await transitionYouTubeBroadcasts(listingIngests, api: api)
+            startYouTubeChatAfterGoLive(listingIngests)
+            startXChatAfterGoLive(listingIngests)
             await finishXBroadcasts(listingIngests, metadata: metadata, api: api)
         }
         return true

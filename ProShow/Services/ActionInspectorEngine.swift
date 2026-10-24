@@ -118,8 +118,17 @@ final class ActionInspectorEngine {
             props[index].transition = document.transition
             props[index].collectionName = document.collectionName
             props[index].transitionDuration = document.transitionDuration
+            // Phone fields only come from documents that carry the Phone board; others leave them as saved.
+            if document.boards.contains(where: { EditorEngine.isPropPhoneBoard($0, of: document) }) {
+                props[index].phoneMode = document.propPhoneMode
+                props[index].showOn = document.propShowOn
+                if let phone = EditorEngine.propPhoneElements(of: document) {
+                    props[index].phoneElements = phone
+                }
+            }
             return
         }
+        let hasPhoneBoard = document.boards.contains(where: { EditorEngine.isPropPhoneBoard($0, of: document) })
         props.append(
             ProShowProp(
                 id: document.id,
@@ -128,7 +137,10 @@ final class ActionInspectorEngine {
                 transitionDuration: document.transitionDuration,
                 autoClearMode: .parse(document.autoClear),
                 collectionName: document.collectionName,
-                transition: document.transition
+                transition: document.transition,
+                phoneElements: EditorEngine.propPhoneElements(of: document),
+                phoneMode: hasPhoneBoard ? document.propPhoneMode : nil,
+                showOn: hasPhoneBoard ? document.propShowOn : .both
             )
         )
         if selectedPropID == nil {
@@ -181,6 +193,7 @@ final class ActionInspectorEngine {
         copy.id = UUID()
         copy.name = prop.name.hasSuffix(" Copy") ? prop.name : "\(prop.name) Copy"
         copy.isActive = false
+        copy.isChatTemplate = false
         props.append(copy)
         selectedPropID = copy.id
         return copy
@@ -198,6 +211,15 @@ final class ActionInspectorEngine {
     func setPropAutoClear(id: UUID, mode: ProShowProp.AutoClearMode) {
         guard let index = props.firstIndex(where: { $0.id == id }) else { return }
         props[index].autoClearMode = mode
+        selectedPropID = id
+    }
+
+    /// Marks one prop as the live chat template, or unmarks it. Marking clears any other mark.
+    func setPropChatTemplate(id: UUID, on: Bool) {
+        guard props.contains(where: { $0.id == id }) else { return }
+        for index in props.indices {
+            props[index].isChatTemplate = on && props[index].id == id
+        }
         selectedPropID = id
     }
 

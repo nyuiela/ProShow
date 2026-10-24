@@ -11,6 +11,8 @@ final class ProgramAudioMonitorBridge {
     static let shared = ProgramAudioMonitorBridge()
 
     private(set) var isRunning = false
+    /// Read on the render thread instead of the main-actor monitor engine (a plain Float store).
+    nonisolated(unsafe) static var renderVolume: Float = 1
 
     #if canImport(AVFoundation)
     private var engine: AVAudioEngine?
@@ -46,7 +48,7 @@ final class ProgramAudioMonitorBridge {
         let source = AVAudioSourceNode(format: format) { _, _, frameCount, audioBufferList -> OSStatus in
             let frames = Int(frameCount)
             let stereo = ProgramPCMBridge.consumeInterleavedStereo(frameCount: frames)
-            let volume = AudioMonitoringEngine.shared.effectiveMonitorVolume
+            let volume = ProgramAudioMonitorBridge.renderVolume
             let abl = UnsafeMutableAudioBufferListPointer(audioBufferList)
             if abl.count >= 2,
                let left = abl[0].mData?.assumingMemoryBound(to: Float.self),
@@ -68,7 +70,7 @@ final class ProgramAudioMonitorBridge {
         graph.connect(source, to: graph.mainMixerNode, format: format)
         _ = MacAudioOutputRouting.applyPreferredDevice(
             to: graph,
-            uid: AudioMonitoringEngine.shared.preferredOutputDeviceUID
+            uid: AudioMonitoringEngine.shared.activeOutputDeviceUID
         )
         do {
             try graph.start()
@@ -92,7 +94,7 @@ final class ProgramAudioMonitorBridge {
         engine.pause()
         _ = MacAudioOutputRouting.applyPreferredDevice(
             to: engine,
-            uid: AudioMonitoringEngine.shared.preferredOutputDeviceUID
+            uid: AudioMonitoringEngine.shared.activeOutputDeviceUID
         )
         try? engine.start()
     }

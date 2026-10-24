@@ -223,6 +223,15 @@ enum ScreenCaptureRouting {
         }
     }
 
+    /// ScreenCaptureKit reports `.idle` while the captured content is unchanged.
+    static func isIdleFrame(_ sampleBuffer: CMSampleBuffer) -> Bool {
+        guard let attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false) as? [[SCStreamFrameInfo: Any]],
+              let raw = attachments.first?[.status] as? Int,
+              let status = SCFrameStatus(rawValue: raw)
+        else { return false }
+        return status == .idle
+    }
+
     static func isCompleteFrame(_ sampleBuffer: CMSampleBuffer) -> Bool {
         let hasPixel = CMSampleBufferGetImageBuffer(sampleBuffer) != nil
         guard let attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false) as? [[SCStreamFrameInfo: Any]],

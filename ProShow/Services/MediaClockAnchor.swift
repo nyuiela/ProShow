@@ -10,7 +10,28 @@ final class MediaClockAnchor: @unchecked Sendable {
     private var lastAudioPTS: CMTime = .invalid
     private var inactiveAudioIndex: Int64 = 0
 
+    /// Audio more than this far behind host time jumps forward instead of catching up.
+    static let resyncAfterSeconds: Double = 0.5
+    private(set) var resyncCount = 0
+
     init() {}
+
+    /// How many AAC blocks a pump tick should emit now (catch-up after a late tick), capped.
+    /// Idle sessions without a host anchor always get exactly one.
+    func dueAudioBlockCount(max cap: Int = 8, now: CMTime = CMClockGetTime(CMClockGetHostTimeClock())) -> Int {
+        let frameSeconds = Double(ProgramStreamAudioClock.framesPerAccessUnit) / Double(ProgramStreamAudioClock.sampleRate)
+        lock.lock()
+        let anchor = hostAnchor
+        let last = lastAudioPTS
+        lock.unlock()
+        guard anchor.isValid else { return 1 }
+        guard last.isValid else { return 1 }
+        let raw = CMTimeGetSeconds(presentationTime(atHostTime: now))
+        let next = CMTimeGetSeconds(last) + frameSeconds
+        guard raw >= next else { return 0 }
+        let due = Int((raw - next) / frameSeconds) + 1
+        return min(Swift.max(1, due), Swift.max(1, cap))
+    }
 
     var isActive: Bool {
         lock.lock()
@@ -87,8 +108,16 @@ final class MediaClockAnchor: @unchecked Sendable {
             let samples = Int64((CMTimeGetSeconds(raw) * Double(ProgramStreamAudioClock.sampleRate)).rounded(.down))
             let aligned = max(0, samples / Int64(ProgramStreamAudioClock.framesPerAccessUnit)) * Int64(ProgramStreamAudioClock.framesPerAccessUnit)
             var candidate = CMTime(value: aligned, timescale: CMTimeScale(ProgramStreamAudioClock.sampleRate))
-            if last.isValid, CMTimeCompare(candidate, last) <= 0 {
-                candidate = CMTimeAdd(last, frame)
+            if last.isValid {
+                // Contiguous: one AU after the last. A late pump tick no longer skips grid slots
+                // (that left holes in the AAC timeline). Resync only after a long stall.
+                let next = CMTimeAdd(last, frame)
+                let behind = CMTimeGetSeconds(CMTimeSubtract(raw, next))
+                if behind > Self.resyncAfterSeconds, CMTimeCompare(candidate, next) > 0 {
+                    resyncCount += 1
+                } else {
+                    candidate = next
+                }
             }
             resolved = candidate
         } else {

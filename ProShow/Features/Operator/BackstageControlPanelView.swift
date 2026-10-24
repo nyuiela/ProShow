@@ -12,10 +12,7 @@ struct BackstageControlPanelView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: DeskSpace.md) {
-                roomSection
-                virtualCameraSection
-                guestsSection
-                intercomSection
+                backstageSection
                 chatSection
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -49,71 +46,151 @@ struct BackstageControlPanelView: View {
         }
     }
 
-    private var roomSection: some View {
-        VStack(alignment: .leading, spacing: DeskSpace.xs) {
-            DeskSectionTitle(title: "Backstage room")
-            Text(backstage.inviteURLString)
-                .font(DeskType.mono)
-                .foregroundStyle(ShowSidebarPalette.title)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
-            HStack(spacing: 8) {
-                Button("Copy link") { controller.copyBackstageInviteLink() }
-                    .controlSize(.small)
-                Button("New room") { controller.newGuestRoom() }
-                    .controlSize(.small)
-                Spacer(minLength: 0)
-            }
+    @State private var roomNameDraft = ""
+    @State private var roomNameInvalid = false
+    @State private var roomNameEditing = false
+
+    private func applyRoomName() {
+        roomNameInvalid = !controller.setBackstageRoomName(roomNameDraft)
+        if !roomNameInvalid {
+            roomNameDraft = ""
+            roomNameEditing = false
         }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(ShowSidebarPalette.selection(scheme), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
-    private var virtualCameraSection: some View {
-        VStack(alignment: .leading, spacing: DeskSpace.xs) {
-            DeskSectionTitle(title: "Virtual camera")
-            Toggle("Virtual Camera", isOn: Binding(
-                get: { controller.deviceSettings.document.virtualCameraEnabled },
-                set: { value in
-                    controller.deviceSettings.document.virtualCameraEnabled = value
-                    controller.deviceSettings.save()
-                    controller.virtualCameraOutput?.setPublishing(value)
-                    controller.syncVirtualAudioLoopbackPublishing()
+    private var virtualCameraOn: Binding<Bool> {
+        Binding(
+            get: { controller.deviceSettings.document.virtualCameraEnabled },
+            set: { value in
+                controller.deviceSettings.document.virtualCameraEnabled = value
+                controller.deviceSettings.save()
+                controller.virtualCameraOutput?.setPublishing(value)
+                controller.syncVirtualAudioLoopbackPublishing()
+            }
+        )
+    }
+
+    /// Room, guests, return feed, talk and virtual camera in one flat section.
+    private var backstageSection: some View {
+        VStack(alignment: .leading, spacing: DeskSpace.sm) {
+            HStack(spacing: 6) {
+                DeskSectionTitle(title: "Backstage")
+                    .fixedSize()
+                if controller.deviceSettings.document.virtualCameraEnabled {
+                    Image(systemName: "web.camera.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(ProShowTheme.statusOn)
+                        .help("Virtual camera on")
+                        .accessibilityLabel("Virtual camera on")
                 }
-            ))
-            .font(DeskType.body)
-            .fixedSize(horizontal: false, vertical: true)
-            .help("Publish program as a camera.")
-            .accessibilityLabel("Publish program as a camera")
-            if let output = controller.virtualCameraOutput, output.needsExtension {
+                Spacer(minLength: 4)
+                TalkPillButton(controller: controller)
+                returnFeedMenu
+                backstageMoreMenu
+            }
+            HStack(spacing: 6) {
+                Text(backstage.inviteURLString)
+                    .font(DeskType.mono)
+                    .foregroundStyle(ShowSidebarPalette.title)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
+                Button { controller.copyBackstageInviteLink() } label: {
+                    Image(systemName: "doc.on.doc")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(ShowSidebarPalette.subtitle)
+                }
+                .buttonStyle(.borderless)
+                .help("Copy link")
+                .accessibilityLabel("Copy invite link")
+            }
+            if roomNameEditing {
+                HStack(spacing: 6) {
+                    TextField("Room name", text: $roomNameDraft)
+                        .textFieldStyle(.roundedBorder)
+                        .controlSize(.small)
+                        .onSubmit { applyRoomName() }
+                    Button("Set") { applyRoomName() }
+                        .controlSize(.small)
+                    Button { roomNameEditing = false; roomNameInvalid = false } label: {
+                        Image(systemName: "xmark").font(.system(size: 9, weight: .bold))
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Cancel")
+                    .accessibilityLabel("Cancel rename")
+                }
+                if roomNameInvalid {
+                    Text("3 to 40 lowercase letters, numbers or dashes")
+                        .font(DeskType.micro)
+                        .foregroundStyle(.red)
+                }
+            }
+            if let output = controller.virtualCameraOutput, output.needsExtension,
+               controller.deviceSettings.document.virtualCameraEnabled {
                 Text(output.blockedReason ?? "Camera extension missing.")
                     .font(DeskType.micro)
                     .foregroundStyle(ProShowTheme.sandboxOrange)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            if controller.liveKitDesk.guests.isEmpty {
+                Text(controller.liveKitDesk.status)
+                    .font(DeskType.micro)
+                    .foregroundStyle(ShowSidebarPalette.subtitle)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isStaticText)
+            } else {
+                ForEach(controller.liveKitDesk.guests) { feed in
+                    guestRow(feed)
+                }
+            }
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(ShowSidebarPalette.selection(scheme), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
-    private var guestsSection: some View {
-        VStack(alignment: .leading, spacing: DeskSpace.sm) {
-            DeskSectionTitle(title: "Remote guests")
-            Text(controller.liveKitDesk.status)
-                .font(DeskType.micro)
-                .foregroundStyle(ShowSidebarPalette.subtitle)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityAddTraits(.isStaticText)
-            ForEach(controller.liveKitDesk.guests) { feed in
-                guestRow(feed)
+    private var returnFeedMenu: some View {
+        let mode = controller.backstage.returnFeedMode
+        return Menu {
+            Picker("Return feed", selection: Binding(
+                get: { controller.backstage.returnFeedMode },
+                set: { controller.setReturnMode(identity: nil, mode: $0) }
+            )) {
+                ForEach(BackstageReturnFeedMode.allCases, id: \.self) { mode in
+                    Text(mode.rawValue).tag(mode)
+                }
             }
+            .pickerStyle(.inline)
+        } label: {
+            HStack(spacing: 3) {
+                Image(systemName: "arrow.uturn.backward")
+                Text(mode.pickerShortLabel)
+            }
+            .font(DeskType.micro)
         }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(ShowSidebarPalette.selection(scheme), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.visible)
+        .controlSize(.small)
+        .fixedSize()
+        .help("Return feed to guests")
+        .accessibilityLabel("Return feed, \(mode.rawValue)")
+    }
+
+    private var backstageMoreMenu: some View {
+        Menu {
+            Button("Copy link") { controller.copyBackstageInviteLink() }
+            Button("New room") { controller.newGuestRoom() }
+            Button("Rename room") { roomNameEditing = true }
+            Divider()
+            Toggle("Virtual camera", isOn: virtualCameraOn)
+        } label: {
+            Text("More").font(DeskType.micro)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.visible)
+        .controlSize(.small)
+        .fixedSize()
+        .accessibilityLabel("More backstage options")
     }
 
     private func guestRow(_ feed: LiveKitGuestFeed) -> some View {
@@ -233,144 +310,82 @@ struct BackstageControlPanelView: View {
             .accessibilityLabel(status.accessibilityTitle)
     }
 
-    private var intercomSection: some View {
-        VStack(alignment: .leading, spacing: DeskSpace.xs) {
-            DeskSectionTitle(title: "Return feed")
-            returnFeedPicker
-            Toggle("Intercom", isOn: Binding(
-                get: { controller.backstage.intercomActive },
-                set: { controller.backstage.intercomActive = $0 }
-            ))
-            .font(DeskType.body)
-            .fixedSize(horizontal: false, vertical: true)
-            .help("Talk to the green room.")
-            .accessibilityLabel("Talk to the green room")
-            Text(controller.mixMinusReturnDescription(excludingGuestID: nil))
-                .font(DeskType.micro)
-                .foregroundStyle(ShowSidebarPalette.subtitle)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(ShowSidebarPalette.selection(scheme), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-    }
-
-    @ViewBuilder
-    private var returnFeedPicker: some View {
-        let selection = Binding(
-            get: { controller.backstage.returnFeedMode },
-            set: { controller.backstage.returnFeedMode = $0 }
-        )
-        ViewThatFits(in: .horizontal) {
-            Picker("Return feed", selection: selection) {
-                ForEach(BackstageReturnFeedMode.allCases, id: \.self) { mode in
-                    Text(mode.pickerShortLabel).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
-            .accessibilityLabel("Return feed")
-
-            Picker("Return feed", selection: selection) {
-                ForEach(BackstageReturnFeedMode.allCases, id: \.self) { mode in
-                    Text(mode.rawValue).tag(mode)
-                }
-            }
-            .labelsHidden()
-            .accessibilityLabel("Return feed")
-        }
-    }
-
     private var chatSection: some View {
-        VStack(alignment: .leading, spacing: DeskSpace.sm) {
-            DeskSectionTitle(title: "Live chat stream")
-            if let chatStream {
-                chatSourceToggles(chatStream)
-                if let active = chatStream.activeOverlay {
-                    activeOverlayCard(active, chatStream: chatStream)
-                }
-                ForEach(chatStream.inbox.prefix(12), id: \.id) { message in
-                    chatMessageRow(message, chatStream: chatStream)
-                }
-            }
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(ShowSidebarPalette.selection(scheme), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        LiveChatFeedView(controller: controller, style: .panel)
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(ShowSidebarPalette.selection(scheme), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
+}
 
-    private func chatSourceToggles(_ chatStream: LiveChatStreamManager) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach([ChatPlatform.zoom, .googleMeet, .backstage], id: \.self) { platform in
-                Toggle(platform.displayTitle, isOn: Binding(
-                    get: { chatStream.enabledSources.contains(platform) },
-                    set: { chatStream.setSourceEnabled(platform, enabled: $0) }
-                ))
-                .font(DeskType.micro)
+/// Talk to guests. Tap toggles, press and hold talks while held. Glows while live.
+/// Wired to startTalkback and stopTalkback exactly like the old checkbox.
+struct TalkPillButton: View {
+    @Bindable var controller: ShowController
+    @Bindable private var model = TalkButtonModel.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var pulse = false
+
+    private var active: Bool { OnAirAudioControls.shared.talkActive }
+    private var enabled: Bool { controller.liveKitDesk.hasStartedConnection }
+    private var holding: Bool { active && model.isPressed }
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: active ? "mic.fill" : "mic")
+                .font(.system(size: 10, weight: .bold))
+                .symbolEffect(.variableColor.iterative, isActive: active && !reduceMotion)
+            Text(active ? "Talking" : "Talk")
+                .font(.system(size: 11, weight: .semibold))
+                .lineLimit(1)
+            if active && !holding {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 7, weight: .bold))
+                    .opacity(0.85)
             }
         }
-    }
-
-    private func chatMessageRow(_ message: LiveChatMessage, chatStream: LiveChatStreamManager) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(message.senderName)
-                        .font(DeskType.bodyEmph)
-                        .lineLimit(1)
-                    Text(message.platformSource)
-                        .font(DeskType.micro)
-                        .foregroundStyle(ShowSidebarPalette.subtitle)
-                }
-                Spacer(minLength: 0)
-                if message.isStarred {
-                    Image(systemName: "star.fill")
-                        .font(.caption2)
-                        .foregroundStyle(ProShowTheme.statusOn)
-                        .accessibilityLabel("Starred")
-                }
-            }
-            Text(message.messageText)
-                .font(DeskType.body)
-                .foregroundStyle(ShowSidebarPalette.title)
-                .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 8) {
-                Button("Display on screen") {
-                    controller.triggerChatOverlay(message)
-                }
-                .controlSize(.small)
-                Button(message.isStarred ? "Unstar" : "Star") {
-                    chatStream.toggleStar(id: message.id)
-                }
-                .controlSize(.small)
-                Spacer(minLength: 0)
-            }
-        }
-        .padding(.vertical, 6)
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func activeOverlayCard(_ message: LiveChatMessage, chatStream: LiveChatStreamManager) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("On-air overlay")
-                .font(DeskType.meta)
-                .foregroundStyle(ProShowTheme.liveRed)
-            Text("\(message.senderName): \(message.messageText)")
-                .font(DeskType.body)
-                .fixedSize(horizontal: false, vertical: true)
-            VStack(alignment: .leading, spacing: 8) {
-                Button("Dismiss") { controller.dismissChatOverlay() }
-                    .controlSize(.small)
-                Stepper("Auto-clear \(chatStream.autoClearSeconds)s", value: Binding(
-                    get: { chatStream.autoClearSeconds },
-                    set: { chatStream.autoClearSeconds = $0 }
-                ), in: 0...120, step: 5)
-                .font(DeskType.micro)
-            }
-        }
+        .foregroundStyle(active ? Color.white : ShowSidebarPalette.title)
+        .padding(.horizontal, 9)
         .padding(.vertical, 4)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(alignment: .leading) {
-            InspectorSelectionRibbon(selected: true, color: ProShowTheme.liveRed)
+        .background {
+            Capsule(style: .continuous)
+                .fill(active ? ProShowTheme.liveRed : ShowSidebarPalette.subtitle.opacity(0.16))
+        }
+        .overlay {
+            if active {
+                Capsule(style: .continuous)
+                    .stroke(ProShowTheme.liveRed.opacity(pulse ? 0.15 : 0.7), lineWidth: pulse ? 6 : 1.5)
+                    .padding(pulse ? -3 : 0)
+            }
+        }
+        .shadow(color: active ? ProShowTheme.liveRed.opacity(holding ? 0.9 : (pulse ? 0.35 : 0.75)) : .clear,
+                radius: active ? (holding ? 9 : 6) : 0)
+        .scaleEffect(holding && !reduceMotion ? 1.06 : 1)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: holding)
+        .contentShape(Capsule())
+        .opacity(enabled ? 1 : 0.45)
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in
+                    guard enabled, !model.isPressed else { return }
+                    model.press(isActive: active) { controller.startTalkback() }
+                }
+                .onEnded { _ in
+                    model.release { controller.stopTalkback() }
+                }
+        )
+        .onChange(of: active, initial: true) { _, on in
+            guard on, !reduceMotion else { pulse = false; return }
+            pulse = false
+            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { pulse = true }
+        }
+        .help(enabled ? "Click to talk, hold to talk while held. Hold T also works. Never on program." : "Room off")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(active ? "Talking to guests" : "Talk to guests")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction {
+            guard enabled else { return }
+            model.toggle(isActive: active, start: { controller.startTalkback() }, stop: { controller.stopTalkback() })
         }
     }
 }

@@ -1,17 +1,48 @@
 import Foundation
 import Observation
 
+enum AudioListenMode: String, Codable, Sendable, CaseIterable {
+    /// Pre-fader: the source as captured (trim only), even if muted or isolated out.
+    case pfl
+    /// After-fader: exactly what the stream gets from this source.
+    case afl
+}
+
 /// Multi-bus mixer: mic, desktop, guest, slide, and soundboard with ducking, EQ, and a limited master.
 @MainActor
 @Observable
 final class AudioMatrixEngine {
-    var channels: [AudioMatrixChannel] = []
+    var channels: [AudioMatrixChannel] = [] {
+        didSet {
+            let next = channels.map(Self.withoutMeters)
+            if next != controls { controls = next }
+        }
+    }
+    /// The channels without meter values. Views that show mute, solo or gain (and own menus) read this,
+    /// so meter ticks (about 30 per second) do not redraw them or rebuild their open menus.
+    private(set) var controls: [AudioMatrixChannel] = []
+
+    static func withoutMeters(_ channel: AudioMatrixChannel) -> AudioMatrixChannel {
+        var channel = channel
+        channel.peak = -120
+        channel.peakLeft = nil
+        channel.peakRight = nil
+        channel.peakHoldDb = nil
+        return channel
+    }
+
+    func controlChannel(role: AudioChannelRole) -> AudioMatrixChannel? {
+        controls.first(where: { $0.role == role })
+    }
     var master = MixerMasterState()
     var duckThresholdDb: Double = -24
     var duckAmountDb: Double = -12
     var duckingEnabled: Bool = true
     var duckingActive: Bool = false
     var programMuted: Bool = false
+    /// Listen (PFL/AFL): operator monitor only. Never persisted, never changes the stream bus.
+    var listenChannelIDs: Set<UUID> = []
+    var listenMode: AudioListenMode = .pfl
     private var channelLimiter: Set<UUID> = []
     private var noiseGate: Set<UUID> = []
 
@@ -166,9 +197,14 @@ final class AudioMatrixEngine {
     }
 
     func processFrame() {
-        let micPeak = channels.filter { $0.role == .microphone }.map(\.peak).max() ?? -120
-        duckingActive = duckingEnabled && !programMuted && micPeak > duckThresholdDb
         let anySolo = channels.contains(where: \.solo)
+        // Only a mic that actually reaches program may duck the others. A muted, closed or
+        // soloed-out mic still meters room sound, and used to duck slides and guests on air.
+        let micGateOpen = ProgramStreamAudioGates.isHardwareCaptureOpen(.microphone)
+        let micPeak = channels
+            .filter { $0.role == .microphone && !$0.muted && micGateOpen && (!anySolo || $0.solo) }
+            .map(\.peak).max() ?? -120
+        duckingActive = duckingEnabled && !programMuted && micPeak > duckThresholdDb
         let audible = channels.compactMap { channel -> Double? in
             if programMuted || master.muted || channel.muted { return nil }
             if anySolo && !channel.solo { return nil }
@@ -178,7 +214,9 @@ final class AudioMatrixEngine {
             return channel.peak
         }
         let slideChannel = channels.first { $0.role == .slide }
-        let slideBlocked = programMuted || master.muted || (slideChannel?.muted ?? false)
+        // Same rule as `outputLevel`: a solo elsewhere silences slide audio, so the meter must drop too.
+        let slideSoloedOut = anySolo && !(slideChannel?.solo ?? false)
+        let slideBlocked = programMuted || master.muted || (slideChannel?.muted ?? false) || slideSoloedOut
         let slideDb = slideBlocked ? -120.0 : ProgramSlideAudioMeter.peakDb()
         let mixDb = max(audible.max() ?? -120, slideDb)
         master.peakLeft = mixDb
@@ -191,7 +229,25 @@ final class AudioMatrixEngine {
         install(DefaultSeedData.studioManifest().audioChannels)
     }
 
+    var isListening: Bool { !listenChannelIDs.isEmpty }
+
+    func setListen(id: UUID, on: Bool) {
+        if on { listenChannelIDs.insert(id) } else { listenChannelIDs.remove(id) }
+    }
+
+    func clearListen() {
+        listenChannelIDs.removeAll()
+    }
+
     func outputLevel(for channel: AudioMatrixChannel, bus: AudioOutputBus) -> Double {
+        if bus == .monitor, isListening {
+            // Monitor bus only: the listened channels, everything else silent.
+            guard listenChannelIDs.contains(channel.id), !programMuted, !master.muted else { return 0 }
+            switch listenMode {
+            case .pfl: return AudioDSP.linear(fromDb: channel.resolvedTrimDb)
+            case .afl: return outputLevel(for: channel, bus: .stream)
+            }
+        }
         if programMuted || master.muted { return 0 }
         guard routes(channel, to: bus) else { return 0 }
         if channel.muted { return 0 }

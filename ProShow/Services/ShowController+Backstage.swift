@@ -6,6 +6,7 @@ import AppKit
 extension ShowController {
     func bootstrapBackstageServices() {
         chatStream = LiveChatStreamManager(chatEngine: chat)
+        bootstrapChatTemplate()
         virtualCameraOutput = VirtualCameraOutputService(sink: virtualCamera)
         virtualCameraOutput?.syncProjectOutput(
             width: projectSettings.resolution.width,
@@ -43,6 +44,19 @@ extension ShowController {
     func activateGuestRoomIfNeeded() {
         guard !liveKitDesk.hasStartedConnection else { return }
         liveKitDesk.connect(roomSlug: backstage.room.roomSlug)
+    }
+
+    /// Per-project custom room name. Reconnects the desk to the new LiveKit room if one is active.
+    @discardableResult
+    func setBackstageRoomName(_ raw: String?) -> Bool {
+        let before = backstage.room.roomSlug
+        guard backstage.setCustomRoomName(raw) else { return false }
+        if backstage.room.roomSlug != before, liveKitDesk.hasStartedConnection {
+            backstage.guests.removeAll { $0.cameraEndpoint.hasPrefix("livekit://") }
+            audioMatrix.pruneGuestChannels(keeping: [])
+            liveKitDesk.connect(roomSlug: backstage.room.roomSlug)
+        }
+        return true
     }
 
     func newGuestRoom() {
@@ -145,6 +159,169 @@ extension ShowController {
         refreshLiveStack()
     }
 
+    // MARK: Chat template prop
+
+    static let chatTemplateFallbackName = "Chat highlight"
+
+    /// The marked prop, else a prop named "Chat highlight". Nil keeps the built-in card.
+    var chatTemplateProp: ProShowProp? {
+        inspector.props.first(where: \.isChatTemplate)
+            ?? inspector.props.first {
+                $0.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                    .caseInsensitiveCompare(Self.chatTemplateFallbackName) == .orderedSame
+            }
+    }
+
+    func setPropChatTemplate(id: UUID, on: Bool) {
+        inspector.setPropChatTemplate(id: id, on: on)
+        persistStudio()
+    }
+
+    static func chatTemplateFields(for message: LiveChatMessage) -> [String: String] {
+        [
+            "chat.name": message.senderName,
+            "chat.message": message.messageText,
+            "chat.platform": message.platformSource,
+            "chat.avatar": message.senderAvatarUrl ?? "",
+        ]
+    }
+
+    /// Puts the message on the template prop. A pick while it is up swaps the text in place.
+    /// False when there is no template, so the caller draws the built-in card.
+    func showChatOnTemplate(_ message: LiveChatMessage, at date: Date = Date()) -> Bool {
+        guard let prop = chatTemplateProp else { return false }
+        chatTemplateClearTask?.cancel()
+        chatTemplateClearTask = nil
+        if let shown = chatTemplateShownID, shown != prop.id,
+           inspector.props.contains(where: { $0.id == shown && $0.isActive }) {
+            _ = toggleInspectorProp(id: shown, at: date)
+        }
+        featuredChatFields = Self.chatTemplateFields(for: message)
+        chatTemplateShownID = prop.id
+        if prop.isActive {
+            // Re-resolve so a bound avatar layer swaps (or falls back) with the text.
+            syncActivePropsToCompositor()
+            tickProgram()
+        } else {
+            _ = toggleInspectorProp(id: prop.id, at: date)
+        }
+        fetchChatAvatarIfBound(prop)
+        return true
+    }
+
+    /// Fetches the featured avatar when the template has a layer bound to it, then re-resolves.
+    private func fetchChatAvatarIfBound(_ prop: ProShowProp) {
+        let url = featuredChatFields["chat.avatar"] ?? ""
+        guard !url.isEmpty else { return }
+        let objects = prop.elements + (prop.phoneElements ?? [])
+        guard objects.contains(where: { $0.imageBinding == "chat.avatar" }) else { return }
+        ChatAvatarFileCache.shared.prefetch(url) { [weak self] path in
+            guard let self, path != nil, self.featuredChatFields["chat.avatar"] == url else { return }
+            self.syncActivePropsToCompositor()
+            self.tickProgram()
+        }
+    }
+
+    /// Hides the template prop through its exit animation, then drops the chat values.
+    func hideChatTemplate(at date: Date = Date()) {
+        guard let id = chatTemplateShownID else {
+            clearFeaturedChatFields()
+            return
+        }
+        chatTemplateShownID = nil
+        guard let prop = inspector.props.first(where: { $0.id == id }), prop.isActive else {
+            clearFeaturedChatFields()
+            return
+        }
+        _ = toggleInspectorProp(id: id, at: date)
+        // Keep the message on the card while it fades; the sample comes back after.
+        let hold = BuildAnimationEngine.authoredPropBuildOutDuration(in: prop.elements) + 0.15
+        chatTemplateClearTask?.cancel()
+        chatTemplateClearTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(max(0.05, hold)))
+            guard !Task.isCancelled, let self, self.chatTemplateShownID == nil else { return }
+            self.clearFeaturedChatFields()
+        }
+    }
+
+    private func clearFeaturedChatFields() {
+        guard !featuredChatFields.isEmpty else { return }
+        featuredChatFields = [:]
+        syncActivePropsToCompositor()
+        tickProgram()
+    }
+
+    /// Binds (or unbinds) an image layer of a prop to a live chat value. Saves the project.
+    @discardableResult
+    func setPropImageBinding(propID: UUID, layerID: UUID, binding: String?) -> Bool {
+        guard let p = inspector.props.firstIndex(where: { $0.id == propID }) else { return false }
+        let value = binding?.trimmingCharacters(in: .whitespacesAndNewlines)
+        var found = false
+        for i in inspector.props[p].elements.indices where inspector.props[p].elements[i].id == layerID {
+            inspector.props[p].elements[i].imageBinding = (value?.isEmpty ?? true) ? nil : value
+            found = true
+        }
+        guard found else { return false }
+        if var phone = inspector.props[p].phoneElements {
+            for i in phone.indices where phone[i].id == layerID {
+                phone[i].imageBinding = (value?.isEmpty ?? true) ? nil : value
+            }
+            inspector.props[p].phoneElements = phone
+        }
+        if editors.kind == .props, let d = editors.documents.firstIndex(where: { $0.id == propID }) {
+            for o in editors.documents[d].objects.indices where editors.documents[d].objects[o].id == layerID {
+                editors.documents[d].objects[o].imageBinding = (value?.isEmpty ?? true) ? nil : value
+            }
+            for b in editors.documents[d].boards.indices {
+                for o in editors.documents[d].boards[b].objects.indices where editors.documents[d].boards[b].objects[o].id == layerID {
+                    editors.documents[d].boards[b].objects[o].imageBinding = (value?.isEmpty ?? true) ? nil : value
+                }
+            }
+        }
+        syncActivePropsToCompositor()
+        persistStudio()
+        return true
+    }
+
+    /// Same calls as the chat panel's Display on screen and Dismiss.
+    func handleChatFeatureControl(method: String, body: Data?) -> (Int, String) {
+        guard let chatStream else { return (503, #"{"ok":false,"error":"chat_unavailable"}"#) }
+        if method == "POST" {
+            let parsed = ControlHTTP.jsonObject(body)
+            if parsed["dismiss"] == "1" || parsed["dismiss"] == "true" {
+                dismissChatOverlay()
+            } else {
+                let message = parsed["id"].flatMap { id in chatStream.inbox.first { $0.id == id } }
+                    ?? parsed["index"].flatMap(Int.init).flatMap { chatStream.inbox.indices.contains($0) ? chatStream.inbox[$0] : nil }
+                guard let message else { return (404, #"{"ok":false,"error":"message_not_found"}"#) }
+                triggerChatOverlay(message)
+            }
+        }
+        let template = chatTemplateProp
+        return (200, ControlJSON.encode([
+            "ok": true,
+            "template": template?.name ?? NSNull(),
+            "template_marked": template?.isChatTemplate ?? false,
+            "template_active": template?.isActive ?? false,
+            "on_template": chatStream.overlayOnTemplate,
+            "card": compositor.stack.chatOverlay != nil,
+            "featured": chatStream.activeOverlay?.id ?? NSNull(),
+            "fields": featuredChatFields,
+            "avatar_cached": featuredChatFields["chat.avatar"].flatMap { ChatAvatarFileCache.shared.localPath(for: $0) } != nil,
+            "avatar_layers": (template?.elements ?? []).filter { $0.imageBinding == "chat.avatar" }.map(\.name),
+            "inbox": chatStream.inbox.prefix(5).map { ["id": $0.id, "name": $0.senderName, "platform": $0.platformSource] },
+        ]))
+    }
+
+    func bootstrapChatTemplate() {
+        chatStream?.templatePresenter = { [weak self] message in
+            self?.showChatOnTemplate(message) ?? false
+        }
+        chatStream?.templateDismisser = { [weak self] in
+            self?.hideChatTemplate()
+        }
+    }
+
     func dismissChatOverlay() {
         chatStream?.dismissOverlay(compositor: compositor)
         refreshLiveStack()
@@ -172,8 +349,7 @@ extension ShowController {
 
     func toggleBackstageIntercom() {
         guard backstage.room.intercomEnabled else { return }
-        backstage.intercomActive.toggle()
-        backstage.returnFeedMode = backstage.intercomActive ? .intercomOnly : .programMixMinus
+        setReturnMode(identity: nil, mode: backstage.intercomActive ? .programMixMinus : .intercomOnly)
     }
 
     func cycleBackstageGuestOnProgram() {

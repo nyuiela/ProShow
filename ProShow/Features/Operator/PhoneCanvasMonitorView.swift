@@ -67,6 +67,7 @@ struct PhoneCanvasPicture: View {
             switch feed {
             case .audience:
                 previewSurface
+                    .environment(\.dynamicText, controller.canonicalProgramDynamicText())
             case .stream, .stage, .matrix:
                 liveSurface
             }
@@ -168,7 +169,10 @@ private struct PhoneLivePixelSurface: View {
 
     var body: some View {
         TimelineView(.animation(minimumInterval: reduceMotion ? 1.0 / 4.0 : 1.0 / 20.0, paused: reduceMotion || !onScreen)) { _ in
+            // The expanded Phone window is its own scene and does not inherit the operator window's
+            // live text, so timers drew 0:00 there. Resolve it here on every tick.
             content
+                .environment(\.dynamicText, controller.canonicalProgramDynamicText())
         }
         .onAppear { onScreen = true }
         .onDisappear { onScreen = false }
@@ -176,7 +180,7 @@ private struct PhoneLivePixelSurface: View {
 
     @ViewBuilder
     private var content: some View {
-        if let buffer = PhoneComposedFrame.shared.current(),
+        if let buffer = PhoneComposedFrame.shared.fresh(),
            let image = InputPreviewImaging.image(from: buffer) {
             #if os(macOS)
             Image(nsImage: image)
@@ -189,7 +193,7 @@ private struct PhoneLivePixelSurface: View {
                 ProgramSlideThumbnailPreview(
                     controller: controller,
                     slide: slide,
-                    objects: controller.resolvedCanvasObjects(board.objects),
+                    objects: controller.resolvedCanvasObjects(board.objects) + controller.livePhonePropObjects(width: board.width, height: board.height),
                     canvasWidth: board.width,
                     canvasHeight: board.height
                 )

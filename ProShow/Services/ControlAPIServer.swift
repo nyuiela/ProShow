@@ -58,6 +58,7 @@ enum ControlHTTP {
         case 403: return "Forbidden"
         case 404: return "Not Found"
         case 405: return "Method Not Allowed"
+        case 409: return "Conflict"
         default: return "Error"
         }
     }
@@ -71,6 +72,22 @@ enum ControlHTTP {
             return method == "POST" || method == "GET"
         }
         if parts.contains("soundboard"), parts.last == "play" {
+            return method == "POST"
+        }
+        if parts == ["v1", "ai", "agent", "send"] || parts == ["v1", "ai", "agent", "apply_draft"] || parts == ["v1", "ai", "agent", "render_last"] || parts == ["v1", "ai", "agent", "delete_group"] || parts == ["v1", "ai", "agent", "delete_test_content"] {
+            return method == "POST"
+        }
+        if parts == ["v1", "ai", "compose"] || parts == ["v1", "ai", "apply"] {
+            return method == "POST"
+        }
+        if parts == ["v1", "chat", "feature"] {
+            return method == "POST" || method == "GET"
+        }
+        if parts == ["v1", "program", "status"] {
+            return method == "POST" || method == "GET"
+        }
+        if parts.count == 3, parts[0] == "v1", parts[1] == "program",
+           ["next", "prev", "previous", "hold", "extend", "auto"].contains(parts[2]) {
             return method == "POST"
         }
         if parts == ["v1", "chat", "overlay"]
@@ -88,9 +105,16 @@ enum ControlHTTP {
             || parts == ["v1", "market", "ticker"]
             || parts == ["v1", "project", "open"]
             || parts == ["v1", "project", "close"]
+            || parts == ["v1", "ui", "addshot"]
+            || parts == ["v1", "ui", "snapshot"]
+            || parts == ["v1", "ui", "qa"]
             || parts == ["v1", "backstage", "connect"]
             || parts == ["v1", "backstage", "disconnect"] {
             return method == "POST"
+        }
+        if parts.count >= 3, parts[0] == "v1", parts[1] == "audio",
+           ["source", "listen", "isolate", "returns", "talkback", "monitor", "follow"].contains(parts[2]) {
+            return method == "POST" || method == "GET"
         }
         if parts == ["v1", "preflight"] || parts == ["v1", "telemetry"] || parts == ["v1", "ws"] {
             return method == "GET" || method == "POST"
@@ -100,6 +124,12 @@ enum ControlHTTP {
         }
         if parts.count == 4, parts[0] == "v1", parts[1] == "chat", parts[2] == "ingest" {
             return method == "POST"
+        }
+        if parts == ["v1", "chat", "youtube"] {
+            return method == "POST" || method == "GET"
+        }
+        if parts == ["v1", "chat", "x"] {
+            return method == "POST" || method == "GET"
         }
         if method == "GET" { return true }
         return false

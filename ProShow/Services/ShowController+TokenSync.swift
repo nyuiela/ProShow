@@ -48,7 +48,9 @@ extension ShowController {
         if liveKitGuestReturnActive, !streaming.isLive, !isoRecorder.isRecording, !streamEncodePreviewEnabled {
             return false
         }
-        return wantsEncodedPreview || streaming.isLive || isoRecorder.isRecording
+        // Operator-desk preview alone keeps the SwiftUI program picture (same path Backstage uses),
+        // so Live paints canvas images without a guest room or encoder session.
+        return streamEncodePreviewEnabled || streaming.isLive || isoRecorder.isRecording
     }
 
     /// Single dynamic-text evaluation per program tick — shared by compositor and SwiftUI fallback.
@@ -135,5 +137,34 @@ private extension RenderStack {
         hasher.combine(slideCanvas.count)
         hasher.combine(slideElements.count)
         return hasher.finalize()
+    }
+}
+
+/// Values the operator window puts in the environment, created once so a re-render of the
+/// window root does not hand every descendant (and every open menu) a new environment.
+@MainActor
+final class ControllerEnvironmentHandles {
+    private weak var controller: ShowController?
+    init(controller: ShowController) { self.controller = controller }
+
+    private(set) lazy var resolvePlaceholder: (String) -> AssignedMediaSource? = { [weak self] letter in
+        self?.controller?.resolvedAssignedSource(forPlaceholder: letter)
+    }
+
+    /// Program text: re-evaluated by its readers when timers, quotes or the frame revision change.
+    private(set) lazy var programText = DynamicTextSource { [weak self] in
+        guard let controller = self?.controller else { return .empty }
+        let _ = controller.inspector.timers.map { "\($0.id)-\($0.displaySeconds)-\($0.isRunning)-\($0.durationSeconds)" }
+        let _ = controller.liveQuotePresentationStamp
+        let _ = controller.programFrameRevisionStamp
+        return controller.canonicalProgramDynamicText()
+    }
+
+    /// Editor text (same fields, evaluated now rather than from the last program tick).
+    private(set) lazy var editorText = DynamicTextSource { [weak self] in
+        guard let controller = self?.controller else { return .empty }
+        let _ = controller.liveQuotePresentationStamp
+        let _ = controller.programFrameRevisionStamp
+        return controller.dynamicTextContext()
     }
 }

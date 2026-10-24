@@ -407,7 +407,7 @@ private struct CompactLiveStreamTelemetry: View {
     private var telemetry: StreamTelemetryMonitor { controller.streaming.telemetry }
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1.0)) { _ in
+        TimelineView(.periodic(from: TimelineAnchor.start, by: 1.0)) { _ in
             HStack(spacing: 6) {
                 Text("\(telemetry.measuredVideoBitrateKbps) Kbps")
                     .font(DeskType.micro.monospacedDigit())
@@ -430,7 +430,7 @@ private struct LiveStreamTelemetryStrip: View {
     private var preset: StreamEncoderConfig { controller.streaming.streamEncoderConfig }
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 0.5)) { context in
+        TimelineView(.periodic(from: TimelineAnchor.start, by: 0.5)) { context in
             let _ = context.date
             let _ = telemetry.refreshMeasurementWindowIfNeeded()
             HStack(spacing: 10) {
@@ -823,7 +823,7 @@ private struct TaskMenuToolbarButton: View {
     @ViewBuilder
     private var toolbarTitle: some View {
         if item == .live, controller.streaming.isLive {
-            TimelineView(.periodic(from: .now, by: 1)) { context in
+            TimelineView(.periodic(from: TimelineAnchor.start, by: 1)) { context in
                 Text(ProShowCopy.liveClock(StreamingEngine.broadcastTimecode(from: controller.streaming.startedAt, now: context.date)))
                     .monospacedDigit()
             }
@@ -869,6 +869,7 @@ private struct TaskMenuToolbarButton: View {
     private var statusMenuItems: some View {
         Button("Pre-Flight…") { controller.openPreFlight() }
         if controller.isoRecorder.isRecording {
+            Text(controller.isoRecorder.recordingFormatsLabel)
             Button("Stop Program Recording") { controller.stopProgramRecording() }
         } else {
             Button("Record Program Output…") { _ = controller.startProgramRecording() }
@@ -949,6 +950,7 @@ private struct TaskMenuToolButton: View {
             Menu {
                 Button("Pre-Flight…") { controller.openPreFlight() }
                 if controller.isoRecorder.isRecording {
+                    Text(controller.isoRecorder.recordingFormatsLabel)
                     Button("Stop Program Recording") { controller.stopProgramRecording() }
                 } else {
                     Button("Record Program Output…") { _ = controller.startProgramRecording() }
@@ -1002,6 +1004,7 @@ private struct TaskMenuToolButton: View {
     private var taskMenuAccessibilityLabel: String {
         if item == .live, controller.streaming.isLive { return "Live" }
         if item == .live, controller.streaming.state == .starting { return "Connecting to stream" }
+        if item == .record, controller.isoRecorder.isRecording { return controller.isoRecorder.recordingFormatsLabel }
         return item.title
     }
 }
@@ -1049,7 +1052,7 @@ private struct TaskMenuGlyph: View {
         if item != .live {
             Text(item.title)
         } else if controller.streaming.isLive {
-            TimelineView(.periodic(from: .now, by: 1)) { context in
+            TimelineView(.periodic(from: TimelineAnchor.start, by: 1)) { context in
                 Text(ProShowCopy.liveClock(StreamingEngine.broadcastTimecode(from: controller.streaming.startedAt, now: context.date)))
                     .monospacedDigit()
             }
@@ -1079,7 +1082,8 @@ private struct TaskMenuCustomIcon: View {
             Image(systemName: controller.isoRecorder.isRecording ? "record.circle.fill" : "record.circle")
                 .font(.system(size: TaskMenuMetrics.iconSize + 1, weight: .semibold))
                 .foregroundStyle(controller.isoRecorder.isRecording ? ProShowTheme.liveRed : ProShowTheme.toolbarIcon)
-                .accessibilityLabel(controller.isoRecorder.isRecording ? "Recording" : "Record")
+                .accessibilityLabel(controller.isoRecorder.isRecording ? controller.isoRecorder.recordingFormatsLabel : "Record")
+                .help(controller.isoRecorder.isRecording ? controller.isoRecorder.recordingFormatsLabel : "Record")
         case .live:
             Image(systemName: "antenna.radiowaves.left.and.right")
                 .font(.system(size: TaskMenuMetrics.iconSize, weight: .semibold))

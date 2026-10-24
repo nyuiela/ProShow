@@ -184,6 +184,10 @@ public struct RundownBlock: Identifiable, Codable, Equatable, Sendable {
     var programSlideID: UUID?
     /// Unused bag for the next experiment. The clock, mixer, and CueLog export ignore it.
     public var extensions: [String: String] = [:]
+    /// Auto-advance stops at the end of this item. Nil: decided by `RundownAutoAdvanceRules`.
+    public var stopHere: Bool?
+    /// How the prompter paces this item. Nil: `PromptPacingMode.defaultMode`.
+    public var promptPacing: PromptPacingMode?
 
     public init(
         itemNumber: String,
@@ -198,6 +202,17 @@ public struct RundownBlock: Identifiable, Codable, Equatable, Sendable {
         self.plannedDurationSeconds = plannedDurationSeconds
         self.assignedTalentIds = assignedTalentIds
     }
+}
+
+/// Prompter pacing for one outline item.
+public enum PromptPacingMode: String, Codable, CaseIterable, Sendable {
+    /// Words per minute chosen so the script fills the planned duration (120 to 240).
+    case fitDuration
+    /// The prompter's own words per minute from its settings.
+    case prompterSpeed
+
+    public static let defaultMode: PromptPacingMode = .fitDuration
+    public static let wpmRange: ClosedRange<Int> = 120...240
 }
 
 public struct ProgramRunEngineState: Codable, Equatable, Sendable {
@@ -219,8 +234,8 @@ public struct ProgramDocumentModel: Codable, Equatable, Sendable {
     public var runState: ProgramRunEngineState = ProgramRunEngineState()
 
     public var defaultStageCueTriggers: [StageCueTrigger] = [
-        StageCueTrigger(triggerOffsetSeconds: -60, stageMessage: "1 MINUTE REMAINING"),
-        StageCueTrigger(triggerOffsetSeconds: -30, stageMessage: "WRAP UP", flashScreen: true),
+        StageCueTrigger(triggerOffsetSeconds: 60, stageMessage: "1 MINUTE REMAINING"),
+        StageCueTrigger(triggerOffsetSeconds: 30, stageMessage: "WRAP UP", flashScreen: true),
         StageCueTrigger(triggerOffsetSeconds: 0, stageMessage: "TIME EXPIRED", flashScreen: true),
     ]
 
@@ -351,6 +366,7 @@ extension RundownBlock {
         case actualStartTime, actualEndTime, isCompleted
         case scriptBody, audioCue, videoCue
         case outlineFormat, screenDirections, linkCues, referenceNotes, programSlideID, extensions
+        case stopHere, promptPacing
     }
 
     public init(from decoder: Decoder) throws {
@@ -381,6 +397,8 @@ extension RundownBlock {
         referenceNotes = try container.decodeIfPresent(String.self, forKey: .referenceNotes) ?? ""
         programSlideID = try container.decodeIfPresent(UUID.self, forKey: .programSlideID)
         extensions = try container.decodeIfPresent([String: String].self, forKey: .extensions) ?? [:]
+        stopHere = try container.decodeIfPresent(Bool.self, forKey: .stopHere)
+        promptPacing = (try? container.decodeIfPresent(PromptPacingMode.self, forKey: .promptPacing)) ?? nil
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -411,6 +429,8 @@ extension RundownBlock {
         try container.encode(referenceNotes, forKey: .referenceNotes)
         try container.encodeIfPresent(programSlideID, forKey: .programSlideID)
         try container.encode(extensions, forKey: .extensions)
+        try container.encodeIfPresent(stopHere, forKey: .stopHere)
+        try container.encodeIfPresent(promptPacing, forKey: .promptPacing)
     }
 }
 
@@ -431,8 +451,8 @@ extension ProgramDocumentModel {
         rundownBlocks = try container.decodeIfPresent([RundownBlock].self, forKey: .rundownBlocks) ?? []
         runState = try container.decodeIfPresent(ProgramRunEngineState.self, forKey: .runState) ?? ProgramRunEngineState()
         defaultStageCueTriggers = try container.decodeIfPresent([StageCueTrigger].self, forKey: .defaultStageCueTriggers) ?? [
-            StageCueTrigger(triggerOffsetSeconds: -60, stageMessage: "1 MINUTE REMAINING"),
-            StageCueTrigger(triggerOffsetSeconds: -30, stageMessage: "WRAP UP", flashScreen: true),
+            StageCueTrigger(triggerOffsetSeconds: 60, stageMessage: "1 MINUTE REMAINING"),
+            StageCueTrigger(triggerOffsetSeconds: 30, stageMessage: "WRAP UP", flashScreen: true),
             StageCueTrigger(triggerOffsetSeconds: 0, stageMessage: "TIME EXPIRED", flashScreen: true),
         ]
         outlineFormat = try container.decodeIfPresent(Int.self, forKey: .outlineFormat) ?? 1

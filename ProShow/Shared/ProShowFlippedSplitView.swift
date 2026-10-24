@@ -96,10 +96,10 @@ final class DeskStudioHost<Content: View>: NSHostingView<Content> {
     required init(rootView: Content) {
         super.init(rootView: rootView)
         DeskStudioHost.paint(self)
-        if #available(macOS 14.0, *) {
-            sizingOptions = [.standardBounds]
-        } else if #available(macOS 13.0, *) {
-            sizingOptions = [.minSize]
+        // Perf: panes are sized by the split controllers; letting SwiftUI publish
+        // min/intrinsic/max constraints re-ran Auto Layout on every view-graph tick.
+        if #available(macOS 13.0, *) {
+            sizingOptions = []
         }
     }
 

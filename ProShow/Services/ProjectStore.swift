@@ -582,6 +582,7 @@ final class AppSession {
         projectURL = resolved.root
         preferences = try preferenceStore.remember(project: resolved.manifest, at: resolved.root)
         controller.projectAutosave = autosave
+        controller.backstage.applyProject(key: resolved.manifest.id.uuidString)
         controller.playback.projectRoot = resolved.root
         MediaPath.currentProjectRoot = resolved.root
         // Do not treat empty `scenes` as “no studio” — props/macros/messages live in `studio.inspector`

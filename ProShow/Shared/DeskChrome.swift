@@ -11,6 +11,7 @@ import AppKit
 import QuartzCore
 import IOSurface
 import Metal
+import CoreImage
 #else
 import UIKit
 #endif
@@ -41,6 +42,11 @@ private struct ProgramRenderPausedKey: EnvironmentKey {
 
 private struct ProShowProgramVideoInputKey: EnvironmentKey {
     static let defaultValue: VideoInputSource? = nil
+}
+
+/// Preview surfaces (editor, thumbnails, Phone monitor) resolve each live well to its own device.
+private struct ProShowWellsKeepOwnDeviceKey: EnvironmentKey {
+    static let defaultValue = false
 }
 
 private struct ProShowShowsProgramVideoLayerKey: EnvironmentKey {
@@ -86,6 +92,11 @@ extension EnvironmentValues {
     var proShowShowsProgramVideoLayer: Bool {
         get { self[ProShowShowsProgramVideoLayerKey.self] }
         set { self[ProShowShowsProgramVideoLayerKey.self] = newValue }
+    }
+
+    var proShowWellsKeepOwnDevice: Bool {
+        get { self[ProShowWellsKeepOwnDeviceKey.self] }
+        set { self[ProShowWellsKeepOwnDeviceKey.self] = newValue }
     }
 }
 
@@ -270,6 +281,8 @@ enum DeskLiveLayer {
 
     static func lockHost(_ view: NSView, color: NSColor = .black) {
         view.wantsLayer = true
+        // Aspect-fill video must not draw outside the host (thumbnails, rows).
+        view.layer?.masksToBounds = true
         view.layer?.backgroundColor = color.cgColor
         view.layer?.isOpaque = true
         view.layer?.contentsGravity = .resize
@@ -798,6 +811,9 @@ struct DeskModalNavRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(DeskPressButtonStyle())
+        // A min-only frame accepts any taller proposal; without this a row (e.g. Cancel) swallows the
+        // sidebar's spare height and centres its label mid-modal.
+        .fixedSize(horizontal: false, vertical: true)
         .padding(.horizontal, 8)
         .accessibilityLabel(title)
         .accessibilityAddTraits(selected ? .isSelected : [])
@@ -1173,8 +1189,10 @@ enum ResolvedCanvasMedia {
         if let cached = AssetCacheManager.shared.object(forKey: path) as? NSImage {
             return Image(nsImage: cached)
         }
-        if let image = NSImage(contentsOfFile: path) {
-            AssetCacheManager.shared.setObject(image, forKey: path, cost: Self.imageCost(image.size))
+        // Previews draw at window size: keep a decoded, display-sized bitmap so SwiftUI never re-decodes the PNG.
+        if let cg = DecodedImageCache.shared.image(atPath: path, maxLongSide: DecodedImageCache.previewLongSide) {
+            let image = NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+            AssetCacheManager.shared.setObject(image, forKey: path, cost: cg.width * cg.height * 4)
             return Image(nsImage: image)
         }
         #else
@@ -1257,6 +1275,23 @@ struct DeskTransparencyGrid: View {
     }
 }
 
+/// Fixed thumbnail box: the box takes exactly the size it is offered; content fills or fits
+/// inside it and is clipped to rounded corners. A fill image in a ZStack grew the stack to the
+/// image's size, so portrait media spilled out of rows.
+struct ThumbnailBox<Content: View>: View {
+    var cornerRadius: CGFloat
+    var background: Color = .black
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        Rectangle()
+            .fill(background)
+            .overlay { content() }
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+    }
+}
+
 struct MediaPreviewFrame: View {
     var filePath: String?
     var artworkURL: URL?
@@ -1265,8 +1300,7 @@ struct MediaPreviewFrame: View {
     var cornerRadius: CGFloat = DeskRadius.control
 
     var body: some View {
-        ZStack {
-            (Color(hex: tintHex) ?? ProShowTheme.well)
+        ThumbnailBox(cornerRadius: cornerRadius, background: Color(hex: tintHex) ?? ProShowTheme.well) {
             if let image = previewImage {
                 image
                     .resizable()
@@ -1277,8 +1311,6 @@ struct MediaPreviewFrame: View {
                     .foregroundStyle(.white.opacity(0.32))
             }
         }
-        .clipped()
-        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .accessibilityHidden(true)
     }
 
@@ -1360,6 +1392,7 @@ struct AssignedSourcePreview: View {
     @Environment(\.programRenderPaused) private var programRenderPaused
     @Environment(\.proShowProgramVideoInput) private var programVideoInput
     @Environment(\.proShowShowsProgramVideoLayer) private var showsProgramVideoLayer
+    @Environment(\.proShowWellsKeepOwnDevice) private var wellsKeepOwnDevice
 
     private var sharedPresentation: SharedProgramPresentation {
         mirrorsProgramPlayer ? .mirroredFrame : .playerLayer
@@ -1461,7 +1494,8 @@ struct AssignedSourcePreview: View {
             assigned: source,
             objectKind: canvasObjectKind,
             programInput: programVideoInput,
-            showsProgramVideoLayer: showsProgramVideoLayer
+            showsProgramVideoLayer: showsProgramVideoLayer,
+            wellsKeepOwnDevice: wellsKeepOwnDevice
         )
     }
 
@@ -1521,6 +1555,74 @@ struct LivePixelPreview: View {
             isPaused: isPaused
         )
         .accessibilityHidden(true)
+        .overlay { guestNameplate }
+    }
+
+    /// LiveKit guest with no live camera: show their nameplate card instead of a black pane.
+    @ViewBuilder
+    private var guestNameplate: some View {
+        if let endpoint, endpoint.hasPrefix("livekit://"), endpoint.hasSuffix("/camera"),
+           let identity = LiveKitGuestEndpoint.identity(from: endpoint),
+           let profile = GuestProfileStore.shared.profile(identity: identity),
+           !profile.cameraLive {
+            GuestNameplateCard(profile: profile)
+        }
+    }
+}
+
+/// Camera-off card for a guest: avatar circle, name, title. Desk graphite + accent.
+struct GuestNameplateCard: View {
+    var profile: GuestProfile
+
+    var body: some View {
+        GeometryReader { proxy in
+            let side = min(proxy.size.width, proxy.size.height)
+            let avatar = max(28, side * 0.34)
+            ZStack {
+                Color(red: 0x12 / 255, green: 0x12 / 255, blue: 0x14 / 255)
+                VStack(spacing: max(4, side * 0.04)) {
+                    avatarView
+                        .frame(width: avatar, height: avatar)
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(Color(red: 0x6B / 255, green: 0x9F / 255, blue: 0xE0 / 255), lineWidth: max(1.5, avatar * 0.035)))
+                    Text(profile.name)
+                        .font(.system(size: max(11, side * 0.085), weight: .semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                    if !profile.title.isEmpty {
+                        Text(profile.title)
+                            .font(.system(size: max(9, side * 0.06)))
+                            .foregroundStyle(Color(red: 0x6B / 255, green: 0x9F / 255, blue: 0xE0 / 255))
+                            .lineLimit(1)
+                    }
+                }
+                .padding(8)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(profile.title.isEmpty ? profile.name : "\(profile.name), \(profile.title)")
+    }
+
+    @ViewBuilder
+    private var avatarView: some View {
+        #if canImport(AppKit)
+        if let image = GuestProfileStore.shared.avatarImage(for: profile.avatarSource), image.size.width > 0 {
+            Image(nsImage: image).resizable().scaledToFill()
+        } else {
+            initials
+        }
+        #else
+        initials
+        #endif
+    }
+
+    private var initials: some View {
+        ZStack {
+            Color(red: 0x6B / 255, green: 0x9F / 255, blue: 0xE0 / 255).opacity(0.25)
+            Text(profile.name.split(separator: " ").prefix(2).compactMap(\.first).map(String.init).joined().uppercased())
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(.white)
+        }
     }
 }
 
@@ -1583,7 +1685,12 @@ private struct LivePixelRepresentable: NSViewRepresentable {
                 sourceID: sourceID,
                 deliverOnCaptureQueue: true
             ) { [weak self] buffer in
-                guard let self, let view = self.view else { return }
+                guard let self else { return }
+                if PreviewBGRAConverter.needsConversion(buffer) {
+                    self.presentConverted(buffer)
+                    return
+                }
+                guard let view = self.view else { return }
                 #if canImport(CoreVideo)
                 if let layer = view.layer {
                     LowLatencyIngestPipeline.shared.presentIOSurface(buffer, on: layer)
@@ -1606,13 +1713,103 @@ private struct LivePixelRepresentable: NSViewRepresentable {
             token = nil
         }
 
+        private let convertLock = NSLock()
+        private var converting = false
+
+        /// Camera lanes arrive as 420v; a layer shows that IOSurface black. Convert off the capture
+        /// path, one frame in flight per well (late frames drop), then present on main.
+        fileprivate func presentConverted(_ buffer: CVPixelBuffer) {
+            convertLock.lock()
+            if converting {
+                convertLock.unlock()
+                return
+            }
+            converting = true
+            convertLock.unlock()
+            let box = PreviewPixelBox(buffer: buffer)
+            PreviewBGRAConverter.shared.queue.async { [weak self] in
+                let out = PreviewBGRAConverter.shared.bgra(box.buffer).map(PreviewPixelBox.init(buffer:))
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    self.convertLock.lock()
+                    self.converting = false
+                    self.convertLock.unlock()
+                    guard self.token != nil, let out, let layer = self.view?.layer else { return }
+                    LowLatencyIngestPipeline.shared.presentIOSurface(out.buffer, on: layer)
+                }
+            }
+        }
+
         deinit { unbind() }
+    }
+}
+
+private struct PreviewPixelBox: @unchecked Sendable {
+    let buffer: CVPixelBuffer
+}
+
+/// Preview-only BGRA copy of YUV capture frames. Never used by the encode or program output.
+final class PreviewBGRAConverter: @unchecked Sendable {
+    static let shared = PreviewBGRAConverter()
+    let queue = DispatchQueue(label: "proshow.preview.bgra", qos: .userInitiated)
+    private let context = CIContext(options: [.useSoftwareRenderer: false, .cacheIntermediates: false])
+    private let lock = NSLock()
+    private var pool: CVPixelBufferPool?
+    private var poolWidth = 0
+    private var poolHeight = 0
+    private var lastSource: CVPixelBuffer?
+    private var lastOutput: CVPixelBuffer?
+
+    static func needsConversion(_ buffer: CVPixelBuffer) -> Bool {
+        switch CVPixelBufferGetPixelFormatType(buffer) {
+        case kCVPixelFormatType_32BGRA, kCVPixelFormatType_32ARGB, kCVPixelFormatType_64RGBAHalf:
+            return false
+        default:
+            return true
+        }
+    }
+
+    /// Same source buffer in, same BGRA buffer out, so several wells on one camera convert once.
+    func bgra(_ buffer: CVPixelBuffer) -> CVPixelBuffer? {
+        lock.lock()
+        defer { lock.unlock() }
+        if let lastSource, lastSource === buffer, let lastOutput { return lastOutput }
+        let width = CVPixelBufferGetWidth(buffer)
+        let height = CVPixelBufferGetHeight(buffer)
+        guard width > 0, height > 0 else { return nil }
+        if pool == nil || poolWidth != width || poolHeight != height {
+            let attrs: [String: Any] = [
+                kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA),
+                kCVPixelBufferWidthKey as String: width,
+                kCVPixelBufferHeightKey as String: height,
+                kCVPixelBufferIOSurfacePropertiesKey as String: [:] as [String: Any],
+            ]
+            var created: CVPixelBufferPool?
+            CVPixelBufferPoolCreate(nil, [kCVPixelBufferPoolMinimumBufferCountKey as String: 4] as CFDictionary, attrs as CFDictionary, &created)
+            pool = created
+            poolWidth = width
+            poolHeight = height
+        }
+        guard let pool else { return nil }
+        var out: CVPixelBuffer?
+        guard CVPixelBufferPoolCreatePixelBuffer(nil, pool, &out) == kCVReturnSuccess, let out else { return nil }
+        context.render(CIImage(cvPixelBuffer: buffer), to: out)
+        lastSource = buffer
+        lastOutput = out
+        return out
     }
 }
 
 final class PixelBufferHostView: ProShowLayerHostView {
     func setPixelBuffer(_ buffer: CVPixelBuffer?, style: MediaFrameStyle = .plain) {
         wantsLayer = true
+        if let source = buffer, PreviewBGRAConverter.needsConversion(source),
+           let converted = PreviewBGRAConverter.shared.bgra(source),
+           let surface = CVPixelBufferGetIOSurface(converted)?.takeUnretainedValue() {
+            layer?.contents = surface
+            DeskLiveLayer.applyFrameStyle(self, style: style)
+            return
+        }
         if let buffer, let surface = CVPixelBufferGetIOSurface(buffer)?.takeUnretainedValue() {
             layer?.contents = surface
         } else if let buffer, let image = InputPreviewImaging.cgImage(from: buffer) {
@@ -2250,5 +2447,222 @@ private struct SlotAVPlayerLayerView: View {
     var startAt: TimeInterval = 0
     var style: MediaFrameStyle = .plain
     var body: some View { Color.clear }
+}
+#endif
+
+/// Test hook: counts how often each menu's content is rebuilt. A menu rebuilt while open
+/// closes its open submenu, so menu content must not re-evaluate on meter or clock ticks.
+enum MenuRenderProbe {
+    nonisolated(unsafe) static var counts: [String: Int] = [:]
+    nonisolated(unsafe) static var since = Date()
+    @discardableResult
+    static func hit(_ name: String) -> Bool {
+        counts[name, default: 0] += 1
+        return true
+    }
+    static func snapshot(reset: Bool) -> [String: Any] {
+        let secs = max(0.001, Date().timeIntervalSince(since))
+        let rates = counts.mapValues { (Double($0) / secs * 10).rounded() / 10 }
+        if reset { counts = [:]; since = Date() }
+        return ["secs": (secs * 10).rounded() / 10, "per_sec": rates]
+    }
+}
+
+/// Test hook: its body runs only when the environment at this spot changes. A changing
+/// environment makes SwiftUI re-apply open menus here, which closes their submenus.
+struct EnvironmentChurnProbe: View {
+    let name: String
+    @Environment(\.self) private var environment
+    var body: some View {
+        let _ = MenuRenderProbe.hit(name)
+        Color.clear.frame(width: 0, height: 0).accessibilityHidden(true)
+    }
+}
+
+/// Wraps a Menu (or menu content) so it only re-renders when `key` changes. Parents that redraw
+/// often (closures, clocks, meters) otherwise rebuild the menu, and a rebuilt menu drops its open submenu.
+struct StableMenuContent<Key: Equatable, Content: View>: View, Equatable {
+    let key: Key
+    @ViewBuilder let content: () -> Content
+
+    static func == (lhs: Self, rhs: Self) -> Bool { lhs.key == rhs.key }
+
+    var body: some View { content() }
+}
+
+#if os(macOS)
+/// Test hook: records NSMenu tracking, item churn and key-window changes with call stacks,
+/// to find what closes an open submenu. Off until `install()`; read with `dump(reset:)`.
+@MainActor
+enum MenuEventWatch {
+    private static var tokens: [NSObjectProtocol] = []
+    private static var events: [[String: Any]] = []
+    private static var tracking = 0
+    private static var idleChurn: [String: Int] = [:]
+    private static var idleStacks: [String: [String]] = [:]
+    private static let start = Date()
+
+    static func install() {
+        guard tokens.isEmpty else { return }
+        let nc = NotificationCenter.default
+        let menuNames: [Notification.Name] = [
+            NSMenu.didBeginTrackingNotification, NSMenu.didEndTrackingNotification,
+            NSMenu.didAddItemNotification, NSMenu.didRemoveItemNotification, NSMenu.didChangeItemNotification,
+        ]
+        for name in menuNames {
+            tokens.append(nc.addObserver(forName: name, object: nil, queue: nil) { note in
+                let title = (note.object as? NSMenu)?.title ?? "?"
+                let short = name.rawValue.replacingOccurrences(of: "NSMenu", with: "").replacingOccurrences(of: "Notification", with: "")
+                MainActor.assumeIsolated {
+                    if name == NSMenu.didBeginTrackingNotification { tracking += 1 }
+                    if name == NSMenu.didEndTrackingNotification { tracking = max(0, tracking - 1) }
+                    // Item churn on the menu bar is normal; while a menu is open it is the suspect.
+                    guard tracking > 0 || name == NSMenu.didEndTrackingNotification else {
+                        let key = short + ":" + title
+                        idleChurn[key, default: 0] += 1
+                        if idleStacks[key] == nil { idleStacks[key] = stackLines() }
+                        return
+                    }
+                    record(short, title, stack: name != NSMenu.didChangeItemNotification || events.count < 40)
+                }
+            })
+        }
+        let windowNames: [Notification.Name] = [
+            NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification,
+            NSWindow.didBecomeMainNotification, NSApplication.didResignActiveNotification,
+            NSApplication.didBecomeActiveNotification,
+        ]
+        for name in windowNames {
+            tokens.append(nc.addObserver(forName: name, object: nil, queue: nil) { note in
+                let title = (note.object as? NSWindow)?.title ?? "app"
+                MainActor.assumeIsolated { record(name.rawValue, title, stack: true) }
+            })
+        }
+    }
+
+    private static func record(_ kind: String, _ title: String, stack: Bool) {
+        var e: [String: Any] = ["t": (Date().timeIntervalSince(start) * 1000).rounded() / 1000, "kind": kind, "menu": title, "tracking": tracking]
+        if stack {
+            e["stack"] = stackLines()
+        }
+        events.append(e)
+        if events.count > 400 { events.removeFirst(events.count - 400) }
+    }
+
+    private static func stackLines() -> [String] {
+        Thread.callStackSymbols.dropFirst(3).prefix(40).map { line in
+            line.split(separator: " ", omittingEmptySubsequences: true).dropFirst(3).joined(separator: " ")
+        }
+    }
+
+    static func dump(reset: Bool) -> [String: Any] {
+        let out: [String: Any] = [
+            "ok": true, "installed": !tokens.isEmpty, "tracking": tracking, "events": events,
+            "coalescer": MenuItemEnableCoalescer.stats, "idle_churn": idleChurn, "idle_stacks": idleStacks, "secs": Date().timeIntervalSince(start),
+        ]
+        if reset { events = []; idleChurn = [:]; idleStacks = [:] }
+        return out
+    }
+}
+#endif
+
+#if os(macOS)
+/// SwiftUI re-applies an open menu's items when its window updates and flips `isEnabled` off
+/// and back on; AppKit dismisses the open submenu on each flip. Once a menu has been open for a
+/// moment (never while it is being presented), enabled changes are coalesced to the end of the
+/// run loop turn and only real changes are applied. Nothing else about NSMenuItem is touched.
+@MainActor
+enum MenuItemEnableCoalescer {
+    private static var installed = false
+    private static var depth = 0
+    private static var openSince: Date?
+    fileprivate static var flushing = false
+    private static var pending: [ObjectIdentifier: (item: NSMenuItem, enabled: Bool)] = [:]
+    private static var scheduled = false
+    private(set) static var skipped = 0
+    private(set) static var applied = 0
+    /// Presentation (item creation, context menu setup) happens before this.
+    private static let settle: TimeInterval = 0.3
+
+    static func install() {
+        guard !installed,
+              let original = class_getInstanceMethod(NSMenuItem.self, #selector(setter: NSMenuItem.isEnabled)),
+              let replacement = class_getInstanceMethod(NSMenuItem.self, #selector(NSMenuItem.proshow_setEnabled(_:)))
+        else { return }
+        method_exchangeImplementations(original, replacement)
+        installed = true
+        let nc = NotificationCenter.default
+        nc.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: nil) { _ in
+            MainActor.assumeIsolated {
+                depth += 1
+                if depth == 1 { openSince = Date() }
+            }
+        }
+        nc.addObserver(forName: NSMenu.didEndTrackingNotification, object: nil, queue: nil) { _ in
+            MainActor.assumeIsolated {
+                depth = max(0, depth - 1)
+                if depth == 0 { endSession() }
+            }
+        }
+        nc.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: nil) { _ in
+            MainActor.assumeIsolated {
+                depth = 0
+                endSession()
+            }
+        }
+    }
+
+    private static func endSession() {
+        openSince = nil
+        flush()
+    }
+
+    fileprivate static var holding: Bool {
+        guard !flushing, let openSince else { return false }
+        return Date().timeIntervalSince(openSince) >= settle
+    }
+
+    fileprivate static func hold(_ item: NSMenuItem, _ enabled: Bool) {
+        pending[ObjectIdentifier(item)] = (item, enabled)
+        guard !scheduled else { return }
+        scheduled = true
+        RunLoop.main.perform(inModes: [.common, .eventTracking]) {
+            MainActor.assumeIsolated { flush() }
+        }
+    }
+
+    private static func flush() {
+        scheduled = false
+        guard !pending.isEmpty else { return }
+        let work = pending
+        pending = [:]
+        flushing = true
+        defer { flushing = false }
+        for (_, entry) in work {
+            if entry.item.isEnabled == entry.enabled {
+                skipped += 1
+            } else {
+                applied += 1
+                entry.item.isEnabled = entry.enabled
+            }
+        }
+    }
+
+    static var stats: [String: Int] { ["skipped": skipped, "applied": applied, "depth": depth] }
+}
+
+extension NSMenuItem {
+    /// Swapped with `setEnabled:` by MenuItemEnableCoalescer; calling it runs the original.
+    @objc fileprivate func proshow_setEnabled(_ enabled: Bool) {
+        if Thread.isMainThread {
+            let held = MainActor.assumeIsolated { () -> Bool in
+                guard MenuItemEnableCoalescer.holding else { return false }
+                MenuItemEnableCoalescer.hold(self, enabled)
+                return true
+            }
+            if held { return }
+        }
+        proshow_setEnabled(enabled)
+    }
 }
 #endif

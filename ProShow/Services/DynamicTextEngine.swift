@@ -259,12 +259,14 @@ enum DynamicTextEngine {
         }
     }
 
+    /// Compiled once: building this regex per call ran for every text object on every program tick.
+    static let braceTokenRegex = try! NSRegularExpression(pattern: #"\{([^{}]+)\}"#)
+
     static func interpolate(_ text: String, context: DynamicTextContext) -> String {
         let normalized = normalizeBraceSyntax(text)
         guard normalized.contains("{") else { return normalized }
         var result = normalized
-        let pattern = #"\{([^{}]+)\}"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
+        let regex = braceTokenRegex
         let matches = regex.matches(in: normalized, range: NSRange(normalized.startIndex..., in: normalized)).reversed()
         for match in matches {
             guard let range = Range(match.range, in: normalized),
@@ -370,7 +372,7 @@ enum DynamicTextEngine {
     static func isQuoteDirectiveTemplate(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, trimmed.contains("{") else { return false }
-        guard let regex = try? NSRegularExpression(pattern: #"\{([^{}]+)\}"#) else { return false }
+        let regex = braceTokenRegex
         let full = NSRange(trimmed.startIndex..., in: trimmed)
         let matches = regex.matches(in: trimmed, range: full)
         guard !matches.isEmpty else { return false }
@@ -488,7 +490,8 @@ enum DynamicTextEngine {
     }
 
     private static func tokens(in text: String) -> [String] {
-        guard let regex = try? NSRegularExpression(pattern: #"\{([^{}]+)\}"#) else { return [] }
+        guard text.contains("{") else { return [] }
+        let regex = braceTokenRegex
         let full = NSRange(text.startIndex..., in: text)
         return regex.matches(in: text, range: full).compactMap { match in
             guard let range = Range(match.range(at: 1), in: text) else { return nil }
@@ -557,6 +560,21 @@ struct LiveQuoteRefreshScope<Content: View>: View {
     }
 }
 
+/// Stable handle for live dynamic text. Its identity never changes, so putting it in the
+/// environment does not invalidate the window each second; views that read `context` track
+/// the underlying state themselves. (A per-second environment value re-applied every open
+/// menu in the window and closed submenus.)
+@MainActor
+final class DynamicTextSource {
+    private let read: @MainActor () -> DynamicTextContext
+    init(_ read: @escaping @MainActor () -> DynamicTextContext) { self.read = read }
+    var context: DynamicTextContext { read() }
+}
+
+private struct DynamicTextSourceKey: EnvironmentKey {
+    static let defaultValue: DynamicTextSource? = nil
+}
+
 private struct DynamicTextContextKey: EnvironmentKey {
     static let defaultValue = DynamicTextContext.empty
 }
@@ -565,6 +583,12 @@ extension EnvironmentValues {
     var dynamicText: DynamicTextContext {
         get { self[DynamicTextContextKey.self] }
         set { self[DynamicTextContextKey.self] = newValue }
+    }
+
+    /// Wins over `dynamicText` when set (see DynamicTextSource).
+    var dynamicTextSource: DynamicTextSource? {
+        get { self[DynamicTextSourceKey.self] }
+        set { self[DynamicTextSourceKey.self] = newValue }
     }
 }
 #endif

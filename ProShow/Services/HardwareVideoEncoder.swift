@@ -101,6 +101,58 @@ final class HardwareVideoEncoder: @unchecked Sendable {
     private var lastRTMPTimestampMs: UInt32 = 0
     #endif
     private var sentSequenceHeader = false
+    /// Phone lane only: subtracted from the PTS before the FLV timestamp, so a lane that started
+    /// on the local clock (9:16 recording) still sends stream-clock timestamps. Zero for Stream.
+    private var rtmpTimestampShift: CMTime = .zero
+    /// Session queue only. True while a passthrough recording outlives the stream and the record-only
+    /// pacer feeds host-timed frames. Any new stream session closes it, so a late pacer frame can never
+    /// stamp a restarted stream with host time.
+    private var hostTimedFeedOpen = false
+
+    /// Called once the stream has stopped and the passthrough recorder keeps this encoder.
+    func openHostTimedFeed() {
+        sessionQueue.async { [weak self] in self?.hostTimedFeedOpen = true }
+    }
+
+    /// Set when the FLV timeline starts over (new shift or a new Phone transport). The next encoded
+    /// frame clears the monotonic floor, so frames stamped on the local clock while only the 9:16 file
+    /// was open cannot hold the stream's video timestamps far ahead of its audio.
+    private var rtmpTimelineResetPending = false
+
+    func setRTMPTimestampShift(_ shift: CMTime) {
+        depthLock.lock()
+        if CMTimeCompare(shift, rtmpTimestampShift) != 0 { rtmpTimelineResetPending = true }
+        rtmpTimestampShift = shift
+        depthLock.unlock()
+    }
+
+    /// A new Phone RTMP transport attached to the running encoder.
+    func resetRTMPTimeline() {
+        depthLock.lock()
+        rtmpTimelineResetPending = true
+        depthLock.unlock()
+    }
+
+    private func takeRTMPTimelineState() -> (shift: CMTime, reset: Bool) {
+        depthLock.lock()
+        defer { depthLock.unlock() }
+        let reset = rtmpTimelineResetPending
+        rtmpTimelineResetPending = false
+        return (rtmpTimestampShift, reset)
+    }
+
+    /// Changes the bitrate on the running session (no new session, no new keyframe).
+    func updateBitrate(targetBps: Int, ceilingBps: Int) {
+        #if canImport(VideoToolbox)
+        sessionQueue.async { [self] in
+            guard let session = compressionSession else { return }
+            VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AverageBitRate, value: max(400_000, targetBps) as CFNumber)
+            let bytesPerSecond = max(1, max(targetBps, ceilingBps) / 8)
+            let limits: [NSNumber] = [NSNumber(value: bytesPerSecond), NSNumber(value: 1)]
+            VTSessionSetProperty(session, key: kVTCompressionPropertyKey_DataRateLimits, value: limits as CFArray)
+        }
+        #endif
+    }
 
     func setupSession(width: Int32, height: Int32, fps: Int, bitrateKbps: Int) {
         var config = StreamEncoderConfig.preset720p30Saver()
@@ -235,13 +287,19 @@ final class HardwareVideoEncoder: @unchecked Sendable {
     func encode(pixelBuffer: CVPixelBuffer, presentationTime: TimeInterval, hostTime: CMTime = .invalid) {
         #if canImport(VideoToolbox) && canImport(CoreVideo) && canImport(CoreMedia)
         _ = presentationTime
-        _ = hostTime
         let forceKey = !sentSequenceHeader
         sessionQueue.async { [weak self] in
             guard let self, let session = self.compressionSession else { return }
+            let hostTimed = hostTime.isValid && hostTime.isNumeric
+            if hostTimed, !self.hostTimedFeedOpen { return }
             let index = self.frameCount
             self.frameCount += 1
-            let pts = StreamVideoCFRClock.presentationTime(frameIndex: index, fps: self.targetFps)
+            // Live callers pass no host time and keep the CFR index. The record-only feed after a
+            // stream stop passes the frame's host time, so the passthrough file tracks the wall
+            // clock instead of a 30 fps index fed at a lower rate (that drift forced 2 s re-anchors).
+            let pts = hostTimed
+                ? CMTimeConvertScale(hostTime, timescale: 600, method: .roundHalfAwayFromZero)
+                : StreamVideoCFRClock.presentationTime(frameIndex: index, fps: self.targetFps)
             let duration = StreamVideoCFRClock.frameDuration(fps: self.targetFps)
             var properties: CFDictionary?
             if forceKey {
@@ -295,6 +353,8 @@ final class HardwareVideoEncoder: @unchecked Sendable {
             frameCount = 0
             targetFps = 30
             lastRTMPTimestampMs = 0
+            hostTimedFeedOpen = false
+            setRTMPTimestampShift(.zero)
         }
         if sessionQueue === ProShowQueues.encoderQueue, ProShowQueues.isOnEncoderQueue {
             work()
@@ -337,7 +397,10 @@ final class HardwareVideoEncoder: @unchecked Sendable {
             onEncoded?(.sequenceHeader(record))
         }
         guard let avcc = Self.avccPayload(from: sample) else { return }
-        let pts = CMSampleBufferGetPresentationTimeStamp(sample)
+        let samplePTS = CMSampleBufferGetPresentationTimeStamp(sample)
+        let (shift, resetTimeline) = takeRTMPTimelineState()
+        if resetTimeline { lastRTMPTimestampMs = 0 }
+        let pts = CMTimeCompare(shift, .zero) == 0 ? samplePTS : CMTimeSubtract(samplePTS, shift)
         let timestampMs = rtmpTimestampMs(for: pts)
         encodedFrameCount += 1
         onAccessUnitBytes?(avcc.count)

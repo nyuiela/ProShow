@@ -125,6 +125,16 @@ struct ProShowApp: App {
                 Button("Open Project…") { openFromMenu() }
                     .keyboardShortcut("o", modifiers: [.command])
                 Button("Open Program Rundown…") { openProgramRundown(session: session) }
+                Button("Import Slides…") { session.controller.presentImportSlides() }
+                    .keyboardShortcut("i", modifiers: [.command, .shift])
+                    .disabled(session.phase != .desk)
+                Button("Add Broadcast Template Pack") { session.controller.addBroadcastTemplatePack() }
+                    .disabled(session.phase != .desk)
+                Button("Ask ProShow…") { AgentComposerController.shared.toggle(controller: session.controller) }
+                    .keyboardShortcut("a", modifiers: [.command, .option])
+                    .disabled(session.phase != .desk)
+                Button("AI Desk…") { AIDeskWindowController.shared.toggle(controller: session.controller) }
+                    .disabled(session.phase != .desk)
                 Divider()
                 Button("Save Project") { _ = session.saveProject() }
                     .keyboardShortcut("s", modifiers: [.command])
@@ -139,6 +149,26 @@ struct ProShowApp: App {
                 Button("Redo") { session.controller.editors.redo() }
                     .keyboardShortcut("z", modifiers: [.command, .shift])
                     .disabled(!session.controller.editors.canRedo)
+            }
+            CommandMenu("Audio") {
+                let audioKeysOff = session.phase != .desk || session.controller.editors.isEditingText
+                ForEach(0..<5, id: \.self) { index in
+                    Button("Mute Layer \(index + 1) Audio") { session.controller.toggleLayerAudioShortcut(index) }
+                        .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: [.option])
+                        .disabled(audioKeysOff)
+                }
+                Divider()
+                Button("Mute Mic") { session.controller.toggleMicChannelShortcut() }
+                    .keyboardShortcut("m", modifiers: [.option])
+                    .disabled(audioKeysOff)
+                Button("Clear Isolate") { session.controller.clearAllAudioSolos() }
+                    .keyboardShortcut("s", modifiers: [.option, .shift])
+                    .disabled(audioKeysOff)
+                Button("Clear Listen") { session.controller.clearOnAirListen() }
+                    .keyboardShortcut("l", modifiers: [.option])
+                    .disabled(audioKeysOff)
+                Divider()
+                Text("Hold T to Talk")
             }
             CommandGroup(after: .pasteboard) {
                 Divider()
@@ -573,6 +603,16 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .proShowOpenPhoneWindow)) { _ in
             presentPhoneWindow()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .proShowOpenChatWindow)) { _ in
+            LiveChatGlassController.shared.attach(controller)
+            LiveChatGlassController.shared.open()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .proShowCloseChatWindow)) { _ in
+            LiveChatGlassController.shared.close()
+        }
+        .onChange(of: ObjectIdentifier(controller)) { _, _ in
+            LiveChatGlassController.shared.attach(controller)
+        }
         .onReceive(NotificationCenter.default.publisher(for: .proShowOpenMultiViewerWindow)) { _ in
             presentMultiViewer(forceOpen: false)
         }
@@ -738,11 +778,23 @@ final class ProShowAppDelegate: NSObject, NSApplicationDelegate {
     var sessionProvider: (() -> AppSession?)?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        MenuItemEnableCoalescer.install()
         // Keep the bundle AppIcon in the Dock. Overriding it at runtime with
         // ProShowLogo swapped the look (inverted colors, larger mark) right after launch.
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // Quitting while recording left a 0-byte .mov plus an unfinished temp file. Finish it first.
+        if let controller = sessionProvider?()?.controller, controller.isoRecorder.isRecording {
+            controller.stopProgramRecording()
+        }
+        return .terminateNow
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
+        if let controller = sessionProvider?()?.controller, controller.isoRecorder.isRecording {
+            controller.stopProgramRecording()
+        }
         sessionProvider?()?.flushToDiskOnQuit()
     }
 }

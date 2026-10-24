@@ -337,7 +337,7 @@ final class AudioIOEngine {
             let stereo = AudioDSP.stereoPeaks(from: buffer)
             let samples = AudioIOEngine.monoSamples(from: buffer)
             let rate = buffer.format.sampleRate
-            ProgramStreamAudioGates.enqueueCapture(role: .microphone, mono: samples, sampleRate: rate)
+            ProgramStreamAudioGates.enqueueCapture(role: .microphone, mono: samples, sampleRate: rate, source: "system-input")
             Task { @MainActor in
                 self?.lastPeaks[.microphone] = max(stereo.left, stereo.right)
                 self?.lastStereoPeaks[.microphone] = stereo

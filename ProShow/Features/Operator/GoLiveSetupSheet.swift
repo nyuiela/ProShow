@@ -27,8 +27,10 @@ struct GoLiveSetupSheet: View {
     private var store: SettingsStore { controller.deviceSettings }
 
     var body: some View {
+        // The sidebar rides in an overlay so it is always sized to the full modal height, even when the
+        // sheet lays out with an ideal (nil) height proposal and the HStack would otherwise centre a short sidebar.
         HStack(spacing: 0) {
-            sidebar
+            Color.clear.frame(width: 220)
             VStack(spacing: 0) {
                 header
                 contentPane
@@ -37,8 +39,13 @@ struct GoLiveSetupSheet: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(ShowDrawerPalette.background(scheme))
         }
-        .frame(width: Self.modalWidth, height: Self.modalHeight)
-        .frame(maxWidth: Self.modalMaxWidth, maxHeight: Self.modalMaxHeight)
+        .overlay(alignment: .topLeading) {
+            sidebar
+                .frame(maxHeight: .infinity, alignment: .top)
+        }
+        // Fill the sheet (not a fixed 620 pt box centred in it) so the sidebar reaches the bottom edge.
+        .frame(minWidth: Self.modalWidth, idealWidth: Self.modalWidth, maxWidth: Self.modalMaxWidth,
+               minHeight: Self.modalHeight, idealHeight: Self.modalHeight, maxHeight: Self.modalMaxHeight)
         .background(ShowDrawerPalette.background(scheme))
         .clipShape(RoundedRectangle(cornerRadius: DeskRadius.sheet, style: .continuous))
         .modifier(ShowSidebarSystemScheme())
@@ -95,14 +102,17 @@ struct GoLiveSetupSheet: View {
             .focusEffectDisabled()
             .frame(maxHeight: .infinity, alignment: .top)
 
-            Spacer(minLength: 0)
-
+            // Keep the list clear of the pinned Cancel row.
+            Color.clear.frame(height: 56)
+        }
+        .frame(width: 220, alignment: .leading)
+        .frame(maxHeight: .infinity, alignment: .top)
+        // Cancel is pinned to the sidebar's bottom edge (aligned with the footer row), independent of list height.
+        .overlay(alignment: .bottomLeading) {
             navButton("Cancel", systemImage: "xmark") { closeSheet() }
                 .padding(.bottom, 12)
                 .keyboardShortcut(.cancelAction)
         }
-        .frame(width: 220, alignment: .leading)
-        .frame(maxHeight: .infinity, alignment: .top)
         .background(ShowSidebarPalette.background(scheme))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Broadcast sections")
@@ -156,7 +166,7 @@ struct GoLiveSetupSheet: View {
     private var headerSubtitle: some View {
         switch controller.streaming.state {
         case .live:
-            TimelineView(.periodic(from: .now, by: 1)) { context in
+            TimelineView(.periodic(from: TimelineAnchor.start, by: 1)) { context in
                 Text(ProShowCopy.liveClock(StreamingEngine.broadcastTimecode(from: controller.streaming.startedAt, now: context.date)))
                     .font(.system(size: 13))
                     .foregroundStyle(ShowSidebarPalette.subtitle)
@@ -253,12 +263,11 @@ struct GoLiveSetupSheet: View {
     private var thumbnailDropContent: some View {
         #if os(macOS)
         if let data = controller.broadcastMetadata.thumbnailJPEG, let image = NSImage(data: data) {
-            Image(nsImage: image)
-                .resizable()
-                .scaledToFill()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipped()
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            ThumbnailBox(cornerRadius: 12) {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFill()
+            }
         } else {
             emptyThumbnailPrompt
         }
@@ -484,10 +493,30 @@ struct GoLiveSetupSheet: View {
                     .font(.system(size: 12))
                     .foregroundStyle(ShowSidebarPalette.subtitle)
                     .lineLimit(1)
+                if !controller.streaming.isLive, !controller.soloedAudioChannelNames.isEmpty {
+                    Label(
+                        "Isolate: \(controller.soloedAudioChannelNames.joined(separator: ", "))",
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color.orange)
+                    .lineLimit(1)
+                }
             }
             .accessibilityElement(children: .combine)
 
             Spacer(minLength: 8)
+
+            if !controller.streaming.isLive, !controller.soloedAudioChannelNames.isEmpty {
+                Button("Clear Isolate") { controller.clearAllAudioSolos() }
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(ShowSidebarPalette.title)
+                    .padding(.horizontal, 14)
+                    .frame(height: 34)
+                    .background(ShowSidebarPalette.field(scheme), in: Capsule(style: .continuous))
+                    .buttonStyle(DeskPressButtonStyle())
+                    .help("Turn off Isolate so all sources reach the stream")
+            }
 
             Button("Cancel") { closeSheet() }
                 .font(.system(size: 13, weight: .medium))

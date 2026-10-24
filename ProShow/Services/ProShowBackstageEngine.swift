@@ -35,6 +35,62 @@ final class ProShowBackstageEngine {
     func rotateRoom() {
         room.roomSlug = Self.makeRoomSlug()
         UserDefaults.standard.set(room.roomSlug, forKey: Self.slugDefaultsKey)
+        if let projectKey { UserDefaults.standard.removeObject(forKey: Self.projectRoomKey(projectKey)) }
+    }
+
+    // MARK: Per-project room name (custom invite slug, e.g. "stellar14")
+
+    /// Project whose room-name override is active (set when a project opens).
+    private(set) var projectKey: String?
+    /// The custom room name for the open project, or nil when using the generated pso-#### room.
+    var customRoomName: String? {
+        guard let projectKey else { return nil }
+        return UserDefaults.standard.string(forKey: Self.projectRoomKey(projectKey))
+    }
+
+    /// Lowercase letters, digits and dashes, 3–40 chars, starting with a letter or digit.
+    /// Subset of the showroom token route's room regex `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`.
+    static func normalizedRoomName(_ raw: String) -> String? {
+        let name = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard name.range(of: "^[a-z0-9][a-z0-9-]{2,39}$", options: .regularExpression) != nil else { return nil }
+        return name
+    }
+
+    /// Applies the open project's override (if any); otherwise keeps the generated room.
+    func applyProject(key: String) {
+        projectKey = key
+        if let name = customRoomName, let valid = Self.normalizedRoomName(name) {
+            room.roomSlug = valid
+        } else if !room.roomSlug.hasPrefix("pso-") {
+            room.roomSlug = Self.generatedSlug()
+        }
+    }
+
+    /// Sets (or clears, with nil/empty) the open project's room name. Returns false when invalid.
+    @discardableResult
+    func setCustomRoomName(_ raw: String?) -> Bool {
+        guard let projectKey else { return false }
+        let key = Self.projectRoomKey(projectKey)
+        guard let raw, !raw.trimmingCharacters(in: .whitespaces).isEmpty else {
+            UserDefaults.standard.removeObject(forKey: key)
+            room.roomSlug = Self.generatedSlug()
+            return true
+        }
+        guard let name = Self.normalizedRoomName(raw) else { return false }
+        UserDefaults.standard.set(name, forKey: key)
+        room.roomSlug = name
+        return true
+    }
+
+    private static func projectRoomKey(_ project: String) -> String { "proshow.backstage.roomName.\(project)" }
+
+    private static func generatedSlug() -> String {
+        if let saved = UserDefaults.standard.string(forKey: slugDefaultsKey), saved.hasPrefix("pso-"), saved.count <= 16 {
+            return saved
+        }
+        let slug = makeRoomSlug()
+        UserDefaults.standard.set(slug, forKey: slugDefaultsKey)
+        return slug
     }
 
     @discardableResult
@@ -155,7 +211,7 @@ enum BackstageReturnFeedMode: String, Codable, Sendable, CaseIterable {
     /// Compact labels for the narrow action-inspector column.
     var pickerShortLabel: String {
         switch self {
-        case .programMixMinus: "Mix−"
+        case .programMixMinus: "Mix"
         case .programFull: "Full"
         case .intercomOnly: "Intercom"
         }

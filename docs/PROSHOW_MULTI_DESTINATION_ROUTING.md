@@ -116,7 +116,7 @@ New destination fields decode as Stream and Fit when missing. Old shows Go Live 
 
 Stream destinations share the project encode preset. A saved account resolution does not open a second lane. An explicit frame rate on a lane member does. That keeps old shows on one Stream encode.
 
-A present Phone board is drawn on the Phone queue as shapes and text. Live video inputs stay on the Stream composite. An absent board letterboxes the Stream frame. Neither path runs on the program encoder queue.
+A present Phone board is drawn by the program composer right after the Stream frame, in the same work item: same `renderNow`, same text context, same captured frames (one snapshot per source buffer, shared by both canvases). Board objects go through `resolvedCanvasObjects` (placeholders and image bindings) like the editor preview. Slide builds use `broadcastPlayback` computed from the Phone objects; props drawn on Phone get their own prop playback. Media slots on the board play the program media; the 16:9 media backdrop and video layer stay off the Phone frame. Live tiles are scaled on the GPU and static layers around them are cached per output size. The Phone encoder ticker repeats the latest composed Phone frame. An absent board letterboxes the Stream frame. Neither path runs on the program encoder queue.
 
 One AAC pump. When Stream is live, Phone taps those access units. When only Phone is live, Phone is the pump.
 

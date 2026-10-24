@@ -7,6 +7,15 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		20B40C8DC25E4974AB401A9E /* AgentComposerOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C096765363C4945A1F7CECC /* AgentComposerOverlay.swift */; };
+		2E9527966B09EE72E0408029 /* XAIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE742513DC6377110BA776A3 /* XAIProvider.swift */; };
+		3B33FED38E2B33812B3D87E5 /* FloatingPanelTransparency.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25ACA0AC1A4A6935B1346764 /* FloatingPanelTransparency.swift */; };
+		55C4BCC80F6B123CCF63895C /* AIAgentSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FA5466F322705B2EF1530B3 /* AIAgentSession.swift */; };
+		5E58E6956CB930B03C374F6B /* DecodedImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7F6D658CCBE6C9FB3CEF43B /* DecodedImageCache.swift */; };
+		70DDF89D710261CCFD3CFF63 /* SlideDeckImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 394D828F02D4E088EA8AF2F8 /* SlideDeckImporter.swift */; };
+		7C3216A31314A00C649B21F8 /* SpecProjectBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E7705E0267DB911C4F1EB98 /* SpecProjectBuilder.swift */; };
+		8DC5C336478DBEEDF37396E5 /* AIDeskWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 175E580C434437AB5ACE6109 /* AIDeskWindow.swift */; };
+		9B2308FCF47F11FFD0EAD05C /* BroadcastTemplatePack.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69E78DF0B0D4828910EF0123 /* BroadcastTemplatePack.swift */; };
 		A10000000000000000000001 /* ProShowApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* ProShowApp.swift */; };
 		A10000000000000000000002 /* ShowModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000002 /* ShowModels.swift */; };
 		A10000000000000000000003 /* SampleContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* SampleContent.swift */; };
@@ -46,6 +55,10 @@
 		A10000000000000000000026 /* AudioMatrixEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000026 /* AudioMatrixEngine.swift */; };
 		A10000000000000000000027 /* SoundboardStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000027 /* SoundboardStore.swift */; };
 		A10000000000000000000028 /* IsoRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000028 /* IsoRecorder.swift */; };
+		8AE64D35F445B5E6513D7F1C /* ShowController+OnAirAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = 210CDB089B347FEEA793099C /* ShowController+OnAirAudio.swift */; };
+		B162F56202DD4BDD812295B4 /* OnAirAudioControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ECD0E532A5C58254EBCE29D /* OnAirAudioControls.swift */; };
+		4067EAF0E65CD35384009DD6 /* TalkbackEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37C176C4F8F6EA7B483FC581 /* TalkbackEngine.swift */; };
+		918289B4CE06BC726E40E021 /* OnAirAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85C6ABA275E835BF795C055F /* OnAirAudio.swift */; };
 		A10000000000000000000029 /* LiveChatEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000029 /* LiveChatEngine.swift */; };
 		A1000000000000000000002A /* ProShowVirtualCam.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002A /* ProShowVirtualCam.swift */; };
 		A1000000000000000000002B /* ProjectSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002B /* ProjectSettingsView.swift */; };
@@ -108,7 +121,6 @@
 		A10000000000000000000065 /* ZeroCopyMetalPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000065 /* ZeroCopyMetalPipeline.swift */; };
 		A10000000000000000000066 /* HardwareVideoEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000066 /* HardwareVideoEncoder.swift */; };
 		A10000000000000000000067 /* AssetCacheManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000067 /* AssetCacheManager.swift */; };
-		C7E40C000000000000000001 /* CaptureBudget.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E40C000000000000000002 /* CaptureBudget.swift */; };
 		A10000000000000000000068 /* DefaultBuildFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000068 /* DefaultBuildFactory.swift */; };
 		A10000000000000000000069 /* ProShowFlippedSplitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000069 /* ProShowFlippedSplitView.swift */; };
 		A10000000000000000000070 /* ProShow3ColumnDeskController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000070 /* ProShow3ColumnDeskController.swift */; };
@@ -143,8 +155,9 @@
 		A100000000000000000000A1 /* StreamAccountModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A1 /* StreamAccountModel.swift */; };
 		A100000000000000000000A2 /* StreamAccountManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A2 /* StreamAccountManager.swift */; };
 		A100000000000000000000A3 /* PlatformLiveApiService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A3 /* PlatformLiveApiService.swift */; };
-		C7E410000000000000000011 /* PhoneCanvasMonitorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E410000000000000000012 /* PhoneCanvasMonitorView.swift */; };
 		A100000000000000000000A4 /* GoLiveSetupSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A4 /* GoLiveSetupSheet.swift */; };
+		AA469E10A68C1B02BBAF5052 /* OnAirAudioSectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28408C03F2E0D54ABB91D279 /* OnAirAudioSectionView.swift */; };
+		9AFD35FFAE90A09BCED856FC /* OnAirReturnsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 254A9066E64990753F37036B /* OnAirReturnsViews.swift */; };
 		A100000000000000000000A5 /* ShowController+GoLive.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A5 /* ShowController+GoLive.swift */; };
 		A100000000000000000000A6 /* RemoteControlRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A6 /* RemoteControlRuntime.swift */; };
 		A100000000000000000000A7 /* ControlWebSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000A7 /* ControlWebSocket.swift */; };
@@ -169,6 +182,9 @@
 		A100000000000000000000D1 /* DeskTaskbarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000D1 /* DeskTaskbarView.swift */; };
 		A100000000000000000000D2 /* NDISessions.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000D2 /* NDISessions.swift */; };
 		A100000000000000000000F1 /* ThemeTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000F1 /* ThemeTokens.swift */; };
+		A1A100000000000000000C01 /* AIComposeV1.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2A200000000000000000C01 /* AIComposeV1.swift */; };
+		A1A100000000000000000C02 /* AIComposeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2A200000000000000000C02 /* AIComposeTests.swift */; };
+		A1A1000000000000000AA001 /* AIAgentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2A2000000000000000AA001 /* AIAgentTests.swift */; };
 		A1T000000000000000000001 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000001 /* TestSupport.swift */; };
 		A1T000000000000000000002 /* CompositorEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000002 /* CompositorEngineTests.swift */; };
 		A1T000000000000000000003 /* CueTransportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000003 /* CueTransportTests.swift */; };
@@ -183,14 +199,17 @@
 		A1T00000000000000000000C /* PresentationImportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T00000000000000000000C /* PresentationImportTests.swift */; };
 		A1T00000000000000000000D /* ParityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T00000000000000000000D /* ParityTests.swift */; };
 		A1T00000000000000000000E /* ProjectStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T00000000000000000000E /* ProjectStoreTests.swift */; };
-		C7E4B3000000000000000001 /* CaptureBudgetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E4B3000000000000000002 /* CaptureBudgetTests.swift */; };
 		A1T00000000000000000000F /* AssetPipelineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T00000000000000000000F /* AssetPipelineTests.swift */; };
 		A1T000000000000000000010 /* EditorEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000010 /* EditorEngineTests.swift */; };
 		A1T000000000000000000011 /* SceneManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000011 /* SceneManagerTests.swift */; };
 		A1T000000000000000000012 /* ChromaKeyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000012 /* ChromaKeyTests.swift */; };
 		A1T000000000000000000013 /* AudioMatrixTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000013 /* AudioMatrixTests.swift */; };
+		F3C66B3FF9D6D785C942B6BB /* OnAirAudioTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AE5BC21D3E2D7B29074455E /* OnAirAudioTests.swift */; };
 		A1T000000000000000000014 /* IsoRecorderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000014 /* IsoRecorderTests.swift */; };
 		A1T000000000000000000015 /* LiveChatOverlayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000015 /* LiveChatOverlayTests.swift */; };
+		2BABB7AF45D2559942FEEDA6 /* YouTubeChatIngestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22A34932106B5A07A8C5ECD5 /* YouTubeChatIngestTests.swift */; };
+		DE565729698310CC34CEDE2A /* XChatIngestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A5455AE7C49B323CFE2A830 /* XChatIngestTests.swift */; };
+		C7A11E5D0B3F4E2A9C61D0B1 /* ChatTemplatePropTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A11E5D0B3F4E2A9C61D0B2 /* ChatTemplatePropTests.swift */; };
 		A1T000000000000000000016 /* ProjectSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000016 /* ProjectSettingsTests.swift */; };
 		A1T000000000000000000017 /* CanvasEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000017 /* CanvasEngineTests.swift */; };
 		A1T000000000000000000018 /* ActionInspectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000018 /* ActionInspectorTests.swift */; };
@@ -221,10 +240,11 @@
 		A1T000000000000000000038 /* BroadcastGoLiveTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000038 /* BroadcastGoLiveTests.swift */; };
 		A1T000000000000000000039 /* MultiViewerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T000000000000000000039 /* MultiViewerTests.swift */; };
 		A1T00000000000000000003A /* ActionStackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2T00000000000000000003A /* ActionStackTests.swift */; };
+		A455B12D8FD39A3C8FB94791 /* AIAgentCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 833632A23808345937921080 /* AIAgentCore.swift */; };
+		A5C6F72375DEFD397688A45C /* PROSHOW_CREATIVE_DESIGN_AGENT.md in Resources */ = {isa = PBXBuildFile; fileRef = 66903F9BF1565A22D565FAD1 /* PROSHOW_CREATIVE_DESIGN_AGENT.md */; };
 		AKLINK000000000000000001 /* AudioKit in Frameworks */ = {isa = PBXBuildFile; productRef = AKPROD000000000000000001 /* AudioKit */; };
 		AKLINK000000000000000002 /* AudioKitUI in Frameworks */ = {isa = PBXBuildFile; productRef = AKPROD000000000000000002 /* AudioKitUI */; };
 		AKLINK000000000000000003 /* Controls in Frameworks */ = {isa = PBXBuildFile; productRef = AKPROD000000000000000003 /* Controls */; };
-		LKLINK000000000000000001 /* LiveKit in Frameworks */ = {isa = PBXBuildFile; productRef = LKPROD000000000000000001 /* LiveKit */; };
 		B100000000000000000000B1 /* ProgramOutputMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000000000000000000B1 /* ProgramOutputMode.swift */; };
 		B100000000000000000000B2 /* ProgramRenderContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000000000000000000B2 /* ProgramRenderContract.swift */; };
 		B100000000000000000000B3 /* ProgramOutputBus.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000000000000000000B3 /* ProgramOutputBus.swift */; };
@@ -290,12 +310,12 @@
 		C6D10000000000000000004D /* ThemeRundownBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D20000000000000000004D /* ThemeRundownBridge.swift */; };
 		C6D10000000000000000004E /* StageThemeBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D20000000000000000004E /* StageThemeBridge.swift */; };
 		C6D10000000000000000004F /* DeskGlass.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D20000000000000000004F /* DeskGlass.swift */; };
-		C6D1FFFF00000000000000A1 /* ProShowObjCTry.m in Sources */ = {isa = PBXBuildFile; fileRef = C6D2FFFF00000000000000A1 /* ProShowObjCTry.m */; };
 		C6D100000000000000000099 /* ProjectTitleHeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D200000000000000000099 /* ProjectTitleHeaderView.swift */; };
 		C6D10000000000000000017B /* ShowController+ProgramLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D20000000000000000017B /* ShowController+ProgramLibrary.swift */; };
 		C6D10000000000000000017C /* ProgramOutlinePresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D20000000000000000017C /* ProgramOutlinePresentation.swift */; };
 		C6D10000000000000000017D /* RundownBlockSlideSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D20000000000000000017D /* RundownBlockSlideSource.swift */; };
 		C6D10000000000000000017E /* RundownProgramSlideAssignSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D20000000000000000017E /* RundownProgramSlideAssignSession.swift */; };
+		C6D1FFFF00000000000000A1 /* ProShowObjCTry.m in Sources */ = {isa = PBXBuildFile; fileRef = C6D2FFFF00000000000000A1 /* ProShowObjCTry.m */; };
 		C7A100000000000000000001 /* AudioMatrixReconciler.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A200000000000000000001 /* AudioMatrixReconciler.swift */; };
 		C7D301000000000000000001 /* MediaClockAnchor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7D301000000000000000002 /* MediaClockAnchor.swift */; };
 		C7D302000000000000000001 /* RTMPEndpointQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7D302000000000000000002 /* RTMPEndpointQueue.swift */; };
@@ -324,7 +344,6 @@
 		C7E10000000000000000001B /* DeskDestructiveConfirmation.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E20000000000000000001B /* DeskDestructiveConfirmation.swift */; };
 		C7E300000000000000000001 /* EncoderPresetPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E300000000000000000002 /* EncoderPresetPickerView.swift */; };
 		C7E401000000000000000001 /* EncoderPresetStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E401000000000000000002 /* EncoderPresetStore.swift */; };
-		C7E410000000000000000001 /* EncodeLaneRouting.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E410000000000000000002 /* EncodeLaneRouting.swift */; };
 		C7E402000000000000000001 /* StreamTelemetryMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E402000000000000000002 /* StreamTelemetryMonitor.swift */; };
 		C7E403000000000000000001 /* IsoRecorderEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E403000000000000000002 /* IsoRecorderEngine.swift */; };
 		C7E404000000000000000001 /* LowLatencyIngestPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E404000000000000000002 /* LowLatencyIngestPipeline.swift */; };
@@ -334,25 +353,33 @@
 		C7E408000000000000000001 /* StreamHoldFrameCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E408000000000000000002 /* StreamHoldFrameCache.swift */; };
 		C7E409000000000000000001 /* StreamEngineV2.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E409000000000000000002 /* StreamEngineV2.swift */; };
 		C7E40A000000000000000001 /* StreamAudioPipelineDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E40A000000000000000002 /* StreamAudioPipelineDiagnostics.swift */; };
+		C7E40C000000000000000001 /* CaptureBudget.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E40C000000000000000002 /* CaptureBudget.swift */; };
+		C7E410000000000000000001 /* EncodeLaneRouting.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E410000000000000000002 /* EncodeLaneRouting.swift */; };
+		C7E410000000000000000011 /* PhoneCanvasMonitorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E410000000000000000012 /* PhoneCanvasMonitorView.swift */; };
 		C7E4B1000000000000000001 /* EncoderPresetStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E4B2000000000000000001 /* EncoderPresetStoreTests.swift */; };
+		C7E4B3000000000000000001 /* CaptureBudgetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E4B3000000000000000002 /* CaptureBudgetTests.swift */; };
 		C7F100000000000000000001 /* PropLifecycleEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F200000000000000000001 /* PropLifecycleEngine.swift */; };
 		C7F100000000000000000002 /* ShowController+PropLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F200000000000000000002 /* ShowController+PropLifecycle.swift */; };
 		C7F100000000000000000003 /* RemoteGuestAndMeetingModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F200000000000000000003 /* RemoteGuestAndMeetingModels.swift */; };
 		C7F100000000000000000004 /* VirtualCameraOutputService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F200000000000000000004 /* VirtualCameraOutputService.swift */; };
 		C7F100000000000000000005 /* ProShowBackstageEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F200000000000000000005 /* ProShowBackstageEngine.swift */; };
 		C7F100000000000000000006 /* LiveChatStreamManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F200000000000000000006 /* LiveChatStreamManager.swift */; };
+		A43E7680D3B0C7C448F5F475 /* ShowController+ChatIngest.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2DB8034ED5178F27B6DE62A /* ShowController+ChatIngest.swift */; };
+		ABB503DAE1C9205EED77AF5C /* ChatIngestHub.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09938EA7249F35AB71EBF69F /* ChatIngestHub.swift */; };
+		B434CC88AFED8D3DD5014035 /* YouTubeChatConnector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27544121B6381B6ABC118974 /* YouTubeChatConnector.swift */; };
+		282BD1022248B8E6D688A390 /* XChatConnector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79855F983DA36D148C037F2A /* XChatConnector.swift */; };
+		C7A11E5D0B3F4E2A9C61D0C1 /* ChatAvatarFileCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A11E5D0B3F4E2A9C61D0C2 /* ChatAvatarFileCache.swift */; };
 		C7F100000000000000000007 /* MeetingSdkBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F200000000000000000007 /* MeetingSdkBridge.swift */; };
 		C7F100000000000000000008 /* ShowController+Backstage.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F200000000000000000008 /* ShowController+Backstage.swift */; };
 		C7F100000000000000000009 /* BackstageControlPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F200000000000000000009 /* BackstageControlPanelView.swift */; };
+		2750DB37224DEB4DAF8642D9 /* LiveChatFeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9035DC6315A490D1FCE4F1AA /* LiveChatFeedView.swift */; };
+		EE1B6975A1D758C4CDD06ADA /* TalkButtonModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7229C134D0CF3B81114BEDD6 /* TalkButtonModel.swift */; };
+		93BB5E00F85E48519651CF34 /* ChatAvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DB06D7C6E8A3E6C22AF7C16 /* ChatAvatarView.swift */; };
 		C7F10000000000000000000A /* BackstageEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F20000000000000000000A /* BackstageEngineTests.swift */; };
 		C7F10000000000000000000B /* VirtualCameraFrameQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F20000000000000000000B /* VirtualCameraFrameQueue.swift */; };
 		C7F10000000000000000000C /* VirtualAudioLoopbackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F20000000000000000000C /* VirtualAudioLoopbackService.swift */; };
 		C7F10000000000000000000D /* BackstageSignalingEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F20000000000000000000D /* BackstageSignalingEngine.swift */; };
 		C7F10000000000000000000E /* BackstageWebRTCIngestEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F20000000000000000000E /* BackstageWebRTCIngestEngine.swift */; };
-		LKBLD0000000000000000001 /* LiveKitAccessToken.swift in Sources */ = {isa = PBXBuildFile; fileRef = LKREF0000000000000000001 /* LiveKitAccessToken.swift */; };
-		LKBLD0000000000000000002 /* LiveKitDeskConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = LKREF0000000000000000002 /* LiveKitDeskConfig.swift */; };
-		LKBLD0000000000000000003 /* LiveKitGuestCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = LKREF0000000000000000003 /* LiveKitGuestCatalog.swift */; };
-		LKBLD0000000000000000004 /* LiveKitDeskSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = LKREF0000000000000000004 /* LiveKitDeskSession.swift */; };
 		C7F10000000000000000000F /* LiveChatIngestService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F20000000000000000000F /* LiveChatIngestService.swift */; };
 		C7F100000000000000000010 /* MeetingOAuthClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F200000000000000000010 /* MeetingOAuthClient.swift */; };
 		C7F100000000000000000011 /* CanvasShimmerRasterizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F200000000000000000011 /* CanvasShimmerRasterizer.swift */; };
@@ -365,27 +392,35 @@
 		C7R100000000000000000003 /* ProgramAudioMonitorBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7R200000000000000000003 /* ProgramAudioMonitorBridge.swift */; };
 		C8F100000000000000000001 /* OutlineScriptCompiler.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F200000000000000000001 /* OutlineScriptCompiler.swift */; };
 		C8F100000000000000000002 /* OutlineScriptCompilerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F200000000000000000002 /* OutlineScriptCompilerTests.swift */; };
-		C8F311000000000000000001 /* Teleprompter/PromptColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F321000000000000000001 /* Teleprompter/PromptColor.swift */; };
-		C8F311000000000000000002 /* Teleprompter/ScriptPauseKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F321000000000000000002 /* Teleprompter/ScriptPauseKind.swift */; };
-		C8F311000000000000000003 /* Teleprompter/VocalStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F321000000000000000003 /* Teleprompter/VocalStyle.swift */; };
-		C8F311000000000000000004 /* Teleprompter/SpokenWord.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F321000000000000000004 /* Teleprompter/SpokenWord.swift */; };
-		C8F311000000000000000005 /* Teleprompter/PunctuationEmphasis.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F321000000000000000005 /* Teleprompter/PunctuationEmphasis.swift */; };
-		C8F311000000000000000006 /* Teleprompter/ScriptPacing.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F321000000000000000006 /* Teleprompter/ScriptPacing.swift */; };
-		C8F311000000000000000007 /* Teleprompter/ScriptTokenizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F321000000000000000007 /* Teleprompter/ScriptTokenizer.swift */; };
-		C8F311000000000000000008 /* Teleprompter/KineticStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F321000000000000000008 /* Teleprompter/KineticStyle.swift */; };
-		C8F311000000000000000009 /* Teleprompter/KineticLineLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F321000000000000000009 /* Teleprompter/KineticLineLayout.swift */; };
-		C8F31100000000000000000A /* Teleprompter/KineticEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F32100000000000000000A /* Teleprompter/KineticEngine.swift */; };
-		C8F31100000000000000000B /* Teleprompter/ScrollEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F32100000000000000000B /* Teleprompter/ScrollEngine.swift */; };
-		C8F31100000000000000000C /* Teleprompter/ScrollEngineProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F32100000000000000000C /* Teleprompter/ScrollEngineProtocol.swift */; };
-		C8F31100000000000000000D /* Teleprompter/TeleprompterSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F32100000000000000000D /* Teleprompter/TeleprompterSettingsStore.swift */; };
+		AA0D0A000000000000000001 /* AutoAdvanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0D0A000000000000000002 /* AutoAdvanceTests.swift */; };
+		C8F311000000000000000001 /* PromptColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F321000000000000000001 /* PromptColor.swift */; };
+		C8F311000000000000000002 /* ScriptPauseKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F321000000000000000002 /* ScriptPauseKind.swift */; };
+		C8F311000000000000000003 /* VocalStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F321000000000000000003 /* VocalStyle.swift */; };
+		C8F311000000000000000004 /* SpokenWord.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F321000000000000000004 /* SpokenWord.swift */; };
+		C8F311000000000000000005 /* PunctuationEmphasis.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F321000000000000000005 /* PunctuationEmphasis.swift */; };
+		C8F311000000000000000006 /* ScriptPacing.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F321000000000000000006 /* ScriptPacing.swift */; };
+		C8F311000000000000000007 /* ScriptTokenizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F321000000000000000007 /* ScriptTokenizer.swift */; };
+		C8F311000000000000000008 /* KineticStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F321000000000000000008 /* KineticStyle.swift */; };
+		C8F311000000000000000009 /* KineticLineLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F321000000000000000009 /* KineticLineLayout.swift */; };
+		C8F31100000000000000000A /* KineticEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F32100000000000000000A /* KineticEngine.swift */; };
+		C8F31100000000000000000B /* ScrollEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F32100000000000000000B /* ScrollEngine.swift */; };
+		C8F31100000000000000000C /* ScrollEngineProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F32100000000000000000C /* ScrollEngineProtocol.swift */; };
+		C8F31100000000000000000D /* TeleprompterSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F32100000000000000000D /* TeleprompterSettingsStore.swift */; };
 		C8F31100000000000000000E /* RundownTeleprompterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F32100000000000000000E /* RundownTeleprompterView.swift */; };
 		C8F31100000000000000000F /* ScriptTokenizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F32100000000000000000F /* ScriptTokenizerTests.swift */; };
-		C8F311000000000000000010 /* Teleprompter/ScriptDisplayText.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F321000000000000000010 /* Teleprompter/ScriptDisplayText.swift */; };
-		C8F311000000000000000011 /* Teleprompter/TeleprompterSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F321000000000000000011 /* Teleprompter/TeleprompterSession.swift */; };
+		C8F311000000000000000010 /* ScriptDisplayText.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F321000000000000000010 /* ScriptDisplayText.swift */; };
+		C8F311000000000000000011 /* TeleprompterSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F321000000000000000011 /* TeleprompterSession.swift */; };
 		C8F311000000000000000012 /* PromptFloatWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F321000000000000000012 /* PromptFloatWindow.swift */; };
 		C8F312000000000000000013 /* RundownFloatWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F322000000000000000013 /* RundownFloatWindow.swift */; };
 		C8F314000000000000000014 /* StudioGlassLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F324000000000000000014 /* StudioGlassLayout.swift */; };
 		C8F315000000000000000015 /* StudioGlassWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F325000000000000000015 /* StudioGlassWindow.swift */; };
+		E98D4B8F1298835F24E2052E /* PropCanvasLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE9118119B763AD0581A9223 /* PropCanvasLayout.swift */; };
+		EBEE41AD8B46469F806AFF82 /* AgentHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB87794D07C049F88D052558 /* AgentHistoryStore.swift */; };
+		LKBLD0000000000000000001 /* LiveKitAccessToken.swift in Sources */ = {isa = PBXBuildFile; fileRef = LKREF0000000000000000001 /* LiveKitAccessToken.swift */; };
+		LKBLD0000000000000000002 /* LiveKitDeskConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = LKREF0000000000000000002 /* LiveKitDeskConfig.swift */; };
+		LKBLD0000000000000000003 /* LiveKitGuestCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = LKREF0000000000000000003 /* LiveKitGuestCatalog.swift */; };
+		LKBLD0000000000000000004 /* LiveKitDeskSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = LKREF0000000000000000004 /* LiveKitDeskSession.swift */; };
+		LKLINK000000000000000001 /* LiveKit in Frameworks */ = {isa = PBXBuildFile; productRef = LKPROD000000000000000001 /* LiveKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -399,6 +434,15 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		175E580C434437AB5ACE6109 /* AIDeskWindow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIDeskWindow.swift; sourceTree = "<group>"; };
+		25ACA0AC1A4A6935B1346764 /* FloatingPanelTransparency.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FloatingPanelTransparency.swift; sourceTree = "<group>"; };
+		394D828F02D4E088EA8AF2F8 /* SlideDeckImporter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SlideDeckImporter.swift; sourceTree = "<group>"; };
+		5C096765363C4945A1F7CECC /* AgentComposerOverlay.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentComposerOverlay.swift; sourceTree = "<group>"; };
+		5E7705E0267DB911C4F1EB98 /* SpecProjectBuilder.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpecProjectBuilder.swift; sourceTree = "<group>"; };
+		66903F9BF1565A22D565FAD1 /* PROSHOW_CREATIVE_DESIGN_AGENT.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; name = PROSHOW_CREATIVE_DESIGN_AGENT.md; path = docs/PROSHOW_CREATIVE_DESIGN_AGENT.md; sourceTree = SOURCE_ROOT; };
+		69E78DF0B0D4828910EF0123 /* BroadcastTemplatePack.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BroadcastTemplatePack.swift; sourceTree = "<group>"; };
+		7FA5466F322705B2EF1530B3 /* AIAgentSession.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIAgentSession.swift; sourceTree = "<group>"; };
+		833632A23808345937921080 /* AIAgentCore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIAgentCore.swift; sourceTree = "<group>"; };
 		A20000000000000000000001 /* ProShowApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProShowApp.swift; sourceTree = "<group>"; };
 		A20000000000000000000002 /* ShowModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShowModels.swift; sourceTree = "<group>"; };
 		A20000000000000000000003 /* SampleContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleContent.swift; sourceTree = "<group>"; };
@@ -439,6 +483,10 @@
 		A20000000000000000000026 /* AudioMatrixEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMatrixEngine.swift; sourceTree = "<group>"; };
 		A20000000000000000000027 /* SoundboardStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundboardStore.swift; sourceTree = "<group>"; };
 		A20000000000000000000028 /* IsoRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IsoRecorder.swift; sourceTree = "<group>"; };
+		210CDB089B347FEEA793099C /* ShowController+OnAirAudio.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "ShowController+OnAirAudio.swift"; sourceTree = "<group>"; };
+		3ECD0E532A5C58254EBCE29D /* OnAirAudioControls.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OnAirAudioControls.swift; sourceTree = "<group>"; };
+		37C176C4F8F6EA7B483FC581 /* TalkbackEngine.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TalkbackEngine.swift; sourceTree = "<group>"; };
+		85C6ABA275E835BF795C055F /* OnAirAudio.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OnAirAudio.swift; sourceTree = "<group>"; };
 		A20000000000000000000029 /* LiveChatEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveChatEngine.swift; sourceTree = "<group>"; };
 		A2000000000000000000002A /* ProShowVirtualCam.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProShowVirtualCam.swift; sourceTree = "<group>"; };
 		A2000000000000000000002B /* ProjectSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSettingsView.swift; sourceTree = "<group>"; };
@@ -502,7 +550,6 @@
 		A20000000000000000000065 /* ZeroCopyMetalPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZeroCopyMetalPipeline.swift; sourceTree = "<group>"; };
 		A20000000000000000000066 /* HardwareVideoEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HardwareVideoEncoder.swift; sourceTree = "<group>"; };
 		A20000000000000000000067 /* AssetCacheManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssetCacheManager.swift; sourceTree = "<group>"; };
-		C7E40C000000000000000002 /* CaptureBudget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureBudget.swift; sourceTree = "<group>"; };
 		A20000000000000000000068 /* DefaultBuildFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultBuildFactory.swift; sourceTree = "<group>"; };
 		A20000000000000000000069 /* ProShowFlippedSplitView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProShowFlippedSplitView.swift; sourceTree = "<group>"; };
 		A20000000000000000000070 /* ProShow3ColumnDeskController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProShow3ColumnDeskController.swift; sourceTree = "<group>"; };
@@ -537,8 +584,9 @@
 		A200000000000000000000A1 /* StreamAccountModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamAccountModel.swift; sourceTree = "<group>"; };
 		A200000000000000000000A2 /* StreamAccountManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamAccountManager.swift; sourceTree = "<group>"; };
 		A200000000000000000000A3 /* PlatformLiveApiService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformLiveApiService.swift; sourceTree = "<group>"; };
-		C7E410000000000000000012 /* PhoneCanvasMonitorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneCanvasMonitorView.swift; sourceTree = "<group>"; };
 		A200000000000000000000A4 /* GoLiveSetupSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoLiveSetupSheet.swift; sourceTree = "<group>"; };
+		28408C03F2E0D54ABB91D279 /* OnAirAudioSectionView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OnAirAudioSectionView.swift; sourceTree = "<group>"; };
+		254A9066E64990753F37036B /* OnAirReturnsViews.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OnAirReturnsViews.swift; sourceTree = "<group>"; };
 		A200000000000000000000A5 /* ShowController+GoLive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ShowController+GoLive.swift"; sourceTree = "<group>"; };
 		A200000000000000000000A6 /* RemoteControlRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteControlRuntime.swift; sourceTree = "<group>"; };
 		A200000000000000000000A7 /* ControlWebSocket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlWebSocket.swift; sourceTree = "<group>"; };
@@ -564,6 +612,9 @@
 		A200000000000000000000D2 /* NDISessions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NDISessions.swift; sourceTree = "<group>"; };
 		A200000000000000000000F1 /* ThemeTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeTokens.swift; sourceTree = "<group>"; };
 		A200TEST000000000000000A /* ProShowTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ProShowTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A2A200000000000000000C01 /* AIComposeV1.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIComposeV1.swift; sourceTree = "<group>"; };
+		A2A200000000000000000C02 /* AIComposeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIComposeTests.swift; sourceTree = "<group>"; };
+		A2A2000000000000000AA001 /* AIAgentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIAgentTests.swift; sourceTree = "<group>"; };
 		A2T000000000000000000001 /* TestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestSupport.swift; sourceTree = "<group>"; };
 		A2T000000000000000000002 /* CompositorEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompositorEngineTests.swift; sourceTree = "<group>"; };
 		A2T000000000000000000003 /* CueTransportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CueTransportTests.swift; sourceTree = "<group>"; };
@@ -578,14 +629,17 @@
 		A2T00000000000000000000C /* PresentationImportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresentationImportTests.swift; sourceTree = "<group>"; };
 		A2T00000000000000000000D /* ParityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParityTests.swift; sourceTree = "<group>"; };
 		A2T00000000000000000000E /* ProjectStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectStoreTests.swift; sourceTree = "<group>"; };
-		C7E4B3000000000000000002 /* CaptureBudgetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureBudgetTests.swift; sourceTree = "<group>"; };
 		A2T00000000000000000000F /* AssetPipelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssetPipelineTests.swift; sourceTree = "<group>"; };
 		A2T000000000000000000010 /* EditorEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorEngineTests.swift; sourceTree = "<group>"; };
 		A2T000000000000000000011 /* SceneManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneManagerTests.swift; sourceTree = "<group>"; };
 		A2T000000000000000000012 /* ChromaKeyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromaKeyTests.swift; sourceTree = "<group>"; };
 		A2T000000000000000000013 /* AudioMatrixTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMatrixTests.swift; sourceTree = "<group>"; };
+		7AE5BC21D3E2D7B29074455E /* OnAirAudioTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OnAirAudioTests.swift; sourceTree = "<group>"; };
 		A2T000000000000000000014 /* IsoRecorderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IsoRecorderTests.swift; sourceTree = "<group>"; };
 		A2T000000000000000000015 /* LiveChatOverlayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveChatOverlayTests.swift; sourceTree = "<group>"; };
+		22A34932106B5A07A8C5ECD5 /* YouTubeChatIngestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubeChatIngestTests.swift; sourceTree = "<group>"; };
+		2A5455AE7C49B323CFE2A830 /* XChatIngestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XChatIngestTests.swift; sourceTree = "<group>"; };
+		C7A11E5D0B3F4E2A9C61D0B2 /* ChatTemplatePropTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatTemplatePropTests.swift; sourceTree = "<group>"; };
 		A2T000000000000000000016 /* ProjectSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSettingsTests.swift; sourceTree = "<group>"; };
 		A2T000000000000000000017 /* CanvasEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasEngineTests.swift; sourceTree = "<group>"; };
 		A2T000000000000000000018 /* ActionInspectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionInspectorTests.swift; sourceTree = "<group>"; };
@@ -616,10 +670,12 @@
 		A2T000000000000000000038 /* BroadcastGoLiveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BroadcastGoLiveTests.swift; sourceTree = "<group>"; };
 		A2T000000000000000000039 /* MultiViewerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultiViewerTests.swift; sourceTree = "<group>"; };
 		A2T00000000000000000003A /* ActionStackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionStackTests.swift; sourceTree = "<group>"; };
+		AE9118119B763AD0581A9223 /* PropCanvasLayout.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PropCanvasLayout.swift; sourceTree = "<group>"; };
 		B200000000000000000000B1 /* ProgramOutputMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramOutputMode.swift; sourceTree = "<group>"; };
 		B200000000000000000000B2 /* ProgramRenderContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramRenderContract.swift; sourceTree = "<group>"; };
 		B200000000000000000000B3 /* ProgramOutputBus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramOutputBus.swift; sourceTree = "<group>"; };
 		B200000000000000000000B4 /* ShowController+OutputBus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ShowController+OutputBus.swift"; sourceTree = "<group>"; };
+		BE742513DC6377110BA776A3 /* XAIProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = XAIProvider.swift; sourceTree = "<group>"; };
 		C6D200000000000000000001 /* TickerEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TickerEngine.swift; sourceTree = "<group>"; };
 		C6D200000000000000000002 /* MarqueeTickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarqueeTickerView.swift; sourceTree = "<group>"; };
 		C6D200000000000000000003 /* MarqueeTextLoopView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarqueeTextLoopView.swift; sourceTree = "<group>"; };
@@ -681,14 +737,14 @@
 		C6D20000000000000000004D /* ThemeRundownBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeRundownBridge.swift; sourceTree = "<group>"; };
 		C6D20000000000000000004E /* StageThemeBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StageThemeBridge.swift; sourceTree = "<group>"; };
 		C6D20000000000000000004F /* DeskGlass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeskGlass.swift; sourceTree = "<group>"; };
-		C6D2FFFF00000000000000A1 /* ProShowObjCTry.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ProShowObjCTry.m; sourceTree = "<group>"; };
-		C6D2FFFF00000000000000A2 /* ProShowObjCTry.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ProShowObjCTry.h; sourceTree = "<group>"; };
-		C6D2FFFF00000000000000A3 /* ProShow-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "ProShow-Bridging-Header.h"; sourceTree = "<group>"; };
 		C6D200000000000000000099 /* ProjectTitleHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectTitleHeaderView.swift; sourceTree = "<group>"; };
 		C6D20000000000000000017B /* ShowController+ProgramLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ShowController+ProgramLibrary.swift"; sourceTree = "<group>"; };
 		C6D20000000000000000017C /* ProgramOutlinePresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramOutlinePresentation.swift; sourceTree = "<group>"; };
 		C6D20000000000000000017D /* RundownBlockSlideSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RundownBlockSlideSource.swift; sourceTree = "<group>"; };
 		C6D20000000000000000017E /* RundownProgramSlideAssignSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RundownProgramSlideAssignSession.swift; sourceTree = "<group>"; };
+		C6D2FFFF00000000000000A1 /* ProShowObjCTry.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ProShowObjCTry.m; sourceTree = "<group>"; };
+		C6D2FFFF00000000000000A2 /* ProShowObjCTry.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ProShowObjCTry.h; sourceTree = "<group>"; };
+		C6D2FFFF00000000000000A3 /* ProShow-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "ProShow-Bridging-Header.h"; sourceTree = "<group>"; };
 		C7A200000000000000000001 /* AudioMatrixReconciler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMatrixReconciler.swift; sourceTree = "<group>"; };
 		C7D301000000000000000002 /* MediaClockAnchor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaClockAnchor.swift; sourceTree = "<group>"; };
 		C7D302000000000000000002 /* RTMPEndpointQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RTMPEndpointQueue.swift; sourceTree = "<group>"; };
@@ -717,7 +773,6 @@
 		C7E20000000000000000001B /* DeskDestructiveConfirmation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeskDestructiveConfirmation.swift; sourceTree = "<group>"; };
 		C7E300000000000000000002 /* EncoderPresetPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EncoderPresetPickerView.swift; sourceTree = "<group>"; };
 		C7E401000000000000000002 /* EncoderPresetStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EncoderPresetStore.swift; sourceTree = "<group>"; };
-		C7E410000000000000000002 /* EncodeLaneRouting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EncodeLaneRouting.swift; sourceTree = "<group>"; };
 		C7E402000000000000000002 /* StreamTelemetryMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamTelemetryMonitor.swift; sourceTree = "<group>"; };
 		C7E403000000000000000002 /* IsoRecorderEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IsoRecorderEngine.swift; sourceTree = "<group>"; };
 		C7E404000000000000000002 /* LowLatencyIngestPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LowLatencyIngestPipeline.swift; sourceTree = "<group>"; };
@@ -727,25 +782,33 @@
 		C7E408000000000000000002 /* StreamHoldFrameCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamHoldFrameCache.swift; sourceTree = "<group>"; };
 		C7E409000000000000000002 /* StreamEngineV2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamEngineV2.swift; sourceTree = "<group>"; };
 		C7E40A000000000000000002 /* StreamAudioPipelineDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamAudioPipelineDiagnostics.swift; sourceTree = "<group>"; };
+		C7E40C000000000000000002 /* CaptureBudget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureBudget.swift; sourceTree = "<group>"; };
+		C7E410000000000000000002 /* EncodeLaneRouting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EncodeLaneRouting.swift; sourceTree = "<group>"; };
+		C7E410000000000000000012 /* PhoneCanvasMonitorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneCanvasMonitorView.swift; sourceTree = "<group>"; };
 		C7E4B2000000000000000001 /* EncoderPresetStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EncoderPresetStoreTests.swift; sourceTree = "<group>"; };
+		C7E4B3000000000000000002 /* CaptureBudgetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureBudgetTests.swift; sourceTree = "<group>"; };
 		C7F200000000000000000001 /* PropLifecycleEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PropLifecycleEngine.swift; sourceTree = "<group>"; };
 		C7F200000000000000000002 /* ShowController+PropLifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ShowController+PropLifecycle.swift"; sourceTree = "<group>"; };
 		C7F200000000000000000003 /* RemoteGuestAndMeetingModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteGuestAndMeetingModels.swift; sourceTree = "<group>"; };
 		C7F200000000000000000004 /* VirtualCameraOutputService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualCameraOutputService.swift; sourceTree = "<group>"; };
 		C7F200000000000000000005 /* ProShowBackstageEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProShowBackstageEngine.swift; sourceTree = "<group>"; };
 		C7F200000000000000000006 /* LiveChatStreamManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveChatStreamManager.swift; sourceTree = "<group>"; };
+		A2DB8034ED5178F27B6DE62A /* ShowController+ChatIngest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ShowController+ChatIngest.swift"; sourceTree = "<group>"; };
+		09938EA7249F35AB71EBF69F /* ChatIngestHub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatIngestHub.swift; sourceTree = "<group>"; };
+		27544121B6381B6ABC118974 /* YouTubeChatConnector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubeChatConnector.swift; sourceTree = "<group>"; };
+		79855F983DA36D148C037F2A /* XChatConnector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XChatConnector.swift; sourceTree = "<group>"; };
+		C7A11E5D0B3F4E2A9C61D0C2 /* ChatAvatarFileCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatAvatarFileCache.swift; sourceTree = "<group>"; };
 		C7F200000000000000000007 /* MeetingSdkBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingSdkBridge.swift; sourceTree = "<group>"; };
 		C7F200000000000000000008 /* ShowController+Backstage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ShowController+Backstage.swift"; sourceTree = "<group>"; };
 		C7F200000000000000000009 /* BackstageControlPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackstageControlPanelView.swift; sourceTree = "<group>"; };
+		9035DC6315A490D1FCE4F1AA /* LiveChatFeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveChatFeedView.swift; sourceTree = "<group>"; };
+		7229C134D0CF3B81114BEDD6 /* TalkButtonModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TalkButtonModel.swift; sourceTree = "<group>"; };
+		5DB06D7C6E8A3E6C22AF7C16 /* ChatAvatarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatAvatarView.swift; sourceTree = "<group>"; };
 		C7F20000000000000000000A /* BackstageEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackstageEngineTests.swift; sourceTree = "<group>"; };
 		C7F20000000000000000000B /* VirtualCameraFrameQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualCameraFrameQueue.swift; sourceTree = "<group>"; };
 		C7F20000000000000000000C /* VirtualAudioLoopbackService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualAudioLoopbackService.swift; sourceTree = "<group>"; };
 		C7F20000000000000000000D /* BackstageSignalingEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackstageSignalingEngine.swift; sourceTree = "<group>"; };
 		C7F20000000000000000000E /* BackstageWebRTCIngestEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackstageWebRTCIngestEngine.swift; sourceTree = "<group>"; };
-		LKREF0000000000000000001 /* LiveKitAccessToken.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveKitAccessToken.swift; sourceTree = "<group>"; };
-		LKREF0000000000000000002 /* LiveKitDeskConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveKitDeskConfig.swift; sourceTree = "<group>"; };
-		LKREF0000000000000000003 /* LiveKitGuestCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveKitGuestCatalog.swift; sourceTree = "<group>"; };
-		LKREF0000000000000000004 /* LiveKitDeskSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveKitDeskSession.swift; sourceTree = "<group>"; };
 		C7F20000000000000000000F /* LiveChatIngestService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveChatIngestService.swift; sourceTree = "<group>"; };
 		C7F200000000000000000010 /* MeetingOAuthClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingOAuthClient.swift; sourceTree = "<group>"; };
 		C7F200000000000000000011 /* CanvasShimmerRasterizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasShimmerRasterizer.swift; sourceTree = "<group>"; };
@@ -758,27 +821,34 @@
 		C7R200000000000000000003 /* ProgramAudioMonitorBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramAudioMonitorBridge.swift; sourceTree = "<group>"; };
 		C8F200000000000000000001 /* OutlineScriptCompiler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutlineScriptCompiler.swift; sourceTree = "<group>"; };
 		C8F200000000000000000002 /* OutlineScriptCompilerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutlineScriptCompilerTests.swift; sourceTree = "<group>"; };
-		C8F321000000000000000001 /* Teleprompter/PromptColor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Teleprompter/PromptColor.swift; sourceTree = "<group>"; };
-		C8F321000000000000000002 /* Teleprompter/ScriptPauseKind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Teleprompter/ScriptPauseKind.swift; sourceTree = "<group>"; };
-		C8F321000000000000000003 /* Teleprompter/VocalStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Teleprompter/VocalStyle.swift; sourceTree = "<group>"; };
-		C8F321000000000000000004 /* Teleprompter/SpokenWord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Teleprompter/SpokenWord.swift; sourceTree = "<group>"; };
-		C8F321000000000000000005 /* Teleprompter/PunctuationEmphasis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Teleprompter/PunctuationEmphasis.swift; sourceTree = "<group>"; };
-		C8F321000000000000000006 /* Teleprompter/ScriptPacing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Teleprompter/ScriptPacing.swift; sourceTree = "<group>"; };
-		C8F321000000000000000007 /* Teleprompter/ScriptTokenizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Teleprompter/ScriptTokenizer.swift; sourceTree = "<group>"; };
-		C8F321000000000000000008 /* Teleprompter/KineticStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Teleprompter/KineticStyle.swift; sourceTree = "<group>"; };
-		C8F321000000000000000009 /* Teleprompter/KineticLineLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Teleprompter/KineticLineLayout.swift; sourceTree = "<group>"; };
-		C8F32100000000000000000A /* Teleprompter/KineticEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Teleprompter/KineticEngine.swift; sourceTree = "<group>"; };
-		C8F32100000000000000000B /* Teleprompter/ScrollEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Teleprompter/ScrollEngine.swift; sourceTree = "<group>"; };
-		C8F32100000000000000000C /* Teleprompter/ScrollEngineProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Teleprompter/ScrollEngineProtocol.swift; sourceTree = "<group>"; };
-		C8F32100000000000000000D /* Teleprompter/TeleprompterSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Teleprompter/TeleprompterSettingsStore.swift; sourceTree = "<group>"; };
+		AA0D0A000000000000000002 /* AutoAdvanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoAdvanceTests.swift; sourceTree = "<group>"; };
+		C8F321000000000000000001 /* PromptColor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Teleprompter/PromptColor.swift; sourceTree = "<group>"; };
+		C8F321000000000000000002 /* ScriptPauseKind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Teleprompter/ScriptPauseKind.swift; sourceTree = "<group>"; };
+		C8F321000000000000000003 /* VocalStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Teleprompter/VocalStyle.swift; sourceTree = "<group>"; };
+		C8F321000000000000000004 /* SpokenWord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Teleprompter/SpokenWord.swift; sourceTree = "<group>"; };
+		C8F321000000000000000005 /* PunctuationEmphasis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Teleprompter/PunctuationEmphasis.swift; sourceTree = "<group>"; };
+		C8F321000000000000000006 /* ScriptPacing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Teleprompter/ScriptPacing.swift; sourceTree = "<group>"; };
+		C8F321000000000000000007 /* ScriptTokenizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Teleprompter/ScriptTokenizer.swift; sourceTree = "<group>"; };
+		C8F321000000000000000008 /* KineticStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Teleprompter/KineticStyle.swift; sourceTree = "<group>"; };
+		C8F321000000000000000009 /* KineticLineLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Teleprompter/KineticLineLayout.swift; sourceTree = "<group>"; };
+		C8F32100000000000000000A /* KineticEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Teleprompter/KineticEngine.swift; sourceTree = "<group>"; };
+		C8F32100000000000000000B /* ScrollEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Teleprompter/ScrollEngine.swift; sourceTree = "<group>"; };
+		C8F32100000000000000000C /* ScrollEngineProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Teleprompter/ScrollEngineProtocol.swift; sourceTree = "<group>"; };
+		C8F32100000000000000000D /* TeleprompterSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Teleprompter/TeleprompterSettingsStore.swift; sourceTree = "<group>"; };
 		C8F32100000000000000000E /* RundownTeleprompterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RundownTeleprompterView.swift; sourceTree = "<group>"; };
 		C8F32100000000000000000F /* ScriptTokenizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScriptTokenizerTests.swift; sourceTree = "<group>"; };
-		C8F321000000000000000010 /* Teleprompter/ScriptDisplayText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Teleprompter/ScriptDisplayText.swift; sourceTree = "<group>"; };
-		C8F321000000000000000011 /* Teleprompter/TeleprompterSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Teleprompter/TeleprompterSession.swift; sourceTree = "<group>"; };
+		C8F321000000000000000010 /* ScriptDisplayText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Teleprompter/ScriptDisplayText.swift; sourceTree = "<group>"; };
+		C8F321000000000000000011 /* TeleprompterSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Teleprompter/TeleprompterSession.swift; sourceTree = "<group>"; };
 		C8F321000000000000000012 /* PromptFloatWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptFloatWindow.swift; sourceTree = "<group>"; };
 		C8F322000000000000000013 /* RundownFloatWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RundownFloatWindow.swift; sourceTree = "<group>"; };
 		C8F324000000000000000014 /* StudioGlassLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioGlassLayout.swift; sourceTree = "<group>"; };
 		C8F325000000000000000015 /* StudioGlassWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioGlassWindow.swift; sourceTree = "<group>"; };
+		D7F6D658CCBE6C9FB3CEF43B /* DecodedImageCache.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DecodedImageCache.swift; sourceTree = "<group>"; };
+		DB87794D07C049F88D052558 /* AgentHistoryStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentHistoryStore.swift; sourceTree = "<group>"; };
+		LKREF0000000000000000001 /* LiveKitAccessToken.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveKitAccessToken.swift; sourceTree = "<group>"; };
+		LKREF0000000000000000002 /* LiveKitDeskConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveKitDeskConfig.swift; sourceTree = "<group>"; };
+		LKREF0000000000000000003 /* LiveKitGuestCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveKitGuestCatalog.swift; sourceTree = "<group>"; };
+		LKREF0000000000000000004 /* LiveKitDeskSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveKitDeskSession.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -803,6 +873,17 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		0691E04B54D3F397BF2A628D /* AIAgent */ = {
+			isa = PBXGroup;
+			children = (
+				833632A23808345937921080 /* AIAgentCore.swift */,
+				BE742513DC6377110BA776A3 /* XAIProvider.swift */,
+				DB87794D07C049F88D052558 /* AgentHistoryStore.swift */,
+				7FA5466F322705B2EF1530B3 /* AIAgentSession.swift */,
+			);
+			path = AIAgent;
+			sourceTree = "<group>";
+		};
 		A40000000000000000000001 = {
 			isa = PBXGroup;
 			children = (
@@ -892,6 +973,7 @@
 				A20000000000000000000014 /* StreamingEngine.swift */,
 				A20000000000000000000015 /* ControlAPIServer.swift */,
 				A2000000000000000000003A /* ControlAPIOpenAPI.swift */,
+				A2A200000000000000000C01 /* AIComposeV1.swift */,
 				A2000000000000000000003B /* NDIRuntime.swift */,
 				A200000000000000000000D2 /* NDISessions.swift */,
 				A2000000000000000000003E /* SourceDiscoveryManager.swift */,
@@ -907,6 +989,10 @@
 				A20000000000000000000026 /* AudioMatrixEngine.swift */,
 				A20000000000000000000027 /* SoundboardStore.swift */,
 				A20000000000000000000028 /* IsoRecorder.swift */,
+				210CDB089B347FEEA793099C /* ShowController+OnAirAudio.swift */,
+				3ECD0E532A5C58254EBCE29D /* OnAirAudioControls.swift */,
+				37C176C4F8F6EA7B483FC581 /* TalkbackEngine.swift */,
+				85C6ABA275E835BF795C055F /* OnAirAudio.swift */,
 				B200000000000000000000B1 /* ProgramOutputMode.swift */,
 				B200000000000000000000B2 /* ProgramRenderContract.swift */,
 				B200000000000000000000B3 /* ProgramOutputBus.swift */,
@@ -977,21 +1063,21 @@
 				C6D200000000000000000010 /* ShowController+CompositionPanel.swift */,
 				C6D200000000000000000021 /* ProgramDocumentStore.swift */,
 				C8F200000000000000000001 /* OutlineScriptCompiler.swift */,
-				C8F321000000000000000001 /* Teleprompter/PromptColor.swift */,
-				C8F321000000000000000002 /* Teleprompter/ScriptPauseKind.swift */,
-				C8F321000000000000000003 /* Teleprompter/VocalStyle.swift */,
-				C8F321000000000000000004 /* Teleprompter/SpokenWord.swift */,
-				C8F321000000000000000005 /* Teleprompter/PunctuationEmphasis.swift */,
-				C8F321000000000000000006 /* Teleprompter/ScriptPacing.swift */,
-				C8F321000000000000000007 /* Teleprompter/ScriptTokenizer.swift */,
-				C8F321000000000000000008 /* Teleprompter/KineticStyle.swift */,
-				C8F321000000000000000009 /* Teleprompter/KineticLineLayout.swift */,
-				C8F32100000000000000000A /* Teleprompter/KineticEngine.swift */,
-				C8F32100000000000000000B /* Teleprompter/ScrollEngine.swift */,
-				C8F32100000000000000000C /* Teleprompter/ScrollEngineProtocol.swift */,
-				C8F32100000000000000000D /* Teleprompter/TeleprompterSettingsStore.swift */,
-				C8F321000000000000000010 /* Teleprompter/ScriptDisplayText.swift */,
-				C8F321000000000000000011 /* Teleprompter/TeleprompterSession.swift */,
+				C8F321000000000000000001 /* PromptColor.swift */,
+				C8F321000000000000000002 /* ScriptPauseKind.swift */,
+				C8F321000000000000000003 /* VocalStyle.swift */,
+				C8F321000000000000000004 /* SpokenWord.swift */,
+				C8F321000000000000000005 /* PunctuationEmphasis.swift */,
+				C8F321000000000000000006 /* ScriptPacing.swift */,
+				C8F321000000000000000007 /* ScriptTokenizer.swift */,
+				C8F321000000000000000008 /* KineticStyle.swift */,
+				C8F321000000000000000009 /* KineticLineLayout.swift */,
+				C8F32100000000000000000A /* KineticEngine.swift */,
+				C8F32100000000000000000B /* ScrollEngine.swift */,
+				C8F32100000000000000000C /* ScrollEngineProtocol.swift */,
+				C8F32100000000000000000D /* TeleprompterSettingsStore.swift */,
+				C8F321000000000000000010 /* ScriptDisplayText.swift */,
+				C8F321000000000000000011 /* TeleprompterSession.swift */,
 				C6D200000000000000000022 /* RundownClockEngine.swift */,
 				C6D200000000000000000023 /* TalentManager.swift */,
 				C6D200000000000000000024 /* StageCueController.swift */,
@@ -1039,6 +1125,11 @@
 				C7F200000000000000000004 /* VirtualCameraOutputService.swift */,
 				C7F200000000000000000005 /* ProShowBackstageEngine.swift */,
 				C7F200000000000000000006 /* LiveChatStreamManager.swift */,
+				A2DB8034ED5178F27B6DE62A /* ShowController+ChatIngest.swift */,
+				09938EA7249F35AB71EBF69F /* ChatIngestHub.swift */,
+				27544121B6381B6ABC118974 /* YouTubeChatConnector.swift */,
+				79855F983DA36D148C037F2A /* XChatConnector.swift */,
+				C7A11E5D0B3F4E2A9C61D0C2 /* ChatAvatarFileCache.swift */,
 				C7F200000000000000000007 /* MeetingSdkBridge.swift */,
 				C7F200000000000000000008 /* ShowController+Backstage.swift */,
 				C7F200000000000000000013 /* ShowController+LibraryHierarchy.swift */,
@@ -1071,6 +1162,12 @@
 				C7E40C000000000000000002 /* CaptureBudget.swift */,
 				A20000000000000000000037 /* PathGeometryEngine.swift */,
 				A20000000000000000000038 /* RTMPStreamTransport.swift */,
+				394D828F02D4E088EA8AF2F8 /* SlideDeckImporter.swift */,
+				0691E04B54D3F397BF2A628D /* AIAgent */,
+				69E78DF0B0D4828910EF0123 /* BroadcastTemplatePack.swift */,
+				5E7705E0267DB911C4F1EB98 /* SpecProjectBuilder.swift */,
+				AE9118119B763AD0581A9223 /* PropCanvasLayout.swift */,
+				D7F6D658CCBE6C9FB3CEF43B /* DecodedImageCache.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -1107,6 +1204,7 @@
 				C7E200000000000000000019 /* CanvasTextBoxLayout.swift */,
 				C7E20000000000000000001A /* CanvasEditorScreenAlign.swift */,
 				C7E20000000000000000001B /* DeskDestructiveConfirmation.swift */,
+				25ACA0AC1A4A6935B1346764 /* FloatingPanelTransparency.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -1116,6 +1214,7 @@
 			children = (
 				A20000000000000000000009 /* Assets.xcassets */,
 				A200000000000000000000C9 /* Localizable.xcstrings */,
+				66903F9BF1565A22D565FAD1 /* PROSHOW_CREATIVE_DESIGN_AGENT.md */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -1161,6 +1260,9 @@
 				A20000000000000000000081 /* CanvasEditorMouseTracker.swift */,
 				A20000000000000000000031 /* RightInspectorView.swift */,
 				C7F200000000000000000009 /* BackstageControlPanelView.swift */,
+				9035DC6315A490D1FCE4F1AA /* LiveChatFeedView.swift */,
+				7229C134D0CF3B81114BEDD6 /* TalkButtonModel.swift */,
+				5DB06D7C6E8A3E6C22AF7C16 /* ChatAvatarView.swift */,
 				A200000000000000000000AE /* ActionStackInspectorView.swift */,
 				C6D200000000000000000030 /* UserCompositionPanelView.swift */,
 				C6D20000000000000000000D /* AdobeLayerRowView.swift */,
@@ -1168,6 +1270,8 @@
 				A20000000000000000000097 /* PreFlightHealthView.swift */,
 				C7E410000000000000000012 /* PhoneCanvasMonitorView.swift */,
 				A200000000000000000000A4 /* GoLiveSetupSheet.swift */,
+				28408C03F2E0D54ABB91D279 /* OnAirAudioSectionView.swift */,
+				254A9066E64990753F37036B /* OnAirReturnsViews.swift */,
 				C7E300000000000000000002 /* EncoderPresetPickerView.swift */,
 				A200000000000000000000A9 /* ConnectDestinationSheet.swift */,
 				A20000000000000000000041 /* MapWorkspaceView.swift */,
@@ -1177,6 +1281,8 @@
 				C6D200000000000000000029 /* RundownDetailPane.swift */,
 				C8F32100000000000000000E /* RundownTeleprompterView.swift */,
 				C8F321000000000000000012 /* PromptFloatWindow.swift */,
+				5C096765363C4945A1F7CECC /* AgentComposerOverlay.swift */,
+				175E580C434437AB5ACE6109 /* AIDeskWindow.swift */,
 				C8F322000000000000000013 /* RundownFloatWindow.swift */,
 				C8F325000000000000000015 /* StudioGlassWindow.swift */,
 				C6D20000000000000000002A /* RundownProgramEditor.swift */,
@@ -1237,6 +1343,7 @@
 				A2T00000000000000000000B /* StreamingEngineTests.swift */,
 				C7E4B2000000000000000001 /* EncoderPresetStoreTests.swift */,
 				C8F200000000000000000002 /* OutlineScriptCompilerTests.swift */,
+				AA0D0A000000000000000002 /* AutoAdvanceTests.swift */,
 				C8F32100000000000000000F /* ScriptTokenizerTests.swift */,
 				A2T00000000000000000000C /* PresentationImportTests.swift */,
 				A2T00000000000000000000D /* ParityTests.swift */,
@@ -1247,13 +1354,19 @@
 				A2T000000000000000000011 /* SceneManagerTests.swift */,
 				A2T000000000000000000012 /* ChromaKeyTests.swift */,
 				A2T000000000000000000013 /* AudioMatrixTests.swift */,
+				7AE5BC21D3E2D7B29074455E /* OnAirAudioTests.swift */,
 				A2T000000000000000000014 /* IsoRecorderTests.swift */,
 				A2T000000000000000000015 /* LiveChatOverlayTests.swift */,
+				22A34932106B5A07A8C5ECD5 /* YouTubeChatIngestTests.swift */,
+				2A5455AE7C49B323CFE2A830 /* XChatIngestTests.swift */,
+				C7A11E5D0B3F4E2A9C61D0B2 /* ChatTemplatePropTests.swift */,
 				C7F20000000000000000000A /* BackstageEngineTests.swift */,
 				C7F200000000000000000012 /* BackstageIntegrationTests.swift */,
 				A2T000000000000000000016 /* ProjectSettingsTests.swift */,
 				A2T000000000000000000017 /* CanvasEngineTests.swift */,
 				A2T000000000000000000018 /* ActionInspectorTests.swift */,
+				A2A200000000000000000C02 /* AIComposeTests.swift */,
+				A2A2000000000000000AA001 /* AIAgentTests.swift */,
 				A2T000000000000000000019 /* ProgramCompositorTests.swift */,
 				A2T000000000000000000020 /* VideoIngestTests.swift */,
 				A2T000000000000000000021 /* AudioIOTests.swift */,
@@ -1380,6 +1493,7 @@
 			files = (
 				A10000000000000000000009 /* Assets.xcassets in Resources */,
 				A100000000000000000000C9 /* Localizable.xcstrings in Resources */,
+				A5C6F72375DEFD397688A45C /* PROSHOW_CREATIVE_DESIGN_AGENT.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1408,7 +1522,6 @@
 			outputFileListPaths = (
 			);
 			outputPaths = (
-				/Applications/ProShow.app,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/zsh;
@@ -1506,6 +1619,7 @@
 				A10000000000000000000014 /* StreamingEngine.swift in Sources */,
 				A10000000000000000000015 /* ControlAPIServer.swift in Sources */,
 				A1000000000000000000003A /* ControlAPIOpenAPI.swift in Sources */,
+				A1A100000000000000000C01 /* AIComposeV1.swift in Sources */,
 				A1000000000000000000003B /* NDIRuntime.swift in Sources */,
 				A100000000000000000000D2 /* NDISessions.swift in Sources */,
 				A1000000000000000000003D /* AddShotModels.swift in Sources */,
@@ -1587,10 +1701,18 @@
 				C7F100000000000000000004 /* VirtualCameraOutputService.swift in Sources */,
 				C7F100000000000000000005 /* ProShowBackstageEngine.swift in Sources */,
 				C7F100000000000000000006 /* LiveChatStreamManager.swift in Sources */,
+				A43E7680D3B0C7C448F5F475 /* ShowController+ChatIngest.swift in Sources */,
+				ABB503DAE1C9205EED77AF5C /* ChatIngestHub.swift in Sources */,
+				B434CC88AFED8D3DD5014035 /* YouTubeChatConnector.swift in Sources */,
+				282BD1022248B8E6D688A390 /* XChatConnector.swift in Sources */,
+				C7A11E5D0B3F4E2A9C61D0C1 /* ChatAvatarFileCache.swift in Sources */,
 				C7F100000000000000000007 /* MeetingSdkBridge.swift in Sources */,
 				C7F100000000000000000008 /* ShowController+Backstage.swift in Sources */,
 				C7F100000000000000000013 /* ShowController+LibraryHierarchy.swift in Sources */,
 				C7F100000000000000000009 /* BackstageControlPanelView.swift in Sources */,
+				2750DB37224DEB4DAF8642D9 /* LiveChatFeedView.swift in Sources */,
+				EE1B6975A1D758C4CDD06ADA /* TalkButtonModel.swift in Sources */,
+				93BB5E00F85E48519651CF34 /* ChatAvatarView.swift in Sources */,
 				C7F10000000000000000000B /* VirtualCameraFrameQueue.swift in Sources */,
 				C7F10000000000000000000C /* VirtualAudioLoopbackService.swift in Sources */,
 				C7F10000000000000000000D /* BackstageSignalingEngine.swift in Sources */,
@@ -1630,21 +1752,21 @@
 				C6D100000000000000000020 /* ProgramDocumentSchema.swift in Sources */,
 				C6D100000000000000000021 /* ProgramDocumentStore.swift in Sources */,
 				C8F100000000000000000001 /* OutlineScriptCompiler.swift in Sources */,
-				C8F311000000000000000001 /* Teleprompter/PromptColor.swift in Sources */,
-				C8F311000000000000000002 /* Teleprompter/ScriptPauseKind.swift in Sources */,
-				C8F311000000000000000003 /* Teleprompter/VocalStyle.swift in Sources */,
-				C8F311000000000000000004 /* Teleprompter/SpokenWord.swift in Sources */,
-				C8F311000000000000000005 /* Teleprompter/PunctuationEmphasis.swift in Sources */,
-				C8F311000000000000000006 /* Teleprompter/ScriptPacing.swift in Sources */,
-				C8F311000000000000000007 /* Teleprompter/ScriptTokenizer.swift in Sources */,
-				C8F311000000000000000008 /* Teleprompter/KineticStyle.swift in Sources */,
-				C8F311000000000000000009 /* Teleprompter/KineticLineLayout.swift in Sources */,
-				C8F31100000000000000000A /* Teleprompter/KineticEngine.swift in Sources */,
-				C8F31100000000000000000B /* Teleprompter/ScrollEngine.swift in Sources */,
-				C8F31100000000000000000C /* Teleprompter/ScrollEngineProtocol.swift in Sources */,
-				C8F31100000000000000000D /* Teleprompter/TeleprompterSettingsStore.swift in Sources */,
-				C8F311000000000000000010 /* Teleprompter/ScriptDisplayText.swift in Sources */,
-				C8F311000000000000000011 /* Teleprompter/TeleprompterSession.swift in Sources */,
+				C8F311000000000000000001 /* PromptColor.swift in Sources */,
+				C8F311000000000000000002 /* ScriptPauseKind.swift in Sources */,
+				C8F311000000000000000003 /* VocalStyle.swift in Sources */,
+				C8F311000000000000000004 /* SpokenWord.swift in Sources */,
+				C8F311000000000000000005 /* PunctuationEmphasis.swift in Sources */,
+				C8F311000000000000000006 /* ScriptPacing.swift in Sources */,
+				C8F311000000000000000007 /* ScriptTokenizer.swift in Sources */,
+				C8F311000000000000000008 /* KineticStyle.swift in Sources */,
+				C8F311000000000000000009 /* KineticLineLayout.swift in Sources */,
+				C8F31100000000000000000A /* KineticEngine.swift in Sources */,
+				C8F31100000000000000000B /* ScrollEngine.swift in Sources */,
+				C8F31100000000000000000C /* ScrollEngineProtocol.swift in Sources */,
+				C8F31100000000000000000D /* TeleprompterSettingsStore.swift in Sources */,
+				C8F311000000000000000010 /* ScriptDisplayText.swift in Sources */,
+				C8F311000000000000000011 /* TeleprompterSession.swift in Sources */,
 				C8F311000000000000000012 /* PromptFloatWindow.swift in Sources */,
 				C8F312000000000000000013 /* RundownFloatWindow.swift in Sources */,
 				C8F31100000000000000000E /* RundownTeleprompterView.swift in Sources */,
@@ -1698,6 +1820,8 @@
 				A100000000000000000000A3 /* PlatformLiveApiService.swift in Sources */,
 				C7E410000000000000000011 /* PhoneCanvasMonitorView.swift in Sources */,
 				A100000000000000000000A4 /* GoLiveSetupSheet.swift in Sources */,
+				AA469E10A68C1B02BBAF5052 /* OnAirAudioSectionView.swift in Sources */,
+				9AFD35FFAE90A09BCED856FC /* OnAirReturnsViews.swift in Sources */,
 				C7E300000000000000000001 /* EncoderPresetPickerView.swift in Sources */,
 				A100000000000000000000A5 /* ShowController+GoLive.swift in Sources */,
 				C6D100000000000000000040 /* ShowController+WorkspaceToolbar.swift in Sources */,
@@ -1731,12 +1855,28 @@
 				A10000000000000000000026 /* AudioMatrixEngine.swift in Sources */,
 				A10000000000000000000027 /* SoundboardStore.swift in Sources */,
 				A10000000000000000000028 /* IsoRecorder.swift in Sources */,
+				8AE64D35F445B5E6513D7F1C /* ShowController+OnAirAudio.swift in Sources */,
+				B162F56202DD4BDD812295B4 /* OnAirAudioControls.swift in Sources */,
+				4067EAF0E65CD35384009DD6 /* TalkbackEngine.swift in Sources */,
+				918289B4CE06BC726E40E021 /* OnAirAudio.swift in Sources */,
 				B100000000000000000000B1 /* ProgramOutputMode.swift in Sources */,
 				B100000000000000000000B2 /* ProgramRenderContract.swift in Sources */,
 				B100000000000000000000B3 /* ProgramOutputBus.swift in Sources */,
 				B100000000000000000000B4 /* ShowController+OutputBus.swift in Sources */,
 				A10000000000000000000029 /* LiveChatEngine.swift in Sources */,
 				A1000000000000000000002A /* ProShowVirtualCam.swift in Sources */,
+				3B33FED38E2B33812B3D87E5 /* FloatingPanelTransparency.swift in Sources */,
+				70DDF89D710261CCFD3CFF63 /* SlideDeckImporter.swift in Sources */,
+				A455B12D8FD39A3C8FB94791 /* AIAgentCore.swift in Sources */,
+				2E9527966B09EE72E0408029 /* XAIProvider.swift in Sources */,
+				EBEE41AD8B46469F806AFF82 /* AgentHistoryStore.swift in Sources */,
+				55C4BCC80F6B123CCF63895C /* AIAgentSession.swift in Sources */,
+				20B40C8DC25E4974AB401A9E /* AgentComposerOverlay.swift in Sources */,
+				8DC5C336478DBEEDF37396E5 /* AIDeskWindow.swift in Sources */,
+				9B2308FCF47F11FFD0EAD05C /* BroadcastTemplatePack.swift in Sources */,
+				7C3216A31314A00C649B21F8 /* SpecProjectBuilder.swift in Sources */,
+				E98D4B8F1298835F24E2052E /* PropCanvasLayout.swift in Sources */,
+				5E58E6956CB930B03C374F6B /* DecodedImageCache.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1757,6 +1897,7 @@
 				A1T00000000000000000000B /* StreamingEngineTests.swift in Sources */,
 				C7E4B1000000000000000001 /* EncoderPresetStoreTests.swift in Sources */,
 				C8F100000000000000000002 /* OutlineScriptCompilerTests.swift in Sources */,
+				AA0D0A000000000000000001 /* AutoAdvanceTests.swift in Sources */,
 				C8F31100000000000000000F /* ScriptTokenizerTests.swift in Sources */,
 				A1T00000000000000000000C /* PresentationImportTests.swift in Sources */,
 				A1T00000000000000000000D /* ParityTests.swift in Sources */,
@@ -1767,13 +1908,19 @@
 				A1T000000000000000000011 /* SceneManagerTests.swift in Sources */,
 				A1T000000000000000000012 /* ChromaKeyTests.swift in Sources */,
 				A1T000000000000000000013 /* AudioMatrixTests.swift in Sources */,
+				F3C66B3FF9D6D785C942B6BB /* OnAirAudioTests.swift in Sources */,
 				A1T000000000000000000014 /* IsoRecorderTests.swift in Sources */,
 				A1T000000000000000000015 /* LiveChatOverlayTests.swift in Sources */,
+				2BABB7AF45D2559942FEEDA6 /* YouTubeChatIngestTests.swift in Sources */,
+				DE565729698310CC34CEDE2A /* XChatIngestTests.swift in Sources */,
+				C7A11E5D0B3F4E2A9C61D0B1 /* ChatTemplatePropTests.swift in Sources */,
 				C7F10000000000000000000A /* BackstageEngineTests.swift in Sources */,
 				C7F100000000000000000012 /* BackstageIntegrationTests.swift in Sources */,
 				A1T000000000000000000016 /* ProjectSettingsTests.swift in Sources */,
 				A1T000000000000000000017 /* CanvasEngineTests.swift in Sources */,
 				A1T000000000000000000018 /* ActionInspectorTests.swift in Sources */,
+				A1A100000000000000000C02 /* AIComposeTests.swift in Sources */,
+				A1A1000000000000000AA001 /* AIAgentTests.swift in Sources */,
 				A1T000000000000000000019 /* ProgramCompositorTests.swift in Sources */,
 				A1T000000000000000000023 /* AddShotTests.swift in Sources */,
 				A1T000000000000000000024 /* PlaceholderMatrixTests.swift in Sources */,
@@ -1863,7 +2010,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = ProShow/ProShow.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 14;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -1890,15 +2037,15 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 0.5.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.kaleel.proshow;
-				SWIFT_OBJC_BRIDGING_HEADER = "ProShow/Shared/ProShow-Bridging-Header.h";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "ProShow/Shared/ProShow-Bridging-Header.h";
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -1912,7 +2059,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = ProShow/ProShow.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 14;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -1939,15 +2086,15 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 0.5.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.kaleel.proshow;
-				SWIFT_OBJC_BRIDGING_HEADER = "ProShow/Shared/ProShow-Bridging-Header.h";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "ProShow/Shared/ProShow-Bridging-Header.h";
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -1962,7 +2109,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 0.5.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.kaleel.proshow.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -1982,7 +2129,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 0.5.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.kaleel.proshow.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;

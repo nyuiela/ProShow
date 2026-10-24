@@ -8,6 +8,8 @@ import QuartzCore
 final class ScrollEngine: NSObject, ScrollEngineProtocol {
     private(set) var offset: Double = 0
     private(set) var isRunning = false
+    /// When the scroll reached the end while rolling. Cleared by reset, seek back and start.
+    private(set) var finishedAt: Date?
     var speedPointsPerSecond: Double = 40 {
         didSet {
             if speedPointsPerSecond < 0 { speedPointsPerSecond = 0 }
@@ -53,11 +55,13 @@ final class ScrollEngine: NSObject, ScrollEngineProtocol {
     func reset() {
         pause()
         offset = 0
+        finishedAt = nil
         lastTimestamp = 0
     }
 
     func seek(to newOffset: Double) {
         offset = min(max(0, newOffset), maxOffset)
+        if offset < maxOffset { finishedAt = nil }
     }
 
     func nudge(by delta: Double) {
@@ -70,6 +74,7 @@ final class ScrollEngine: NSObject, ScrollEngineProtocol {
         let proposed = offset + speedPointsPerSecond * delta
         if proposed >= maxOffset, maxOffset > 0 {
             offset = maxOffset
+            finishedAt = Date()
             pause()
         } else {
             offset = max(0, proposed)

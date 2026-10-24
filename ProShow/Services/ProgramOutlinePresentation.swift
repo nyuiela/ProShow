@@ -18,6 +18,15 @@ enum ProgramOutlinePresentation {
         )
     }
 
+    /// The library keeps a saved copy of the `.program` show. That copy can be older than the
+    /// repaired document (camera rows with the background flag a reopen flipped), so the
+    /// program show always goes on air from the document. Other shows pass through.
+    static func currentShow(for found: Show, document: ProgramDocumentModel) -> Show {
+        guard found.id == showID else { return found }
+        let built = makeShow(from: document)
+        return built.allSlides.isEmpty ? found : built
+    }
+
     static func applyShow(_ show: Show, to document: inout ProgramDocumentModel) {
         guard show.id == showID else { return }
         for slide in show.allSlides {
@@ -78,12 +87,15 @@ enum ProgramOutlinePresentation {
                 changed = true
             }
         }
+        let slidesBeforeSync = document.programSlides
         syncProgramSlides(
             in: &document,
             mediaLookup: mediaLookup,
             showLookup: showLookup,
             playlistShowLookup: playlistShowLookup
         )
+        // The sync merges too; count what it fixed so the repaired file gets saved.
+        if document.programSlides != slidesBeforeSync { changed = true }
         for index in document.rundownBlocks.indices {
             var block = document.rundownBlocks[index]
             let source = RundownBlockSlideSource.resolve(block)
@@ -204,7 +216,11 @@ enum ProgramOutlinePresentation {
         case .camera:
             let hadStaleBrowser = stored.canvas.contains { $0.kind.isBrowserLike }
             stored.canvas.removeAll { $0.kind.isBrowserLike }
-            stored.backgroundEnabled = built.backgroundEnabled
+            stored.backgroundEnabled = cameraRowBackgroundEnabled(
+                stored: stored,
+                built: built,
+                hadStaleBrowser: hadStaleBrowser
+            )
             // A camera row that still has a leftover browser and no input gets the
             // input back. A rectangle the operator deleted stays deleted.
             if hadStaleBrowser,
@@ -219,6 +235,20 @@ enum ProgramOutlinePresentation {
         case .blank, .playlistItem, .presentationSlide:
             break
         }
+    }
+
+    /// A camera row keeps the background its canvas was authored with. The primary Stream board
+    /// is what the editor shows, so it wins; a bare legacy browser row takes the camera template's.
+    /// Before, every reopen forced the template's `false`, and the stream then dropped full-frame
+    /// design layers and the background colour while the editor still showed them.
+    static func cameraRowBackgroundEnabled(stored: Slide, built: Slide, hadStaleBrowser: Bool) -> Bool {
+        if let primary = stored.editorCanvases.first(where: \.isPrimary) {
+            return primary.backgroundEnabled
+        }
+        if hadStaleBrowser, stored.canvas.allSatisfy({ $0.kind == .videoInput }) {
+            return built.backgroundEnabled
+        }
+        return stored.backgroundEnabled
     }
 
     private static func buildProgramSlide(

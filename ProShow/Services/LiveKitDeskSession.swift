@@ -73,12 +73,15 @@ final class LiveKitDeskBridge {
         session = next
         next.onGuests = { [weak self] feeds in
             guard let self else { return }
-            self.guests = feeds
-            self.revision += 1
+            // Assign only on change: every set redraws observers (and rebuilds their menus).
+            if self.guests != feeds {
+                self.guests = feeds
+                self.revision += 1
+            }
             self.onGuests?(feeds)
         }
         next.onStatus = { [weak self] text in
-            self?.status = text
+            if self?.status != text { self?.status = text }
             let active = text.localizedCaseInsensitiveContains("in room")
             self?.onRoomActive?(active)
         }
@@ -120,6 +123,28 @@ final class LiveKitDeskBridge {
         #endif
     }
 
+    func publishReturns(modes: [String: String], defaultMode: String, muted: [String]) {
+        #if canImport(LiveKit)
+        session?.publishReturns(modes: modes, defaultMode: defaultMode, muted: muted)
+        #endif
+    }
+
+    func publishTalk(on: Bool, targets: [String]) {
+        #if canImport(LiveKit)
+        session?.publishTalk(on: on, targets: targets)
+        #endif
+    }
+
+    /// Sendable sender for talkback packets (called off the main actor).
+    func intercomSender() -> (@Sendable (Data, [String]) -> Void)? {
+        #if canImport(LiveKit)
+        guard let session else { return nil }
+        return { [weak session] packet, targets in session?.sendIntercom(packet, targets: targets) }
+        #else
+        return nil
+        #endif
+    }
+
     func setGuestMicrophoneMuted(identity: String, muted: Bool) {
         #if canImport(LiveKit)
         session?.setGuestMicrophoneMuted(identity: identity, muted: muted)
@@ -158,6 +183,7 @@ final class LiveKitDeskSession: NSObject, RoomDelegate {
     private var hiddenVideoGuests: Set<String> = []
     private var programIdentities: [String] = []
     private var tallySeq = 0
+    private var lastReturnsJSON = ""
     private var admitInFlight: Set<String> = []
     private let programPump = ProgramFramePump()
     private var programTrack: LocalVideoTrack?
@@ -353,6 +379,64 @@ final class LiveKitDeskSession: NSObject, RoomDelegate {
         }
     }
 
+    /// Per-guest return feed modes ("mix" | "full" | "intercom") plus desk mutes, read by the join page.
+    func publishReturns(modes: [String: String], defaultMode: String, muted: [String]) {
+        let packet: [String: Any] = ["modes": modes, "default": defaultMode, "muted": muted.sorted()]
+        guard let room,
+              let data = try? JSONSerialization.data(withJSONObject: packet, options: [.sortedKeys]),
+              let text = String(data: data, encoding: .utf8),
+              text != lastReturnsJSON
+        else { return }
+        lastReturnsJSON = text
+        Task {
+            try? await room.localParticipant.set(attributes: ["ps.returns": text])
+            try? await room.localParticipant.publish(
+                data: data,
+                options: DataPublishOptions(topic: "ps.returns", reliable: true)
+            )
+        }
+    }
+
+    /// Talkback state for the guest indicator. `targets` empty = everyone.
+    func publishTalk(on: Bool, targets: [String]) {
+        let packet: [String: Any] = ["on": on, "targets": targets]
+        guard let room, let data = try? JSONSerialization.data(withJSONObject: packet) else { return }
+        Task {
+            try? await room.localParticipant.publish(
+                data: data,
+                options: DataPublishOptions(topic: "ps.talk", reliable: true)
+            )
+        }
+    }
+
+    /// One talkback packet, lossy, to the targets (empty = every guest). Never part of the program track.
+    nonisolated func sendIntercom(_ packet: Data, targets: [String]) {
+        Task { @MainActor [weak self] in
+            guard let room = self?.room else { return }
+            let destinations = targets.map { Participant.Identity(from: $0) }
+            try? await room.localParticipant.publish(
+                data: packet,
+                options: DataPublishOptions(destinationIdentities: destinations, topic: "ps.ic", reliable: false)
+            )
+        }
+    }
+
+    nonisolated func room(_ room: Room, participant: Participant, didUpdateMetadata metadata: String?) {
+        Task { @MainActor in publishGuestList() }
+    }
+
+    nonisolated func room(_ room: Room, participant: Participant, didUpdateAttributes attributes: [String: String]) {
+        Task { @MainActor in publishGuestList() }
+    }
+
+    nonisolated func room(_ room: Room, participant: Participant, didUpdateName name: String) {
+        Task { @MainActor in publishGuestList() }
+    }
+
+    nonisolated func room(_ room: Room, participant: Participant, trackPublication: TrackPublication, didUpdateIsMuted isMuted: Bool) {
+        Task { @MainActor in publishGuestList() }
+    }
+
     nonisolated func room(_ room: Room, participantDidConnect participant: RemoteParticipant) {
         Task { @MainActor in
             await considerAdmit(participant)
@@ -489,6 +573,19 @@ final class LiveKitDeskSession: NSObject, RoomDelegate {
             )
         }
         .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        var profiles: [String: GuestProfile] = [:]
+        for participant in room.remoteParticipants.values {
+            let identity = participant.identity?.stringValue ?? ""
+            guard !identity.isEmpty, participant.attributes["ps.role"] != "desk" else { continue }
+            let camera = participant.trackPublications.values.first { $0.source == .camera }
+            profiles[identity] = GuestProfileStore.make(
+                name: participant.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+                metadata: participant.metadata,
+                attributes: participant.attributes,
+                cameraLive: camera != nil && camera?.isMuted == false && camera?.isSubscribed == true
+            )
+        }
+        GuestProfileStore.shared.replaceAll(profiles)
         onGuests?(feeds)
         if feeds.isEmpty {
             onStatus?("In room. Waiting for guests.")
@@ -852,6 +949,8 @@ enum LiveKitRoomAdmin {
                 "canSubscribe": true,
                 "canPublish": true,
                 "canPublishData": true,
+                // Keep the guest able to attach its profile photo to metadata after admission.
+                "canUpdateMetadata": true,
             ],
             "attributes": [
                 "ps.state": "admitted",

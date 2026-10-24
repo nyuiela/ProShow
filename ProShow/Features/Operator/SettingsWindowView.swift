@@ -288,10 +288,109 @@ struct SettingsWindowView: View {
         case .recording: recordingPane
         case .media: mediaPane
         case .integrations: integrationsPane
+        case .ai: aiPane
         case .groups: groupsPane
         case .teleprompter: TeleprompterSettingsPane(settings: .shared)
         case .cloud: cloudPane
         case .updates: updatesPane
+        }
+    }
+
+
+    private var aiPane: some View {
+        VStack(alignment: .leading, spacing: DeskSpace.md) {
+            SettingsGroup(title: "Ask ProShow", footnote: "⌥⌘A opens the Search or Ask overlay. Agent settings stay here.") {
+                SettingsRow(title: "AI compose", detail: "Allow the agent to draft slides into AI Draft.") {
+                    Toggle("AI compose", isOn: Binding(
+                        get: { ProShowFeatureFlags.aiComposeV1 },
+                        set: { ProShowFeatureFlags.aiComposeV1 = $0 }
+                    ))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                }
+                SettingsHairline()
+                SettingsRow(title: "Provider", detail: "Practice stays on-device. xAI needs a key.") {
+                    Picker("Provider", selection: Binding(
+                        get: { AIAgentSession.shared.provider },
+                        set: { AIAgentSession.shared.provider = $0 }
+                    )) {
+                        ForEach(AIAgentSession.ProviderChoice.allCases) { Text($0.label).tag($0) }
+                    }
+                    .labelsHidden()
+                    .frame(maxWidth: 160)
+                }
+            }
+
+            SettingsGroup(title: "xAI") {
+                SettingsRow(title: "Status", detail: AIAgentSession.shared.keyConnected ? "Key saved in the stream vault on this Mac." : "No key on this Mac.") {
+                    Text(AIAgentSession.shared.keyConnected ? "Connected" : "Missing")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(AIAgentSession.shared.keyConnected ? ProShowTheme.accent : ShowSidebarPalette.subtitle)
+                }
+                SettingsHairline()
+                AISettingsKeyRow()
+                SettingsHairline()
+                SettingsRow(title: "Model", detail: "Default grok-4.3 (low effort, cheapest current). Stored in UserDefaults.") {
+                    TextField("grok-4.3", text: Binding(
+                        get: { XAIConfig.model },
+                        set: { XAIConfig.model = $0 }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 180)
+                }
+                SettingsHairline()
+                SettingsRow(title: "Reasoning effort", detail: "none is cheapest and fastest; low is the default.") {
+                    Picker("", selection: Binding(
+                        get: { XAIConfig.reasoningEffort },
+                        set: { XAIConfig.reasoningEffort = $0 }
+                    )) {
+                        ForEach(["none", "low", "medium", "high"], id: \.self) { Text($0).tag($0) }
+                    }
+                    .labelsHidden()
+                    .frame(maxWidth: 140)
+                }
+            }
+
+            SettingsGroup(title: "Desk update", footnote: "Optional system note sent with the next Ask turn only.") {
+                TextField("Default desk update (optional)", text: Binding(
+                    get: { UserDefaults.standard.string(forKey: "proshow.ai.deskUpdateDefault") ?? "" },
+                    set: { UserDefaults.standard.set($0, forKey: "proshow.ai.deskUpdateDefault") }
+                ), axis: .vertical)
+                .lineLimit(2...4)
+                .textFieldStyle(.roundedBorder)
+            }
+
+            SettingsGroup(
+                title: "Conversation history",
+                footnote: "Stored under Application Support/ProShow/Agent/History. Cap \(AgentHistoryStore.maxEntries) entries per show."
+            ) {
+                SettingsRow(
+                    title: "Saved turns",
+                    detail: AIAgentSession.shared.persistedEntries.isEmpty
+                        ? "No Ask history for this show yet."
+                        : "\(AIAgentSession.shared.persistedEntries.count) entries on this Mac."
+                ) {
+                    Button("Clear") { AIAgentSession.shared.clearPersistedHistory() }
+                        .disabled(AIAgentSession.shared.persistedEntries.isEmpty)
+                }
+                if let last = AIAgentSession.shared.persistedEntries.last(where: { $0.deepLink != nil }) {
+                    SettingsRow(title: "Last slide link", detail: last.locationLabel ?? last.deepLink) {
+                        Button("Open") {
+                            if let link = last.deepLink {
+                                AIAgentSession.shared.openDeepLink(link)
+                            }
+                        }
+                    }
+                }
+            }
+
+            SettingsGroup(title: "Canvases", footnote: "Ask always authors Stream 16:9 and Phone 9:16 unless you say Stream-only.") {
+                SettingsRow(title: "Default", detail: "stream + phone") {
+                    Text("Dual")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(ProShowTheme.accent)
+                }
+            }
         }
     }
 
@@ -697,9 +796,13 @@ struct SettingsWindowView: View {
                 } else {
                     ForEach(Array(attachedVideo.enumerated()), id: \.element.id) { index, source in
                         SettingsRow(title: source.label, detail: videoKindTitle(source.kind)) {
-                            Image(systemName: source.kind == .screenShare ? "display" : "video.fill")
-                                .foregroundStyle(ShowSidebarPalette.subtitle)
-                                .accessibilityHidden(true)
+                            if source.kind == .screenShare, let endpoint = source.endpoint, !endpoint.isEmpty {
+                                ScreenShareSmoothnessPicker(endpoint: endpoint, ingest: controller.videoInputs.ingest)
+                            } else {
+                                Image(systemName: "video.fill")
+                                    .foregroundStyle(ShowSidebarPalette.subtitle)
+                                    .accessibilityHidden(true)
+                            }
                         }
                         if index < attachedVideo.count - 1 {
                             SettingsHairline()
@@ -879,7 +982,7 @@ struct SettingsWindowView: View {
     private var updatesPane: some View {
         SettingsGroup {
             SettingsRow(title: "Installed", detail: "Check releases when you are ready. This build does not phone home.") {
-                Text("ProShow \(ProjectJSON.schemaVersion)")
+                Text("ProShow \(AppBuildInfo.display)")
                     .font(DeskType.mono)
                     .foregroundStyle(ShowSidebarPalette.subtitle)
             }
@@ -925,6 +1028,68 @@ private struct OutputResolutionChoices: View {
             }
             Text("1920 × 1080").tag(DisplayResolution.res1080p)
             Text("1280 × 720").tag(DisplayResolution.res720p)
+        }
+    }
+}
+
+
+#if os(macOS)
+private struct AISettingsKeyRow: View {
+    @State private var keyEntry = ""
+    @Bindable private var session = AIAgentSession.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SettingsRow(title: "API key", detail: "Never written into project files or Settings JSON.") {
+                EmptyView()
+            }
+            HStack(spacing: 8) {
+                SecureField("xAI API key", text: $keyEntry)
+                    .textFieldStyle(.roundedBorder)
+                Button("Save") {
+                    if session.saveKey(keyEntry) { keyEntry = "" }
+                }
+                .disabled(keyEntry.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                if session.keyConnected {
+                    Button("Remove") { session.clearKey() }
+                }
+            }
+            .font(.system(size: 13))
+        }
+    }
+}
+#else
+private struct AISettingsKeyRow: View {
+    var body: some View {
+        SettingsRow(title: "API key", detail: "Configure xAI on Mac.") { EmptyView() }
+    }
+}
+#endif
+
+/// Smooth (30 fps) or Light (15 fps) for one display's screen share.
+private struct ScreenShareSmoothnessPicker: View {
+    let endpoint: String
+    let ingest: VideoIngestEngine
+    @State private var value: ScreenShareSmoothness
+
+    init(endpoint: String, ingest: VideoIngestEngine) {
+        self.endpoint = endpoint
+        self.ingest = ingest
+        _value = State(initialValue: ScreenShareSmoothness.current(endpoint: endpoint))
+    }
+
+    var body: some View {
+        Picker("Screen share frame rate", selection: $value) {
+            ForEach(ScreenShareSmoothness.allCases, id: \.self) { option in
+                Text(option.title).tag(option)
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.segmented)
+        .fixedSize()
+        .accessibilityLabel("Screen share frame rate")
+        .onChange(of: value) { _, newValue in
+            ingest.setScreenShareSmoothness(newValue, endpoint: endpoint)
         }
     }
 }

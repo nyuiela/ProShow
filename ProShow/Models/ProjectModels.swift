@@ -1,5 +1,18 @@
 import Foundation
 
+/// The running app's version, read from the bundle at runtime (MARKETING_VERSION / CURRENT_PROJECT_VERSION).
+/// Not the project file format: that is `ProjectJSON.schemaVersion`.
+enum AppBuildInfo {
+    static var shortVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+    }
+    static var build: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
+    }
+    /// "0.5.2 (9)"
+    static var display: String { "\(shortVersion) (\(build))" }
+}
+
 enum ProjectJSON {
     static let schemaVersion = "1.0.0"
 

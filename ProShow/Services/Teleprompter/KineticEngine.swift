@@ -8,6 +8,8 @@ final class KineticEngine {
     private(set) var words: [SpokenWord] = []
     private(set) var activeIndex: Int = 0
     private(set) var isRunning = false
+    /// When the playhead ran off the end of the script while rolling. Cleared by load, reset and seek.
+    private(set) var finishedAt: Date?
     private(set) var lines: [KineticLine] = []
     private(set) var lineWindow = KineticLineWindow(startLine: 0, visibleCount: 5)
     /// True while voice tracking is delaying the WPM floor advance.
@@ -78,6 +80,7 @@ final class KineticEngine {
         pause()
         words = ScriptTokenizer.tokenize(body, baseWPM: baseWPM, pacing: pacing)
         activeIndex = 0
+        finishedAt = nil
         rebuildLines()
         refitVisibleLines()
         lineWindow = KineticLineWindow(startLine: 0, visibleCount: fittedVisibleLines)
@@ -155,6 +158,7 @@ final class KineticEngine {
     func reset() {
         pause()
         activeIndex = 0
+        finishedAt = nil
         refitVisibleLines()
         lineWindow = KineticLineWindow(startLine: 0, visibleCount: fittedVisibleLines)
             .clamped(totalLines: lines.count)
@@ -163,6 +167,7 @@ final class KineticEngine {
     func seek(to index: Int) {
         guard !words.isEmpty else { return }
         activeIndex = min(max(0, index), words.count)
+        if activeIndex < words.count { finishedAt = nil }
         voiceHoldActive = false
         reconcileWindow()
         if isRunning {
@@ -208,6 +213,7 @@ final class KineticEngine {
             self.reconcileWindow()
             if self.activeIndex >= self.words.count {
                 self.isRunning = false
+                self.finishedAt = Date()
                 return
             }
             self.scheduleAdvance()
@@ -232,14 +238,23 @@ final class KineticEngine {
         guard isRunning else { return }
         guard activeIndex < words.count else {
             isRunning = false
+            if finishedAt == nil { finishedAt = Date() }
             return
         }
 
         let hold = words[activeIndex].totalDuration
-        wordHoldStartedAt = Date()
+        // Each word is due a fixed time after the previous one was due, so wake-up latency
+        // does not add up over a script and the read ends when the pacing says it will.
+        let now = Date()
+        // Catch up after a short main-thread stall (a program cut redraws the window for up to about
+        // a second), so the read still ends on pace. After a longer stall, restart the chain instead.
+        let slotStart = chainedSlotStart.flatMap { now.timeIntervalSince($0) < Self.catchUpLimitSeconds ? min($0, now) : nil } ?? now
+        let due = slotStart.addingTimeInterval(hold)
+        wordHoldStartedAt = slotStart
         runTask = Task { @MainActor in
             do {
-                try await Task.sleep(nanoseconds: UInt64(hold * 1_000_000_000))
+                let wait = max(0, due.timeIntervalSinceNow)
+                try await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
             } catch {
                 return
             }
@@ -248,11 +263,19 @@ final class KineticEngine {
             self.reconcileWindow()
             if self.activeIndex >= self.words.count {
                 self.isRunning = false
+                self.chainedSlotStart = nil
+                self.finishedAt = Date()
                 return
             }
+            self.chainedSlotStart = due
             self.scheduleAdvance()
+            self.chainedSlotStart = nil
         }
     }
+
+    /// Set only while one word hands off to the next inside the run loop.
+    @ObservationIgnored private var chainedSlotStart: Date?
+    static let catchUpLimitSeconds: TimeInterval = 1.5
 
     private func nextSpeakableIndex(after index: Int) -> Int? {
         var probe = index + 1

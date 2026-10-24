@@ -84,8 +84,10 @@ struct AddShotModalView: View {
     }
 
     var body: some View {
+        // The sidebar rides in an overlay so it is always sized to the full modal height, even when the
+        // sheet lays out with an ideal (nil) height proposal and the HStack would otherwise centre a short sidebar.
         HStack(spacing: 0) {
-            sidebar
+            Color.clear.frame(width: 220)
             VStack(spacing: 0) {
                 header
                 if let accessMessage = discovery.accessMessage {
@@ -97,8 +99,13 @@ struct AddShotModalView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(ShowDrawerPalette.background(scheme))
         }
-        .frame(width: Self.modalWidth, height: Self.modalHeight)
-        .frame(maxWidth: Self.modalMaxWidth, maxHeight: Self.modalMaxHeight)
+        .overlay(alignment: .topLeading) {
+            sidebar
+                .frame(maxHeight: .infinity, alignment: .top)
+        }
+        // Fill the sheet (not a fixed 620 pt box centred in it) so the sidebar reaches the bottom edge.
+        .frame(minWidth: Self.modalWidth, idealWidth: Self.modalWidth, maxWidth: Self.modalMaxWidth,
+               minHeight: Self.modalHeight, idealHeight: Self.modalHeight, maxHeight: Self.modalMaxHeight)
         .background(ShowDrawerPalette.background(scheme))
         .clipShape(RoundedRectangle(cornerRadius: DeskRadius.sheet, style: .continuous))
         .modifier(ShowSidebarSystemScheme())
@@ -106,6 +113,7 @@ struct AddShotModalView: View {
         .onAppear {
             refreshCatalog()
             rescanHardware()
+            applyQASeed()
         }
         .onChange(of: controller.liveKitDesk.revision) { _, _ in
             refreshCatalog()
@@ -164,13 +172,19 @@ struct AddShotModalView: View {
             .frame(maxHeight: .infinity, alignment: .top)
             .focusEffectDisabled()
 
+            // Keep the list clear of the pinned Cancel row.
+            Color.clear.frame(height: 56)
+        }
+        .frame(width: 220, alignment: .leading)
+        .frame(maxHeight: .infinity, alignment: .top)
+        // Cancel is pinned to the sidebar's bottom edge (aligned with the footer row), independent of list height.
+        .overlay(alignment: .bottomLeading) {
             navButton("Cancel", systemImage: "xmark") {
                 controller.closeAddShot()
             }
             .padding(.bottom, 20)
             .keyboardShortcut(.cancelAction)
         }
-        .frame(width: 220, alignment: .leading)
         .background(ShowSidebarPalette.background(scheme))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Source categories")
@@ -772,6 +786,22 @@ struct AddShotModalView: View {
         }
     }
 
+    private func applyQASeed() {
+        guard let seed = controller.qaAddShotSeed else { return }
+        controller.qaAddShotSeed = nil
+        if let raw = seed["category"], let value = AddShotCategory(rawValue: raw) { category = value }
+        if let value = seed["query"] { query = value }
+        guard let name = seed["select"] else { return }
+        Task { @MainActor in
+            // Hardware sources arrive after the async rescan; wait for the item before selecting.
+            for _ in 0..<50 where !discovery.items.contains(where: { $0.name == name }) {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
+            selectedID = discovery.items.first { $0.name == name }?.id
+            if seed["confirm"] == "1", selectedID != nil { addSelected(asCopy: false) }
+        }
+    }
+
     private func refreshCatalog() {
         discovery.refresh(
             media: controller.importedMedia,
@@ -798,19 +828,18 @@ private struct DevicePreviewPlate: View {
     var prefersLive: Bool
 
     var body: some View {
-        ZStack {
-            Color.black
-            liveLayer
-            if !showsLivePicture, let image = store.image(for: item) {
-                previewImage(image)
-            } else if !showsLivePicture {
-                Image(systemName: item.category.iconName)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.4))
+        ThumbnailBox(cornerRadius: cornerRadius) {
+            ZStack {
+                liveLayer
+                if !showsLivePicture, let image = store.image(for: item) {
+                    previewImage(image)
+                } else if !showsLivePicture {
+                    Image(systemName: item.category.iconName)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.4))
+                }
             }
         }
-        .clipped()
-        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .accessibilityHidden(true)
     }
 

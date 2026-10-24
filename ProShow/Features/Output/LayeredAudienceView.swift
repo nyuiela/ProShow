@@ -667,7 +667,7 @@ struct LiveStageView: View {
     }
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
+        TimelineView(.periodic(from: TimelineAnchor.start, by: 1)) { context in
             let document = controller.liveStageDocument
             let payload = StagePayload.make(controller: controller)
             let clock = StageLiveBinder.clockString(from: context.date)
@@ -875,6 +875,7 @@ struct CanvasObjectShapeLayer: View {
     @Environment(\.programRenderPaused) private var programRenderPaused
     @Environment(\.proShowProgramVideoInput) private var programVideoInput
     @Environment(\.proShowShowsProgramVideoLayer) private var showsProgramVideoLayer
+    @Environment(\.proShowWellsKeepOwnDevice) private var wellsKeepOwnDevice
 
     var body: some View {
         let path = CanvasObjectDrawing.shapePath(for: object, size: CGSize(width: width, height: height), scale: scale)
@@ -895,10 +896,11 @@ struct CanvasObjectShapeLayer: View {
     private var paintsProgramCanvasVideo: Bool {
         guard playsAssignedVideo, programVideoInput != nil else { return false }
         return ProgramLiveVideoRouting.canvasUsesProgramInput(
-            assigned: object.assignedSource,
+            assigned: resolvedAssignedSource(),
             objectKind: object.kind,
             programInput: programVideoInput,
-            showsProgramVideoLayer: showsProgramVideoLayer
+            showsProgramVideoLayer: showsProgramVideoLayer,
+            wellsKeepOwnDevice: wellsKeepOwnDevice
         )
     }
 
@@ -989,10 +991,9 @@ struct CanvasObjectShapeLayer: View {
         }
     }
 
+    /// Same order as `ShowController.resolvedCanvasObjects`: a lettered well follows its placeholder,
+    /// then its own assignment. Previews and the encode then pick the same source for each well.
     private func resolvedAssignedSource() -> AssignedMediaSource? {
-        if let assigned = object.assignedSource, assigned.isMappedFill {
-            return assigned
-        }
         if let letter = object.assignedPlaceholderLetter, let mapped = resolvePlaceholderSource?(letter) {
             return mapped
         }
@@ -1098,7 +1099,9 @@ struct ProgramSlideCanvas: View {
     var body: some View {
         let rest = resolvedEvaluationMode.usesSettledRestState
         let clock = rest ? BuildClock.idle : (buildClockOverride ?? buildClock)
-        PulsedBuildEnvironment(isActive: !rest, clock: { clock }) {
+        // Perf: the clock here is a captured constant, so a 30 fps pulse only re-evaluated the whole canvas
+        // (every program/preview/thumbnail monitor) for nothing; BuildAnimated runs its own per-object timeline.
+        PulsedBuildEnvironment(isActive: false, clock: { clock }) {
         GeometryReader { proxy in
             let scale = min(
                 proxy.size.width / max(canvasWidth, 1),
@@ -1140,8 +1143,19 @@ struct ProgramSlideThumbnailPreview: View {
     var canvasHeight: Double = CanvasConfig.height
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    private var hasLiveContent: Bool {
+        objects.contains { o in
+            let k = o.kind.rawValue.lowercased()
+            return k.contains("video") || k.contains("web") || k.contains("browser") || k.contains("media")
+                || o.kind.usesLiveText || o.textLayout.isLooping
+        }
+    }
+
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 15.0, paused: reduceMotion)) { _ in
+        // Live thumbnails are throttled to 5 fps (program monitor stays full-rate); static ones don't tick.
+        // Static thumbnails don't need a 15 fps timeline. Before, every thumbnail in the grid re-rendered its
+        // whole canvas 15x/s regardless of content, which pegged the main thread and lagged editing.
+        TimelineView(.animation(minimumInterval: 1.0 / 5.0, paused: reduceMotion || !hasLiveContent)) { _ in
             let videoInput = controller.previewVideoInput(for: slide, forThumbnail: true)
             ProgramSlideCanvas(
                 objects: objects,
@@ -1153,6 +1167,7 @@ struct ProgramSlideThumbnailPreview: View {
             .environment(\.proShowVideoInputs, controller.videoInputs)
             .environment(\.proShowProgramVideoInput, videoInput)
             .environment(\.proShowShowsProgramVideoLayer, false)
+            .environment(\.proShowWellsKeepOwnDevice, true)
         }
         .onAppear { controller.prepareSlidePreviewCapture(for: slide) }
         .onChange(of: slide.id) { _, _ in controller.prepareSlidePreviewCapture(for: slide) }
@@ -1166,7 +1181,9 @@ private struct ProgramCanvasObjectView: View {
     let scale: CGFloat
     var playsAssignedVideo: Bool = false
     var muteAssignedVideo: Bool = true
-    @Environment(\.dynamicText) private var dynamicText
+    @Environment(\.dynamicText) private var explicitDynamicText
+    @Environment(\.dynamicTextSource) private var dynamicTextSource
+    private var dynamicText: DynamicTextContext { dynamicTextSource?.context ?? explicitDynamicText }
     @Environment(\.liveQuoteEngine) private var liveQuoteEngine
     @Environment(\.proShowPlayback) private var playback
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -1236,8 +1253,20 @@ private struct ProgramCanvasObjectView: View {
 
     @ViewBuilder
     private func objectLabelText(_ state: TransformedRenderState) -> some View {
-        TimelineView(.periodic(from: .now, by: textTimelineInterval)) { timeline in
-            let context = countdownContext(at: timeline.date)
+        // Static text (60 s interval) skips TimelineView: a periodic schedule built from `.now` restarts on every
+        // parent update, so each text object re-rendered continuously (main thread pegged, editor lag).
+        if textTimelineInterval >= 60 {
+            objectLabelTextContent(at: Date(), state)
+        } else {
+            TimelineView(.periodic(from: TimelineAnchor.start, by: textTimelineInterval)) { timeline in
+                objectLabelTextContent(at: timeline.date, state)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func objectLabelTextContent(at date: Date, _ state: TransformedRenderState) -> some View {
+            let context = countdownContext(at: date)
             if DynamicTextEngine.shouldDeferProgramLiveQuoteOutput(
                 object: object,
                 context: context,
@@ -1268,7 +1297,7 @@ private struct ProgramCanvasObjectView: View {
             }
             }
         }
-    }
+    
 
     private var textTimelineInterval: TimeInterval {
         if object.textLayout.isLooping { return object.kind.usesLiveText ? 1 : 60 }

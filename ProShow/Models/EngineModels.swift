@@ -555,14 +555,35 @@ enum ProgramLiveVideoRouting {
         assigned: AssignedMediaSource?,
         objectKind: CanvasObjectKind?,
         programInput: VideoInputSource?,
-        showsProgramVideoLayer: Bool
+        showsProgramVideoLayer: Bool,
+        wellsKeepOwnDevice: Bool = false
     ) -> Bool {
         guard let programInput else { return false }
+        if wellsKeepOwnDevice {
+            // Previews (editor, thumbnails, Phone monitor): resolve like the encode does. A lettered
+            // placeholder with no source stays an empty slot, a well with its own camera or display keeps
+            // it, and only unassigned wells or wells on the same device share the slide's input.
+            // Before, one slide input was painted into every live well.
+            if assigned?.sourceType == .placeholderSlot { return false }
+            if hasOwnLiveDevice(assigned) {
+                return programInputFeedsVideoWell(assigned: assigned, programInput: programInput)
+            }
+            return objectKind == .videoInput
+        }
         if objectKind == .videoInput, programInputFeedsVideoWell(assigned: assigned, programInput: programInput) {
             return true
         }
         guard !showsProgramVideoLayer else { return false }
         return liveCanvasAssignment(assigned: assigned, objectKind: objectKind)
+    }
+
+    static func hasOwnLiveDevice(_ assigned: AssignedMediaSource?) -> Bool {
+        switch assigned?.sourceType {
+        case .systemCamera, .systemDisplay, .systemWindow, .ndiSource, .rendezvousGuest, .srtStream:
+            return true
+        default:
+            return false
+        }
     }
 
     /// Unassigned video wells, and wells aimed at the same device as the program input, share that picture.

@@ -11,6 +11,7 @@ enum ControlAPIOpenAPI {
             "info": [
                 "title": title,
                 "version": version,
+                "x-proshow-app-version": AppBuildInfo.display,
                 "description": "Localhost-only operator API for Stream Deck, Bitfocus Companion, and automation. Bound to 127.0.0.1.",
             ],
             "servers": [
@@ -29,6 +30,8 @@ enum ControlAPIOpenAPI {
                         "type": "object",
                         "properties": [
                             "ok": ["type": "boolean"],
+                            "app_version": ["type": "string", "description": "CFBundleShortVersionString of the running app"],
+                            "app_build": ["type": "string", "description": "CFBundleVersion of the running app"],
                             "is_streaming": ["type": "boolean"],
                             "is_recording": ["type": "boolean"],
                             "active_slide_index": ["type": "integer", "nullable": true],
@@ -101,10 +104,14 @@ enum ControlAPIOpenAPI {
         <li><code>clear_layer</code> — GET /v1/clear/layer/{layer}</li>
         <li><code>switch_scene</code> — POST /v1/scenes/{id}/trigger</li>
         <li><code>trigger_macro</code> — GET /v1/macro/{id}/trigger</li>
+        <li><code>program_next</code>, <code>program_prev</code>, <code>program_hold</code>, <code>program_extend</code>: POST /v1/program/next, /prev, /hold, /extend</li>
+        <li><code>program_auto</code>: POST /v1/program/auto with {"enabled": true} or no body to toggle</li>
+        <li>OSC /proshow/program/next, /prev, /hold, /extend, /auto [0|1]. MIDI note on 62 next, 63 prev, 64 hold, 65 +30 s</li>
         </ul>
         <strong>Feedback</strong>
         <ul>
         <li><code>is_streaming</code> · <code>is_recording</code> · <code>active_slide_index</code> via GET /v1/status</li>
+        <li><code>remaining</code> · <code>held</code> · <code>auto</code> · <code>stopped_at_item</code> via GET /v1/program/status</li>
         <li><code>preflight</code> — GET /v1/preflight · <code>slide_next</code> — POST /v1/slide/next</li>
         </ul>
         </div>
@@ -128,7 +135,20 @@ enum ControlAPIOpenAPI {
             "/v1/presentation/active/{index}/trigger": get("Go live at slide index."),
             "/v1/presentation/active/next/trigger": get("Advance to the next slide."),
             "/v1/presentation/active/prev/trigger": get("Go to the previous slide."),
+            "/v1/ai/recipes": get("AI recipes: title, lower_third, qa, chapter_cta, talk_section. 409 if aiComposeV1 is off."),
+            "/v1/ai/compose": post("AI compose. Body {provider: practice, patch}. Returns the validated patch. No slides change. 409 if off."),
+            "/v1/ai/apply": post("Apply a patch. Body {patch, confirm: true, groupName?}. Adds slides to AI Draft. Never goes live. 409 if off."),
+            "/v1/ai/agent/status": get("Agent status: provider, xai connected or missing, model, context pack version, draft. Never returns keys."),
+            "/v1/ai/agent/context": get("Live context pack JSON the agent sees at turn start."),
+            "/v1/ai/agent/tools": get("Agent tool catalog. Operator-gated tools never run."),
+            "/v1/ai/agent/events": get("Last 100 agent events with seq for the desk."),
             "/v1/slides/trigger": post("trigger_slide_index — body {presentation_id, index}", "TriggerSlide"),
+            "/v1/program/next": post("Program outline: Next (skip to the next item now, held or not)."),
+            "/v1/program/prev": post("Program outline: Previous item on air."),
+            "/v1/program/hold": post("Program outline: Hold toggle. Freezes the item clock and auto-advance. 409 when the show is not running."),
+            "/v1/program/extend": post("Program outline: add 30 s to the live item. 409 when the show is not running."),
+            "/v1/program/auto": post("Program outline: Auto on or off. Body {enabled: true|false}; no body toggles."),
+            "/v1/program/status": get("Program outline clock: active item, remaining, held, auto, stop item, prompter, last cuts with due and cut times."),
             "/v1/clear/layer/{layer}": get("clear_layer — slide, media, props, all, …"),
             "/v1/scenes": get("List scenes."),
             "/v1/scenes/{scene_id}/trigger": [
@@ -145,7 +165,10 @@ enum ControlAPIOpenAPI {
             "/v1/library/{library_id}/{presentation_id}/trigger": get("Load a library presentation and go live."),
             "/v1/soundboard/{pad_id}/play": post("Fire a soundboard pad."),
             "/v1/chat/overlay": post("Push a chat overlay card."),
+            "/v1/chat/feature": post("Display on screen for an inbox message: id or index (0 = newest), or dismiss=1. Uses the chat template prop when there is one. GET for state."),
             "/v1/chat/ingest/{platform}": post("Zoom / Meet / YouTube / Twitch webhook ingest."),
+            "/v1/chat/youtube": post("YouTube chat ingest: input (URL, video id, or auto), chat_id, or stop. GET for state."),
+            "/v1/chat/x": post("X broadcast chat ingest: input (broadcast id, link, or auto), stop, or mock_base (loopback only). GET for state. No send route."),
             "/v1/backstage/{room_slug}/signal": [
                 "post": op("WebRTC signaling relay (join, offer, answer, ice, mediaFrame)."),
                 "get": op("Upgrade to WebSocket for the same signaling envelope."),

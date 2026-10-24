@@ -7,19 +7,27 @@ struct ProgramAudioGatePolicy: Equatable, Sendable {
     var microphone: Bool
     var desktop: Bool
 
-    static func derive(from layers: [MasterLayer]) -> ProgramAudioGatePolicy {
+    /// `cameraHasMic`: a live camera shot with its audio on feeds the mic lane from its own mic.
+    static func derive(
+        from layers: [MasterLayer],
+        cameraHasMic: (LayerShot) -> Bool = { _ in false },
+        isHeard: (LayerShot) -> Bool = { _ in true }
+    ) -> ProgramAudioGatePolicy {
         var mic = false
         var desktop = false
         for layer in layers {
             guard let liveID = layer.liveShotID,
                   let shot = layer.shots.first(where: { $0.id == liveID }),
-                  !shot.isAudioMuted
+                  !shot.isAudioMuted,
+                  isHeard(shot)
             else { continue }
             switch shot.source.sourceType {
             case .systemMicrophone:
                 mic = true
             case .systemDisplay, .systemWindow, .systemAudioCapture:
                 desktop = true
+            case .systemCamera:
+                if cameraHasMic(shot) { mic = true }
             default:
                 break
             }
@@ -33,7 +41,8 @@ struct ProgramAudioGatePolicy: Equatable, Sendable {
 enum AudioMatrixReconciler {
     static func reconcile(controller: ShowController) {
         let audioKeys = requiredAudioLaneKeys(controller: controller)
-        let videoKeys = requiredVideoLaneKeys(controller: controller)
+        // Video only: slide windows keep their capture; their audio stays off the keep-list (muted as before).
+        let videoKeys = requiredVideoLaneKeys(controller: controller).union(controller.liveSlideWindowCaptureKeys())
         let keepCaptureGraph = controller.streaming.isLive || controller.isoRecorder.isRecording
         controller.videoInputs.ingest.reconcileCapture(
             audioLaneKeys: audioKeys,
@@ -53,19 +62,26 @@ enum AudioMatrixReconciler {
     }
 
     private static var lastGates: ProgramAudioGatePolicy?
+    private static var lastMicEndpoints: [String] = []
 
     /// Hard gate from the live program layers. Runs on every reconcile and every program tick,
     /// so a stale open gate (streaming, lifetime mic session, missed layer event) cannot leak audio.
     @discardableResult
     static func enforceProgramAudioGates(controller: ShowController) -> ProgramAudioGatePolicy {
-        let gates = ProgramAudioGatePolicy.derive(from: controller.masterLayers)
+        let gates = controller.programAudioGates()
         let previous = lastGates
         lastGates = gates
+        let micEndpoints = gates.microphone
+            ? controller.programMicrophoneShots().map { $0.source.connectionString ?? "" }
+            : []
+        let micChanged = micEndpoints != lastMicEndpoints
+        lastMicEndpoints = micEndpoints
         // Always re-assert: other paths open these gates directly, so a cached
         // "nothing changed" would let a stale open gate survive.
         ProgramStreamAudioGates.setHardwareCaptureOpen(.microphone, open: gates.microphone)
         ProgramStreamAudioGates.setHardwareCaptureOpen(.desktop, open: gates.desktop)
-        if gates.microphone, previous?.microphone != true {
+        if gates.microphone, previous?.microphone != true || micChanged {
+            // Also on a handover (camera A to camera B, camera to mic shot): open the new owner.
             // Reopened (unmute, new take, relaunch): restart capture that a close or reconcile stopped.
             controller.resumeLiveMicrophoneCapture()
         }
@@ -112,6 +128,10 @@ enum AudioMatrixReconciler {
             default:
                 break
             }
+        }
+        // A camera's own mic lane (only when it is the program mic).
+        for mic in controller.programMicrophoneShots() {
+            adoptDiscoveredSource(mic.source, into: &keys)
         }
         return keys
     }

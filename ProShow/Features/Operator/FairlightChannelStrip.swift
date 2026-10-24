@@ -70,7 +70,8 @@ struct FairlightChannelStrip: View {
                     controller.audioMatrix.toggleMute(id: channel.id)
                     controller.tickProgram()
                 }
-                stripButton("S", on: channel.solo, color: ProShowTheme.statusOn) {
+                stripButton("I", on: channel.solo, color: ProShowTheme.statusOn) {
+                    guard channel.solo || controller.confirmIsolateIfLive(channel.name) else { return }
                     controller.audioMatrix.toggleSolo(id: channel.id)
                     controller.tickProgram()
                 }
@@ -207,7 +208,7 @@ struct FairlightChannelStrip: View {
     private func accessibilityTitle(_ title: String, on: Bool) -> String {
         switch title {
         case "M": on ? "Unmute \(channel.name)" : "Mute \(channel.name)"
-        case "S": on ? "Unsolo \(channel.name)" : "Solo \(channel.name)"
+        case "I": on ? "Clear Isolate \(channel.name)" : "Isolate \(channel.name)"
         default: on ? "Disable ducking" : "Enable ducking"
         }
     }

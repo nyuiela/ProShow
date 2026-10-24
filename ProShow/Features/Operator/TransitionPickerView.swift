@@ -13,7 +13,8 @@ struct TransitionPickerView: View {
     var body: some View {
         Group {
             if compact {
-                compactMenuPicker
+                StableMenuContent(key: selection) { compactMenuPicker }
+                    .equatable()
             } else {
                 transitionGrid
             }

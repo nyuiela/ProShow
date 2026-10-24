@@ -8,10 +8,12 @@ struct OperatorView: View {
     var onOpenStreamWindow: (() -> Void)?
     var onOpenMultiViewerWindow: (() -> Void)? = nil
 
+    /// Built once: fresh closures here gave every descendant a new environment on each root render.
+    @State private var windowActions = DeskWindowActions()
+
     var body: some View {
-        let _ = controller.inspector.timers.map { "\($0.id)-\($0.displaySeconds)-\($0.isRunning)-\($0.durationSeconds)" }
-        let _ = controller.liveQuotePresentationStamp
-        let _ = controller.programFrameRevisionStamp
+        // Live text is read by its views through `dynamicTextSource`; reading timers or the frame
+        // revision here re-rendered the whole window each second and closed open submenus.
         VStack(spacing: 0) {
             #if os(macOS)
             AppWorkspaceRouter(controller: controller)
@@ -27,22 +29,15 @@ struct OperatorView: View {
             }
             #endif
         }
-        .environment(\.deskWindowActions, DeskWindowActions(
-            openAudience: { onOpenAudienceWindow?() },
-            openStage: { onOpenStageWindow?() },
-            openStream: { onOpenStreamWindow?() },
-            openMultiViewer: { onOpenMultiViewerWindow?() }
-        ))
+        .environment(\.deskWindowActions, windowActions)
         .background(ProShowTheme.canvas.ignoresSafeArea())
         .lockFlickerFreeBackground()
         .preferredColorScheme(.dark)
         .focusEffectDisabled()
         .environment(\.proShowVideoInputs, controller.videoInputs)
         .environment(\.proShowPlayback, controller.playback)
-        .environment(\.resolvePlaceholderSource) { letter in
-            controller.resolvedAssignedSource(forPlaceholder: letter)
-        }
-        .environment(\.dynamicText, controller.canonicalProgramDynamicText())
+        .environment(\.resolvePlaceholderSource, controller.environmentHandles.resolvePlaceholder)
+        .environment(\.dynamicTextSource, controller.environmentHandles.programText)
         .environment(\.liveQuoteEngine, controller.liveQuotes)
         .environment(\.buildClock, controller.liveBuildClock())
         .environment(\.mirrorsProgramPlayer, true)
@@ -53,6 +48,12 @@ struct OperatorView: View {
             #endif
         }
         .onAppear {
+            windowActions = DeskWindowActions(
+                openAudience: { onOpenAudienceWindow?() },
+                openStage: { onOpenStageWindow?() },
+                openStream: { onOpenStreamWindow?() },
+                openMultiViewer: { onOpenMultiViewerWindow?() }
+            )
             controller.evaluateProgramClockState()
         }
         .onReceive(NotificationCenter.default.publisher(for: .proShowProjectSaveStateChanged)) { _ in
@@ -69,7 +70,8 @@ struct OperatorView: View {
                     maxWidth: AddShotModalView.modalMaxWidth,
                     maxHeight: AddShotModalView.modalMaxHeight
                 )
-                .frame(width: AddShotModalView.modalWidth, height: AddShotModalView.modalHeight)
+                .frame(minWidth: AddShotModalView.modalWidth, idealWidth: AddShotModalView.modalWidth, maxWidth: AddShotModalView.modalMaxWidth,
+               minHeight: AddShotModalView.modalHeight, idealHeight: AddShotModalView.modalHeight, maxHeight: AddShotModalView.modalMaxHeight)
         }
         .sheet(isPresented: $controller.isPreFlightPresented) {
             PreFlightHealthView(controller: controller)
@@ -80,7 +82,8 @@ struct OperatorView: View {
                     maxWidth: GoLiveSetupSheet.modalMaxWidth,
                     maxHeight: GoLiveSetupSheet.modalMaxHeight
                 )
-                .frame(width: GoLiveSetupSheet.modalWidth, height: GoLiveSetupSheet.modalHeight)
+                .frame(minWidth: GoLiveSetupSheet.modalWidth, idealWidth: GoLiveSetupSheet.modalWidth, maxWidth: GoLiveSetupSheet.modalMaxWidth,
+               minHeight: GoLiveSetupSheet.modalHeight, idealHeight: GoLiveSetupSheet.modalHeight, maxHeight: GoLiveSetupSheet.modalMaxHeight)
         }
     }
 

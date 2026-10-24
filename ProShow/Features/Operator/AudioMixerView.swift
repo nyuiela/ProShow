@@ -190,7 +190,7 @@ struct StudioAudioGlass: View {
     private var matrix: AudioMatrixEngine { controller.audioMatrix }
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 0.5)) { context in
+        TimelineView(.periodic(from: TimelineAnchor.start, by: 0.5)) { context in
             StudioAudioGlassBody(
                 controller: controller,
                 page: $page,
@@ -539,7 +539,8 @@ private struct StudioAudioStrip: View {
                     controller.audioMatrix.toggleMute(id: channel.id)
                     controller.tickProgram()
                 }
-                flag("S", on: channel.solo, tint: ProShowTheme.statusOn, label: "\(channel.name) solo") {
+                flag("I", on: channel.solo, tint: ProShowTheme.statusOn, label: "\(channel.name) isolate") {
+                    guard channel.solo || controller.confirmIsolateIfLive(channel.name) else { return }
                     controller.audioMatrix.toggleSolo(id: channel.id)
                     controller.tickProgram()
                 }

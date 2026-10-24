@@ -212,22 +212,31 @@ extension ShowController {
         return candidates.first(where: \.hasBindableHardwareEndpoint) ?? candidates.first
     }
 
+    /// Builds or refreshes the item's program slide. Only a real change touches the document:
+    /// writing the whole `.program` on every cut cost about 85 ms on the main thread.
     func ensureProgramSlide(for block: RundownBlock) {
-        mutateProgramDocument { doc in
-            guard let index = doc.rundownBlocks.firstIndex(where: { $0.id == block.id }) else { return }
-            ProgramOutlinePresentation.syncProgramSlide(
-                at: index,
-                in: &doc,
-                mediaLookup: { id in self.allMediaItems.first(where: { $0.id == id }) },
-                showLookup: { id in self.show(matching: id) },
-                playlistShowLookup: { playlistItemID in
-                    guard let item = self.playlist.items.first(where: { $0.id == playlistItemID }),
-                          let showID = item.showID
-                    else { return nil }
-                    return self.show(matching: showID)
-                }
-            )
-        }
+        var doc = rundownClock.program ?? programDocument
+        guard let index = doc.rundownBlocks.firstIndex(where: { $0.id == block.id }) else { return }
+        let beforeBlock = doc.rundownBlocks[index]
+        let beforeSlides = doc.programSlides
+        syncProgramSlideContents(at: index, in: &doc)
+        guard doc.rundownBlocks[index] != beforeBlock || doc.programSlides != beforeSlides else { return }
+        mutateProgramDocument { $0 = doc }
+    }
+
+    private func syncProgramSlideContents(at index: Int, in doc: inout ProgramDocumentModel) {
+        ProgramOutlinePresentation.syncProgramSlide(
+            at: index,
+            in: &doc,
+            mediaLookup: { id in self.allMediaItems.first(where: { $0.id == id }) },
+            showLookup: { id in self.show(matching: id) },
+            playlistShowLookup: { playlistItemID in
+                guard let item = self.playlist.items.first(where: { $0.id == playlistItemID }),
+                      let showID = item.showID
+                else { return nil }
+                return self.show(matching: showID)
+            }
+        )
     }
 
     func programSlideID(for block: RundownBlock) -> UUID? {

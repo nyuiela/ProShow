@@ -187,14 +187,17 @@ enum OutlineScriptCompiler {
         }
     }
 
+    /// Cues for an item under 90 seconds. Offsets are seconds before the end, whatever the sign, so a
+    /// one-minute warning (60 or the older -60) is dropped: on a short item it lands at the start.
+    /// Nothing left means NEXT MINUTE at 0.
     static func explicitShortCues(inheriting documentCues: [StageCueTrigger]) -> [StageCueTrigger] {
-        let dangerous = documentCues.contains { $0.triggerOffsetSeconds <= -60 }
-        let source = (documentCues.isEmpty || dangerous)
+        let fitting = documentCues.filter { abs($0.triggerOffsetSeconds) < 60 }
+        let source = fitting.isEmpty
             ? [StageCueTrigger(triggerOffsetSeconds: 0, stageMessage: "NEXT MINUTE")]
-            : documentCues
+            : fitting
         return source.map {
             StageCueTrigger(
-                triggerOffsetSeconds: $0.triggerOffsetSeconds,
+                triggerOffsetSeconds: abs($0.triggerOffsetSeconds),
                 stageMessage: $0.stageMessage,
                 flashScreen: $0.flashScreen,
                 triggerMacroId: $0.triggerMacroId
