@@ -245,7 +245,8 @@ extension ShowController {
 #if canImport(CoreVideo)
 /// Keeps the record-only 16:9 file at a constant rate on the shared clock. Real frames pass
 /// straight through; when none arrives for 1.15 frame periods the last one is repeated one
-/// period after the previous stamp. Stamps never go backwards, so a late composite after a repeat is moved just past it.
+/// period after the previous stamp. A composite that lands less than half a period after a repeat
+/// is held and goes out in the next slot, so a late frame never adds an extra frame to the file.
 /// Video only: audio keeps its own pump and clock.
 final class RecordOnlyFramePacer: @unchecked Sendable {
     static let shared = RecordOnlyFramePacer()
@@ -264,6 +265,9 @@ final class RecordOnlyFramePacer: @unchecked Sendable {
     private var lastBuffer: CVPixelBuffer?
     private var lastStamp: TimeInterval = 0
     private var lastRealAt: TimeInterval = 0
+    private var lastWasRepeat = false
+    /// A real frame that arrived just after a repeat; it goes out in the next slot.
+    private var pendingReal = false
     private(set) var repeatedFrames: Int = 0
     /// Stop repeating after this long without a real frame (recording ended or the app is stuck).
     private let staleAfter: TimeInterval = 10
@@ -275,6 +279,14 @@ final class RecordOnlyFramePacer: @unchecked Sendable {
         if timer == nil || abs(wantPeriod - period) > 0.0001 {
             startTimerLocked(period: wantPeriod)
         }
+        if lastWasRepeat, lastStamp > 0, presentationTime <= lastStamp + period * 0.55 {
+            // The repeat already filled this slot: send this frame in the next one.
+            lastBuffer = buffer
+            pendingReal = true
+            lastRealAt = Date().timeIntervalSinceReferenceDate
+            lock.unlock()
+            return
+        }
         var stamp = presentationTime
         if lastStamp > 0, stamp <= lastStamp + period * 0.55 {
             stamp = lastStamp + period * 0.6
@@ -282,6 +294,8 @@ final class RecordOnlyFramePacer: @unchecked Sendable {
         let host = Self.host(hostTime, shiftedBy: stamp - presentationTime)
         lastBuffer = buffer
         lastStamp = stamp
+        lastWasRepeat = false
+        pendingReal = false
         lastRealAt = Date().timeIntervalSinceReferenceDate
         // Emit under the lock so a repeat and a real frame never reach the writer out of order.
         emitHandler?(buffer, stamp, host)
@@ -297,6 +311,8 @@ final class RecordOnlyFramePacer: @unchecked Sendable {
         lastBuffer = nil
         lastStamp = 0
         lastRealAt = 0
+        lastWasRepeat = false
+        pendingReal = false
     }
 
     private func startTimerLocked(period newPeriod: TimeInterval) {
@@ -320,11 +336,17 @@ final class RecordOnlyFramePacer: @unchecked Sendable {
             stop()
             return
         }
-        guard now - lastStamp >= period * 1.15 else { lock.unlock(); return }
+        guard now - lastStamp >= period * (pendingReal ? 1.0 : 1.15) else { lock.unlock(); return }
         // One period after the last frame; after a long stall, catch up to now.
         let stamp = now - lastStamp > period * 3 ? now : lastStamp + period
         lastStamp = stamp
-        repeatedFrames += 1
+        if pendingReal {
+            pendingReal = false
+            lastWasRepeat = false
+        } else {
+            lastWasRepeat = true
+            repeatedFrames += 1
+        }
         let host = Self.host(CMClockGetTime(CMClockGetHostTimeClock()), shiftedBy: stamp - now)
         emitHandler?(buffer, stamp, host)
         lock.unlock()
