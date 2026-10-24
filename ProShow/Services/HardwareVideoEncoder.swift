@@ -263,13 +263,17 @@ final class HardwareVideoEncoder: @unchecked Sendable {
     func encode(pixelBuffer: CVPixelBuffer, presentationTime: TimeInterval, hostTime: CMTime = .invalid) {
         #if canImport(VideoToolbox) && canImport(CoreVideo) && canImport(CoreMedia)
         _ = presentationTime
-        _ = hostTime
         let forceKey = !sentSequenceHeader
         sessionQueue.async { [weak self] in
             guard let self, let session = self.compressionSession else { return }
             let index = self.frameCount
             self.frameCount += 1
-            let pts = StreamVideoCFRClock.presentationTime(frameIndex: index, fps: self.targetFps)
+            // Live callers pass no host time and keep the CFR index. The record-only feed after a
+            // stream stop passes the frame's host time, so the passthrough file tracks the wall
+            // clock instead of a 30 fps index fed at a lower rate (that drift forced 2 s re-anchors).
+            let pts = hostTime.isValid && hostTime.isNumeric
+                ? CMTimeConvertScale(hostTime, timescale: 600, method: .roundHalfAwayFromZero)
+                : StreamVideoCFRClock.presentationTime(frameIndex: index, fps: self.targetFps)
             let duration = StreamVideoCFRClock.frameDuration(fps: self.targetFps)
             var properties: CFDictionary?
             if forceKey {

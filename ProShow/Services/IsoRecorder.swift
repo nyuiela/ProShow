@@ -682,7 +682,9 @@ final class ProgramVideoFileRecorder {
         let origin = recordingOrigin ?? presentationTime
         let relative = max(0, presentationTime - origin)
         let pts = CMTime(seconds: relative, preferredTimescale: 600)
-        let minStep = CMTime(value: 1, timescale: CMTimeScale(fps))
+        // Half a frame: the program clock jitters around 1/fps, and a full-frame floor dropped
+        // every early tick. Still rejects duplicates and backwards stamps.
+        let minStep = CMTime(value: 1, timescale: CMTimeScale(max(1, fps) * 2))
         if lastVideoPTS.isValid {
             let delta = CMTimeSubtract(pts, lastVideoPTS)
             if CMTimeCompare(delta, minStep) < 0 {

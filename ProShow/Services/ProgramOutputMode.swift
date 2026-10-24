@@ -39,7 +39,7 @@ enum ProgramOutputMode: Equatable, Sendable, CustomStringConvertible {
 
     var targetFrameRate: Int {
         switch self {
-        case .recording: 20
+        case .recording: 30
         case .live, .liveAndRecording: 30
         case .preview: 30
         case .idle: 30

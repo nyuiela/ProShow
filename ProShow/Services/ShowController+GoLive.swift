@@ -68,7 +68,7 @@ extension ShowController {
             if streaming.isLive {
                 return max(1, streaming.config.framerate)
             }
-            return min(30, projectSettings.frameRate.encoderFPS)
+            return recordOnlyFrameRate
         }()
         // Passthrough copies the Stream encode. Phone-only live has no Stream encode, so the
         // 16:9 file encodes its own frames and takes audio from the Phone transport pump.

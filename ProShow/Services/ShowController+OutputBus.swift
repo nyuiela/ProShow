@@ -94,6 +94,11 @@ extension ShowController {
         return .idle
     }
 
+    /// Record-only file rate: the project rate, capped at 30. Matches the 16:9 writer.
+    var recordOnlyFrameRate: Int {
+        min(30, max(1, projectSettings.frameRate.encoderFPS))
+    }
+
     /// One size for composite, encoder, and file writer.
     func currentProgramRenderContract() -> ProgramRenderContract {
         switch evaluateOutputMode() {
@@ -112,7 +117,7 @@ extension ShowController {
             return ProgramRenderContract(
                 width: capped.width,
                 height: capped.height,
-                frameRate: 20,
+                frameRate: recordOnlyFrameRate,
                 colorSpace: "Rec709"
             )
         case .preview(.operatorDesk):

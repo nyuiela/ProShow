@@ -2379,6 +2379,8 @@ final class ShowController {
         switch mode {
         case .live, .liveAndRecording:
             return 1.0 / Double(max(1, streaming.config.framerate))
+        case .recording:
+            return 1.0 / Double(recordOnlyFrameRate)
         default:
             return 1.0 / Double(max(1, mode.targetFrameRate))
         }
