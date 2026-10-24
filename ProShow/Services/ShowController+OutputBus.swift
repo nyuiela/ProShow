@@ -1,3 +1,4 @@
+import CoreMedia
 import Foundation
 #if canImport(CoreVideo)
 import CoreVideo
@@ -20,34 +21,46 @@ extension ShowController {
     func configureOutputBusSubscriptions() {
         streaming.onPhoneDestinationChange = { [weak self] in self?.syncPhoneRecording() }
         let encoder = streaming.hardwareEncoder
-        ProgramOutputBus.shared.subscribe(id: "sink.rtmp.encoder") { [weak self] payload in
-            let passthrough = self?.isoRecorder.programFileWriter?.isPassthrough == true
-            guard payload.mode.isLive || (passthrough && payload.mode.isRecording) else { return }
+        ProgramOutputBus.shared.subscribe(id: "sink.rtmp.encoder") { payload in
+            guard payload.mode.isLive else { return }
             StreamHoldFrameCache.remember(payload.pixelBuffer)
-            if payload.mode.isLive {
-                LatestFrameSlot.shared.store(payload.pixelBuffer)
-                PhoneFrameIngress.shared.push(payload.pixelBuffer)
-                return
-            }
-            encoder.encode(
-                pixelBuffer: payload.pixelBuffer,
-                presentationTime: payload.presentationTime,
-                hostTime: payload.hostTime
-            )
-            Task { @MainActor in
-                self?.streaming.markLastEncodeSource(.programComposite)
+            LatestFrameSlot.shared.store(payload.pixelBuffer)
+            PhoneFrameIngress.shared.push(payload.pixelBuffer)
+        }
+        // Record-only 16:9 frames go through the pacer, which repeats the last frame when the
+        // program clock stalls (slide loads, the stream stop handoff), the way the live CFR
+        // pacer does. A passthrough file (the stream stopped mid-recording) keeps its encoder.
+        RecordOnlyFramePacer.shared.emit = { [weak self] buffer, presentationTime, hostTime in
+            guard let self else { return }
+            if self.isoRecorder.programFileWriter?.isPassthrough == true {
+                encoder.encode(pixelBuffer: buffer, presentationTime: presentationTime, hostTime: hostTime)
+            } else {
+                self.isoRecorder.appendProgramFrame(buffer, presentationTime: presentationTime)
             }
         }
         ProgramOutputBus.shared.subscribe(id: "sink.program.recorder") { [weak self] payload in
-            guard payload.mode.isRecording else { return }
+            guard payload.mode.isRecording else {
+                RecordOnlyFramePacer.shared.stop()
+                return
+            }
             // Record-only 9:16: live frames already reach the Phone lane from the Stream sink.
             if !payload.mode.isLive, PhoneRecordingBridge.isActive {
                 PhoneFrameIngress.shared.push(payload.pixelBuffer)
             }
-            if self?.isoRecorder.programFileWriter?.isPassthrough == true { return }
-            self?.isoRecorder.appendProgramFrame(
+            if payload.mode.isLive {
+                RecordOnlyFramePacer.shared.stop()
+                if self?.isoRecorder.programFileWriter?.isPassthrough == true { return }
+                self?.isoRecorder.appendProgramFrame(
+                    payload.pixelBuffer,
+                    presentationTime: payload.presentationTime
+                )
+                return
+            }
+            RecordOnlyFramePacer.shared.submit(
                 payload.pixelBuffer,
-                presentationTime: payload.presentationTime
+                presentationTime: payload.presentationTime,
+                hostTime: payload.hostTime,
+                frameRate: payload.renderContract.frameRate
             )
         }
         ProgramOutputBus.shared.subscribe(id: "sink.live.pixel.hub") { [weak self] payload in
@@ -228,3 +241,96 @@ extension ShowController {
     }
     #endif
 }
+
+#if canImport(CoreVideo)
+/// Keeps the record-only 16:9 file at a constant rate on the shared clock. Real frames pass
+/// straight through; when none arrives for 1.2 frame periods the last one is repeated, stamped
+/// now. Stamps never go backwards, so a late composite after a repeat is moved just past it.
+/// Video only: audio keeps its own pump and clock.
+final class RecordOnlyFramePacer: @unchecked Sendable {
+    static let shared = RecordOnlyFramePacer()
+
+    /// (pixel buffer, presentation seconds on the bus clock, host time)
+    var emit: ((CVPixelBuffer, TimeInterval, CMTime) -> Void)? {
+        get { lock.lock(); defer { lock.unlock() }; return emitHandler }
+        set { lock.lock(); emitHandler = newValue; lock.unlock() }
+    }
+
+    private let queue = DispatchQueue(label: "com.proshow.record.pacer", qos: .userInteractive)
+    private let lock = NSLock()
+    private var emitHandler: ((CVPixelBuffer, TimeInterval, CMTime) -> Void)?
+    private var timer: DispatchSourceTimer?
+    private var period: TimeInterval = 1.0 / 30.0
+    private var lastBuffer: CVPixelBuffer?
+    private var lastStamp: TimeInterval = 0
+    private var lastRealAt: TimeInterval = 0
+    private(set) var repeatedFrames: Int = 0
+    /// Stop repeating after this long without a real frame (recording ended or the app is stuck).
+    private let staleAfter: TimeInterval = 10
+
+    func submit(_ buffer: CVPixelBuffer, presentationTime: TimeInterval, hostTime: CMTime, frameRate: Int) {
+        lock.lock()
+        let fps = max(1, min(60, frameRate))
+        let wantPeriod = 1.0 / Double(fps)
+        if timer == nil || abs(wantPeriod - period) > 0.0001 {
+            startTimerLocked(period: wantPeriod)
+        }
+        var stamp = presentationTime
+        if lastStamp > 0, stamp <= lastStamp + period * 0.55 {
+            stamp = lastStamp + period * 0.6
+        }
+        let host = Self.host(hostTime, shiftedBy: stamp - presentationTime)
+        lastBuffer = buffer
+        lastStamp = stamp
+        lastRealAt = Date().timeIntervalSinceReferenceDate
+        // Emit under the lock so a repeat and a real frame never reach the writer out of order.
+        emitHandler?(buffer, stamp, host)
+        lock.unlock()
+    }
+
+    func stop() {
+        lock.lock()
+        defer { lock.unlock() }
+        guard timer != nil || lastBuffer != nil else { return }
+        timer?.cancel()
+        timer = nil
+        lastBuffer = nil
+        lastStamp = 0
+        lastRealAt = 0
+    }
+
+    private func startTimerLocked(period newPeriod: TimeInterval) {
+        timer?.cancel()
+        period = newPeriod
+        let source = DispatchSource.makeTimerSource(queue: queue)
+        source.schedule(deadline: .now() + newPeriod, repeating: newPeriod, leeway: .milliseconds(2))
+        source.setEventHandler { [weak self] in self?.tick() }
+        source.resume()
+        timer = source
+    }
+
+    private func tick() {
+        lock.lock()
+        let now = Date().timeIntervalSinceReferenceDate
+        guard let buffer = lastBuffer, lastStamp > 0 else { lock.unlock(); return }
+        if now - lastRealAt > staleAfter {
+            lock.unlock()
+            stop()
+            return
+        }
+        guard now - lastStamp >= period * 1.2 else { lock.unlock(); return }
+        let stamp = max(now, lastStamp + period * 0.6)
+        lastStamp = stamp
+        repeatedFrames += 1
+        let host = Self.host(CMClockGetTime(CMClockGetHostTimeClock()), shiftedBy: stamp - now)
+        emitHandler?(buffer, stamp, host)
+        lock.unlock()
+    }
+
+    private static func host(_ time: CMTime, shiftedBy seconds: TimeInterval) -> CMTime {
+        guard time.isValid, time.isNumeric else { return .invalid }
+        guard abs(seconds) > 0.000_001 else { return time }
+        return CMTimeAdd(time, CMTime(seconds: seconds, preferredTimescale: 1_000_000_000))
+    }
+}
+#endif
