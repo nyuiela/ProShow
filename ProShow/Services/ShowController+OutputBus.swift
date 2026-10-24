@@ -245,8 +245,8 @@ extension ShowController {
 #if canImport(CoreVideo)
 /// Keeps the record-only 16:9 file at a constant rate on the shared clock. Real frames pass
 /// straight through; when none arrives for 1.15 frame periods the last one is repeated one
-/// period after the previous stamp. A composite that lands less than half a period after a repeat
-/// is held and goes out in the next slot, so a late frame never adds an extra frame to the file.
+/// period after the previous stamp. A composite that lands less than half a period after the last
+/// frame is held and goes out in the next slot, so late frames and bursts never add frames to the file.
 /// Video only: audio keeps its own pump and clock.
 final class RecordOnlyFramePacer: @unchecked Sendable {
     static let shared = RecordOnlyFramePacer()
@@ -265,8 +265,7 @@ final class RecordOnlyFramePacer: @unchecked Sendable {
     private var lastBuffer: CVPixelBuffer?
     private var lastStamp: TimeInterval = 0
     private var lastRealAt: TimeInterval = 0
-    private var lastWasRepeat = false
-    /// A real frame that arrived just after a repeat; it goes out in the next slot.
+    /// A real frame that landed within half a period of the last one; it goes out in the next slot.
     private var pendingReal = false
     private(set) var repeatedFrames: Int = 0
     /// Stop repeating after this long without a real frame (recording ended or the app is stuck).
@@ -279,22 +278,19 @@ final class RecordOnlyFramePacer: @unchecked Sendable {
         if timer == nil || abs(wantPeriod - period) > 0.0001 {
             startTimerLocked(period: wantPeriod)
         }
-        if lastWasRepeat, lastStamp > 0, presentationTime <= lastStamp + period * 0.55 {
-            // The repeat already filled this slot: send this frame in the next one.
+        if lastStamp > 0, presentationTime <= lastStamp + period * 0.55 {
+            // This slot is already filled (a repeat, or a burst of late composites): the newest
+            // frame goes out in the next slot and older ones in the burst are skipped.
             lastBuffer = buffer
             pendingReal = true
             lastRealAt = Date().timeIntervalSinceReferenceDate
             lock.unlock()
             return
         }
-        var stamp = presentationTime
-        if lastStamp > 0, stamp <= lastStamp + period * 0.55 {
-            stamp = lastStamp + period * 0.6
-        }
-        let host = Self.host(hostTime, shiftedBy: stamp - presentationTime)
+        let stamp = presentationTime
+        let host = hostTime.isValid && hostTime.isNumeric ? hostTime : .invalid
         lastBuffer = buffer
         lastStamp = stamp
-        lastWasRepeat = false
         pendingReal = false
         lastRealAt = Date().timeIntervalSinceReferenceDate
         // Emit under the lock so a repeat and a real frame never reach the writer out of order.
@@ -311,7 +307,6 @@ final class RecordOnlyFramePacer: @unchecked Sendable {
         lastBuffer = nil
         lastStamp = 0
         lastRealAt = 0
-        lastWasRepeat = false
         pendingReal = false
     }
 
@@ -342,9 +337,7 @@ final class RecordOnlyFramePacer: @unchecked Sendable {
         lastStamp = stamp
         if pendingReal {
             pendingReal = false
-            lastWasRepeat = false
         } else {
-            lastWasRepeat = true
             repeatedFrames += 1
         }
         let host = Self.host(CMClockGetTime(CMClockGetHostTimeClock()), shiftedBy: stamp - now)
