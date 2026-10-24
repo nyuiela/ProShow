@@ -43,6 +43,58 @@ final class StreamingEngine {
     #endif
     /// Set when the Phone lane fails and Stream is still up.
     private(set) var phoneLaneError: String?
+    /// A 9:16 file is open. The Phone lane then keeps encoding with or without a Phone destination.
+    private(set) var phoneRecordingActive = false
+    private(set) var phoneRecordingRefusal: String?
+
+    /// True while a Phone destination is attached to the Phone lane.
+    var phoneDestinationAttached: Bool {
+        #if canImport(CoreVideo)
+        return phoneLane?.hasTransport == true
+        #else
+        return false
+        #endif
+    }
+
+    /// Starts or ends the Phone encode that feeds the 9:16 file. One encoder session serves both the
+    /// file and any Phone destination. Returns false when 9:16 would need a third encode.
+    @discardableResult
+    func setPhoneRecording(_ on: Bool) -> Bool {
+        #if canImport(CoreVideo)
+        guard ProShowFeatureFlags.multiDestinationRoutingV1 else { return false }
+        if !on {
+            phoneRecordingActive = false
+            if let lane = phoneLane, !lane.hasTransport {
+                lane.stop()
+                phoneLane = nil
+            }
+            return true
+        }
+        phoneRecordingRefusal = nil
+        if let lane = phoneLane, lane.isEncoding {
+            phoneRecordingActive = true
+            lane.requestKeyframe()
+            return true
+        }
+        if state == .live || state == .starting, let plan = routingPlan, plan.phoneLane == nil,
+           plan.lanes.count >= EncodeLanePlan.maxEncodeLanes {
+            phoneRecordingRefusal = "9:16 recording needs a free encoder. Two encodes are already running."
+            return false
+        }
+        let lane = PhoneEncodeLane()
+        guard lane.startEncoder(lane: routingPlan?.phoneLane) else {
+            phoneRecordingRefusal = "The 9:16 encoder could not start."
+            return false
+        }
+        phoneLane = lane
+        phoneRecordingActive = true
+        pushPhoneCanvas()
+        lane.requestKeyframe()
+        return true
+        #else
+        return false
+        #endif
+    }
 
     func applyProjectSettings(_ settings: ProjectSettings) {
         lastAllocation = EncoderBitrateProfile.allocation(for: settings)
@@ -288,7 +340,7 @@ final class StreamingEngine {
     }
 
     func phoneEncodeBoard() -> EditorCanvasFrame? {
-        guard ProShowFeatureFlags.multiDestinationRoutingV1, routingPlan?.phoneLane != nil else { return nil }
+        guard ProShowFeatureFlags.multiDestinationRoutingV1, routingPlan?.phoneLane != nil || phoneRecordingActive else { return nil }
         return phoneCanvasBoards.first {
             $0.isPhoneArtboard
         }
@@ -296,11 +348,13 @@ final class StreamingEngine {
 
     private func pushPhoneCanvas() {
         #if canImport(CoreVideo)
-        guard ProShowFeatureFlags.multiDestinationRoutingV1, let lane = routingPlan?.phoneLane else { return }
+        guard ProShowFeatureFlags.multiDestinationRoutingV1 else { return }
+        let planned = routingPlan?.phoneLane
+        guard planned != nil || phoneRecordingActive else { return }
         phoneLane?.note(
             state: PhoneSlideRouting.state(boards: phoneCanvasBoards),
             boards: phoneCanvasBoards,
-            scaleMode: lane.scaleMode
+            scaleMode: planned?.scaleMode ?? .fit
         )
         #endif
     }
@@ -320,8 +374,12 @@ final class StreamingEngine {
             lastError = "No Phone destination."
             return false
         }
-        let phone = PhoneEncodeLane()
-        guard phone.start(ingests: phoneIngests(in: plan), lane: lane, pumpsAudio: true) else {
+        // A 9:16 recording may already run this lane's encoder. Reuse it so the file has no gap.
+        let reused = phoneLane?.isEncoding == true ? phoneLane : nil
+        let phone = reused ?? PhoneEncodeLane()
+        guard reused != nil || phone.startEncoder(lane: lane),
+              let link = phone.attach(ingests: phoneIngests(in: plan), lane: lane, pumpsAudio: true) else {
+            if reused == nil { phone.stop() }
             MediaClockAnchor.shared.clear()
             state = .failed
             let name = phoneIngests(in: plan).first?.name ?? "Phone"
@@ -329,24 +387,24 @@ final class StreamingEngine {
             return false
         }
         phoneLane = phone
-        transport = phone.transport
+        transport = link
         pushPhoneCanvas()
+        notePhoneDestinationChange()
         state = .starting
-        if phone.transport.isReady {
+        if link.isReady {
             startedAt = Date()
             state = .live
             return true
         }
         Task { @MainActor [weak self] in
             guard let self else { return }
-            let ready = await phone.transport.waitUntilReady(timeoutMs: 12_000)
+            let ready = await link.waitUntilReady(timeoutMs: 12_000)
             guard self.state == .starting else { return }
             if ready {
                 self.startedAt = Date()
                 self.state = .live
             } else {
-                phone.stop()
-                self.phoneLane = nil
+                self.releasePhoneLane(phone)
                 MediaClockAnchor.shared.clear()
                 self.state = .failed
                 self.startedAt = nil
@@ -381,19 +439,24 @@ final class StreamingEngine {
         guard let lane = plan?.phoneLane else { return false }
         let ids = Set(lane.members.map(\.id))
         let ingests = routingIngests.filter { ids.contains($0.accountID) }
-        let phone = PhoneEncodeLane()
-        guard phone.start(ingests: ingests, lane: lane, pumpsAudio: pumpsAudio) else {
+        // A 9:16 recording may already run this lane's encoder. Reuse it so the file has no gap.
+        let reused = phoneLane?.isEncoding == true ? phoneLane : nil
+        let phone = reused ?? PhoneEncodeLane()
+        guard reused != nil || phone.startEncoder(lane: lane),
+              let link = phone.attach(ingests: ingests, lane: lane, pumpsAudio: pumpsAudio) else {
+            if reused == nil { phone.stop() }
             let name = ingests.first?.name ?? "Phone"
             phoneLaneError = "\(name) lost."
             return false
         }
         phoneLane = phone
         pushPhoneCanvas()
+        notePhoneDestinationChange()
         // The RTMP handshake and publish run in waitUntilReady. Without it the Phone socket opens
         // but never publishes, so the lane never sends a frame and Phone destinations stay blank.
         Task { @MainActor [weak self] in
-            let ready = await phone.transport.waitUntilReady(timeoutMs: 12_000)
-            guard let self, self.phoneLane === phone else { return }
+            let ready = await link.waitUntilReady(timeoutMs: 12_000)
+            guard let self, self.phoneLane === phone, phone.transport === link else { return }
             if !ready {
                 let name = ingests.first?.name ?? "Phone"
                 self.phoneLaneError = "\(name) could not connect."
@@ -418,11 +481,30 @@ final class StreamingEngine {
         return String(format: "%02d:%02d:%02d", total / 3600, (total % 3600) / 60, total % 60)
     }
 
-    func stop() {
+    /// Drops the Phone destinations. The lane keeps encoding while a 9:16 file is open.
+    private func releasePhoneLane(_ phone: PhoneEncodeLane? = nil) {
         #if canImport(CoreVideo)
-        phoneLane?.stop()
-        phoneLane = nil
+        guard let lane = phone ?? phoneLane else { return }
+        if phoneRecordingActive, lane === phoneLane {
+            lane.detachTransport()
+        } else {
+            lane.stop()
+            if lane === phoneLane { phoneLane = nil }
+        }
+        notePhoneDestinationChange()
         #endif
+    }
+
+    /// Lets the show open or close the 9:16 file when a Phone destination comes or goes.
+    @ObservationIgnored var onPhoneDestinationChange: (() -> Void)?
+
+    private func notePhoneDestinationChange() {
+        guard onPhoneDestinationChange != nil else { return }
+        Task { @MainActor [weak self] in self?.onPhoneDestinationChange?() }
+    }
+
+    func stop() {
+        releasePhoneLane()
         phoneLaneError = nil
         state = .stopping
         #if canImport(CoreVideo)

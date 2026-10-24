@@ -101,6 +101,34 @@ final class HardwareVideoEncoder: @unchecked Sendable {
     private var lastRTMPTimestampMs: UInt32 = 0
     #endif
     private var sentSequenceHeader = false
+    /// Phone lane only: subtracted from the PTS before the FLV timestamp, so a lane that started
+    /// on the local clock (9:16 recording) still sends stream-clock timestamps. Zero for Stream.
+    private var rtmpTimestampShift: CMTime = .zero
+
+    func setRTMPTimestampShift(_ shift: CMTime) {
+        depthLock.lock()
+        rtmpTimestampShift = shift
+        depthLock.unlock()
+    }
+
+    private func currentRTMPTimestampShift() -> CMTime {
+        depthLock.lock()
+        defer { depthLock.unlock() }
+        return rtmpTimestampShift
+    }
+
+    /// Changes the bitrate on the running session (no new session, no new keyframe).
+    func updateBitrate(targetBps: Int, ceilingBps: Int) {
+        #if canImport(VideoToolbox)
+        sessionQueue.async { [self] in
+            guard let session = compressionSession else { return }
+            VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AverageBitRate, value: max(400_000, targetBps) as CFNumber)
+            let bytesPerSecond = max(1, max(targetBps, ceilingBps) / 8)
+            let limits: [NSNumber] = [NSNumber(value: bytesPerSecond), NSNumber(value: 1)]
+            VTSessionSetProperty(session, key: kVTCompressionPropertyKey_DataRateLimits, value: limits as CFArray)
+        }
+        #endif
+    }
 
     func setupSession(width: Int32, height: Int32, fps: Int, bitrateKbps: Int) {
         var config = StreamEncoderConfig.preset720p30Saver()
@@ -295,6 +323,7 @@ final class HardwareVideoEncoder: @unchecked Sendable {
             frameCount = 0
             targetFps = 30
             lastRTMPTimestampMs = 0
+            setRTMPTimestampShift(.zero)
         }
         if sessionQueue === ProShowQueues.encoderQueue, ProShowQueues.isOnEncoderQueue {
             work()
@@ -337,7 +366,9 @@ final class HardwareVideoEncoder: @unchecked Sendable {
             onEncoded?(.sequenceHeader(record))
         }
         guard let avcc = Self.avccPayload(from: sample) else { return }
-        let pts = CMSampleBufferGetPresentationTimeStamp(sample)
+        let samplePTS = CMSampleBufferGetPresentationTimeStamp(sample)
+        let shift = currentRTMPTimestampShift()
+        let pts = CMTimeCompare(shift, .zero) == 0 ? samplePTS : CMTimeSubtract(samplePTS, shift)
         let timestampMs = rtmpTimestampMs(for: pts)
         encodedFrameCount += 1
         onAccessUnitBytes?(avcc.count)

@@ -18,6 +18,7 @@ extension ShowController {
     }
 
     func configureOutputBusSubscriptions() {
+        streaming.onPhoneDestinationChange = { [weak self] in self?.syncPhoneRecording() }
         let encoder = streaming.hardwareEncoder
         ProgramOutputBus.shared.subscribe(id: "sink.rtmp.encoder") { [weak self] payload in
             let passthrough = self?.isoRecorder.programFileWriter?.isPassthrough == true
@@ -39,6 +40,10 @@ extension ShowController {
         }
         ProgramOutputBus.shared.subscribe(id: "sink.program.recorder") { [weak self] payload in
             guard payload.mode.isRecording else { return }
+            // Record-only 9:16: live frames already reach the Phone lane from the Stream sink.
+            if !payload.mode.isLive, PhoneRecordingBridge.isActive {
+                PhoneFrameIngress.shared.push(payload.pixelBuffer)
+            }
             if self?.isoRecorder.programFileWriter?.isPassthrough == true { return }
             self?.isoRecorder.appendProgramFrame(
                 payload.pixelBuffer,

@@ -760,6 +760,7 @@ final class ShowController {
             if ProShowFeatureFlags.multiDestinationRoutingV1 {
                 // The Phone lane follows the live slide's Phone canvas; none falls back to Fit from Stream.
                 streaming.notePhoneCanvas(prepareSlideForProgramCue(slide).editorCanvases)
+                if isoRecorder.isRecording { syncPhoneRecording() }
             }
         }
         applyMediaLayerDecision(decision)
@@ -1698,6 +1699,7 @@ final class ShowController {
         )
         if ProShowFeatureFlags.multiDestinationRoutingV1 {
             streaming.notePhoneCanvas(prepared.editorCanvases)
+            if isoRecorder.isRecording { syncPhoneRecording() }
         }
         let incoming = resolvedAssociatedMedia(for: cleaned)
         let decision = MediaActionEvaluator.evaluate(
@@ -3859,14 +3861,18 @@ final class ShowController {
             }
             let ok = streaming.start(ingestPolicies: [])
             publishCurrentPhoneCanvas()
+            syncPhoneRecording()
             return ["ok": ok, "state": streaming.state.rawValue, "phoneLane": streaming.routingPlan?.phoneLane != nil]
         case "stream_local_stop":
             streaming.stop()
             streaming.configureOutputs([], accounts: [])
+            syncPhoneRecording()
             return ["ok": true]
         case "stream_info":
             return ["ok": true, "state": streaming.state.rawValue, "phoneError": streaming.phoneLaneError ?? "", "lastError": streaming.lastError ?? "",
-                    "phone": streaming.phoneLaneDiagnostics, "composite": CompositeRenderTiming.diagnostics]
+                    "phone": streaming.phoneLaneDiagnostics, "composite": CompositeRenderTiming.diagnostics,
+                    "phoneRecording": isoRecorder.phoneRecordingDiagnostics,
+                    "phoneRecordingRefusal": streaming.phoneRecordingRefusal ?? ""]
         case "timer":
             guard let timer = inspector.timers.first(where: { $0.name == args["name"] }) else { return ["ok": false, "error": "no_timer"] }
             switch args["op"] {
@@ -8518,14 +8524,17 @@ final class ShowController {
                 streaming.config.streamKey = loopback.key
                 let ok = streaming.start(ingestPolicies: [])
                 publishCurrentPhoneCanvas()
+                syncPhoneRecording()
                 return (ok ? 200 : 400, ControlJSON.encode(["ok": ok, "state": streaming.state.rawValue, "is_streaming": streaming.isLive]))
             }
             let ok = streaming.start(ingestPolicies: PlatformIngestPolicy.policies(for: armedStreamAccounts()))
             publishCurrentPhoneCanvas()
+            syncPhoneRecording()
             return (ok ? 200 : 400, ControlJSON.encode(["ok": ok, "state": streaming.state.rawValue, "is_streaming": streaming.isLive]))
         }
         if method == "POST", parts == ["v1", "stream", "stop"] || parts == ["v1", "capture", "stop"] {
             streaming.stop()
+            syncPhoneRecording()
             return (200, #"{"ok":true,"state":"idle","is_streaming":false}"#)
         }
         if method == "POST", parts == ["v1", "record", "start"] {

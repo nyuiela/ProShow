@@ -307,12 +307,12 @@ enum ProgramAudioAccessTap {
 
 #if canImport(CoreVideo)
 /// Phone encode beside the Stream session. Work stays off the program encoder queue.
+/// The encoder session and the RTMP link are separate: a 9:16 recording keeps one encoder
+/// session running while Phone destinations come and go, so its file has no gap.
 final class PhoneEncodeLane: @unchecked Sendable {
     let encoder = HardwareVideoEncoder()
-    let transport = MultiRTMPTransport()
     private let queue = DispatchQueue(label: "com.proshow.phone.lane", qos: .userInitiated)
     private var ticker: DispatchSourceTimer?
-    private var audioTapID: UUID?
     private var busy = false
     private var state: PhoneBoardState = .absent
     private var presentBuffer: CVPixelBuffer?
@@ -321,12 +321,78 @@ final class PhoneEncodeLane: @unchecked Sendable {
     private(set) var failed = false
     private(set) var pumpsAudio = false
 
+    // Guarded by linkLock. The RTMP side; nil while the lane only feeds the 9:16 file.
+    private let linkLock = NSLock()
+    private var link: MultiRTMPTransport?
+    private var audioTapID: UUID?
+    private var lastSequenceHeader: Data?
+    private var forceNextKeyframe = true
+
+    var transport: MultiRTMPTransport? {
+        linkLock.lock()
+        defer { linkLock.unlock() }
+        return link
+    }
+
+    var hasTransport: Bool { transport != nil }
+    var isEncoding: Bool { encoder.isPrepared && ticker != nil }
+
+    /// Old entry point: encoder plus destinations in one go.
     func start(ingests: [ResolvedIngest], lane: EncodeLane, pumpsAudio: Bool) -> Bool {
         guard !ingests.isEmpty else { return false }
+        guard startEncoder(lane: lane) else { return false }
+        guard attach(ingests: ingests, lane: lane, pumpsAudio: pumpsAudio) != nil else {
+            stop()
+            return false
+        }
+        return true
+    }
+
+    /// Starts the encoder, ticker and frame feed without any destination.
+    func startEncoder(lane: EncodeLane?) -> Bool {
+        if isEncoding { return true }
+        scaleMode = lane?.scaleMode ?? .fit
+        let encoderConfig = StreamEncoderConfig(
+            presetName: "Phone",
+            width: lane?.key.width ?? PhoneEncodeTemplate.width,
+            height: lane?.key.height ?? PhoneEncodeTemplate.height,
+            frameRate: lane?.key.frameRate ?? PhoneEncodeTemplate.frameRate,
+            targetBitrateBps: lane?.targetBitrateBps ?? PhoneEncodeTemplate.targetBitrateBps,
+            maxBitrateCeilingBps: lane?.ceilingBitrateBps ?? PhoneEncodeTemplate.ceilingBitrateBps,
+            keyframeIntervalSeconds: lane?.key.keyframeIntervalSeconds ?? PhoneEncodeTemplate.keyframeIntervalSeconds
+        )
+        encoder.sessionQueue = queue
+        encoder.setupStream(config: encoderConfig)
+        guard encoder.isPrepared else {
+            failed = true
+            return false
+        }
+        encoder.onEncoded = { [weak self] packet in
+            self?.forward(packet)
+        }
+        encoder.onEncodedSample = { sample in
+            PhoneRecordingBridge.active?.appendEncodedVideoSample(sample)
+        }
+        PhoneFrameIngress.shared.setConsumer { [weak self] buffer in
+            self?.acceptStreamFrame(buffer)
+        }
+        queue.sync {
+            lastPTSValue = Int64.min
+            framesSinceKeyframe = 0
+        }
+        startTicker()
+        failed = false
+        return true
+    }
+
+    /// Opens RTMP to the Phone destinations on the running encoder. The next frame is a keyframe.
+    @discardableResult
+    func attach(ingests: [ResolvedIngest], lane: EncodeLane, pumpsAudio: Bool) -> MultiRTMPTransport? {
+        guard !ingests.isEmpty, isEncoding else { return nil }
+        detachTransport()
         self.pumpsAudio = pumpsAudio
-        self.scaleMode = lane.scaleMode
         var config = RtmpStreamConfig.default
-        var encoderConfig = StreamEncoderConfig(
+        let encoderConfig = StreamEncoderConfig(
             presetName: "Phone",
             width: lane.key.width,
             height: lane.key.height,
@@ -341,71 +407,102 @@ final class PhoneEncodeLane: @unchecked Sendable {
             config.relayDestinations = ingests.map {
                 RelayDestination(id: $0.accountID, name: $0.name, url: $0.publicURLString, streamKey: $0.streamKey)
             }
-            config.destinationURL = ingests[0].publicURLString
-            config.streamKey = ingests[0].streamKey
         } else {
             config.useCloudRelay = false
             config.relayDestinations = []
-            config.destinationURL = ingests[0].publicURLString
-            config.streamKey = ingests[0].streamKey
         }
-        encoder.sessionQueue = queue
-        encoder.setupStream(config: encoderConfig)
-        guard encoder.isPrepared else {
-            failed = true
-            return false
+        config.destinationURL = ingests[0].publicURLString
+        config.streamKey = ingests[0].streamKey
+        encoder.updateBitrate(targetBps: lane.targetBitrateBps, ceilingBps: lane.ceilingBitrateBps)
+        queue.async { [weak self] in
+            self?.scaleMode = PhoneSlideRouting.scaleMode(requested: lane.scaleMode, state: self?.state ?? .absent)
         }
+        let transport = MultiRTMPTransport()
         transport.suppressSharedAudioPump = !pumpsAudio
         do {
             try transport.connect(config: config)
         } catch {
             failed = true
-            encoder.teardown()
-            return false
+            return nil
         }
-        encoder.onEncoded = { [transport, weak self] packet in
-            self?.diagSent += 1
-            let message = RTMPClient.videoMessage(packet)
-            let kind: RTMPOutboundTag
-            switch packet {
-            case .sequenceHeader:
-                transport.rememberVideoSequenceHeader(message)
-                kind = .video(keyframe: true)
-            case .accessUnit(_, let keyframe, _):
-                kind = .video(keyframe: keyframe)
-            }
-            transport.send(message, kind: kind)
-        }
+        var tap: UUID?
         if !pumpsAudio {
-            audioTapID = ProgramAudioAccessTap.add { [transport] unit in
+            tap = ProgramAudioAccessTap.add { [transport] unit in
                 transport.send(
                     RTMPClient.audioMessage(.accessUnit(timestampMs: unit.timestampMs, aac: unit.aac)),
                     kind: .audio
                 )
             }
         }
-        PhoneFrameIngress.shared.setConsumer { [weak self] buffer in
-            self?.acceptStreamFrame(buffer)
+        linkLock.lock()
+        if let header = lastSequenceHeader {
+            transport.rememberVideoSequenceHeader(header)
         }
-        startTicker()
+        link = transport
+        audioTapID = tap
+        forceNextKeyframe = true
+        linkLock.unlock()
+        queue.async { [weak self] in self?.sentWhileReady = false }
         failed = false
-        return true
+        return transport
+    }
+
+    /// Closes RTMP only. The encoder keeps running for the 9:16 file.
+    func detachTransport() {
+        linkLock.lock()
+        let old = link
+        let tap = audioTapID
+        link = nil
+        audioTapID = nil
+        linkLock.unlock()
+        if let tap {
+            ProgramAudioAccessTap.remove(tap)
+        }
+        old?.disconnect()
+    }
+
+    /// Next frame is a keyframe (a 9:16 file just opened).
+    func requestKeyframe() {
+        linkLock.lock()
+        forceNextKeyframe = true
+        linkLock.unlock()
     }
 
     func stop() {
         ticker?.cancel()
         ticker = nil
         PhoneFrameIngress.shared.setConsumer(nil)
-        if let audioTapID {
-            ProgramAudioAccessTap.remove(audioTapID)
-            self.audioTapID = nil
-        }
+        detachTransport()
         encoder.onEncoded = nil
+        encoder.onEncodedSample = nil
         encoder.teardown()
-        transport.disconnect()
-        presentBuffer = nil
-        lastFitted = nil
+        queue.sync {
+            presentBuffer = nil
+            lastFitted = nil
+            latestSource = nil
+        }
         PhoneComposedFrame.shared.clear()
+    }
+
+    private func forward(_ packet: EncodedVideoPacket) {
+        let message = RTMPClient.videoMessage(packet)
+        let kind: RTMPOutboundTag
+        linkLock.lock()
+        if case .sequenceHeader = packet {
+            lastSequenceHeader = message
+        }
+        let transport = link
+        linkLock.unlock()
+        switch packet {
+        case .sequenceHeader:
+            transport?.rememberVideoSequenceHeader(message)
+            kind = .video(keyframe: true)
+        case .accessUnit(_, let keyframe, _):
+            kind = .video(keyframe: keyframe)
+        }
+        guard let transport else { return }
+        diagSent += 1
+        transport.send(message, kind: kind)
     }
 
     func note(state: PhoneBoardState, boards: [EditorCanvasFrame], scaleMode: DestinationScaleMode) {
@@ -438,8 +535,12 @@ final class PhoneEncodeLane: @unchecked Sendable {
     }
 
     private var latestSource: CVPixelBuffer?
-    private var frameIndex: Int64 = 0
     private var sentWhileReady = false
+    // Phone clock timeline (queue only).
+    private var lastPTSValue = Int64.min
+    private var lastPTSHost: Double = 0
+    private var ptsOffsetFrames: Int64 = 0
+    private var framesSinceKeyframe = 0
 
     private func startTicker() {
         ticker?.cancel()
@@ -459,16 +560,49 @@ final class PhoneEncodeLane: @unchecked Sendable {
     private(set) var diagNoFrame = 0
     private(set) var diagEncodeCalls = 0
     private(set) var diagSent = 0
+    private(set) var diagClockJumps = 0
+    private(set) var diagRecordOnlyEncodes = 0
     var diagnostics: [String: Any] {
         ["ticks": diagTicks, "notReady": diagNotReady, "noFrame": diagNoFrame, "encodeCalls": diagEncodeCalls,
          "videoSent": diagSent, "encoded": encoder.encodedFrameCount, "encodeFailures": encoder.encodeFailureCount,
          "lastStatus": Int(encoder.lastEncodeStatus), "prepared": encoder.isPrepared, "state": "\(state)",
-         "hasComposed": PhoneComposedFrame.shared.current() != nil, "hasPresent": presentBuffer != nil, "hasSource": latestSource != nil]
+         "hasComposed": PhoneComposedFrame.shared.current() != nil, "hasPresent": presentBuffer != nil, "hasSource": latestSource != nil,
+         "transport": hasTransport, "clockJumps": diagClockJumps, "recordOnlyEncodes": diagRecordOnlyEncodes,
+         "recording": PhoneRecordingBridge.isActive]
+    }
+
+    /// Frame time on the Phone clock (stream media clock when live, host time otherwise).
+    /// A clock switch (record-only to live) keeps the lane's own timeline continuous; the FLV
+    /// timestamps get the matching shift so RTMP stays on the stream clock.
+    private func nextPresentationTime() -> CMTime {
+        let fps = Int64(PhoneEncodeTemplate.frameRate)
+        let host = PhoneMediaClock.hostSeconds()
+        let clockFrames = Int64((PhoneMediaClock.seconds(atHost: host) * Double(fps)).rounded())
+        var value = clockFrames + ptsOffsetFrames
+        if lastPTSValue != Int64.min {
+            let expected = lastPTSValue + max(1, Int64(((host - lastPTSHost) * Double(fps)).rounded()))
+            if abs(value - expected) > fps / 2 {
+                ptsOffsetFrames = expected - clockFrames
+                value = expected
+                encoder.setRTMPTimestampShift(CMTime(value: ptsOffsetFrames, timescale: CMTimeScale(fps)))
+                diagClockJumps += 1
+            }
+            if value <= lastPTSValue {
+                value = lastPTSValue + 1
+            }
+        }
+        lastPTSValue = value
+        lastPTSHost = host
+        return CMTime(value: value, timescale: CMTimeScale(fps))
     }
 
     private func emitTick() {
         diagTicks += 1
-        guard transport.isReady else { diagNotReady += 1; return }
+        let transport = self.transport
+        let ready = transport?.isReady == true
+        let recording = PhoneRecordingBridge.isActive
+        if !ready { diagNotReady += 1 }
+        guard ready || recording else { return }
         guard !busy else { return }
         busy = true
         defer { busy = false }
@@ -501,13 +635,19 @@ final class PhoneEncodeLane: @unchecked Sendable {
             return
         }
         diagEncodeCalls += 1
-        let index = frameIndex
-        frameIndex += 1
-        let force = !sentWhileReady
-            || transport.clientNeedsVideoConfig()
-            || index % Int64(PhoneEncodeTemplate.frameRate * 2) == 0
-        sentWhileReady = true
-        let pts = CMTime(value: index, timescale: CMTimeScale(PhoneEncodeTemplate.frameRate))
+        if !ready { diagRecordOnlyEncodes += 1 }
+        linkLock.lock()
+        let requested = forceNextKeyframe
+        forceNextKeyframe = false
+        linkLock.unlock()
+        let needsConfig = ready && (transport?.clientNeedsVideoConfig() == true)
+        let force = requested
+            || needsConfig
+            || (ready && !sentWhileReady)
+            || framesSinceKeyframe >= PhoneEncodeTemplate.frameRate * 2
+        if ready { sentWhileReady = true }
+        framesSinceKeyframe = force ? 1 : framesSinceKeyframe + 1
+        let pts = nextPresentationTime()
         encoder.encodeOnMasterClock(pixelBuffer: frame, presentationTime: pts, forceKeyframe: force)
     }
 }

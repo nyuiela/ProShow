@@ -869,6 +869,7 @@ private struct TaskMenuToolbarButton: View {
     private var statusMenuItems: some View {
         Button("Pre-Flight…") { controller.openPreFlight() }
         if controller.isoRecorder.isRecording {
+            Text(controller.isoRecorder.recordingFormatsLabel)
             Button("Stop Program Recording") { controller.stopProgramRecording() }
         } else {
             Button("Record Program Output…") { _ = controller.startProgramRecording() }
@@ -949,6 +950,7 @@ private struct TaskMenuToolButton: View {
             Menu {
                 Button("Pre-Flight…") { controller.openPreFlight() }
                 if controller.isoRecorder.isRecording {
+                    Text(controller.isoRecorder.recordingFormatsLabel)
                     Button("Stop Program Recording") { controller.stopProgramRecording() }
                 } else {
                     Button("Record Program Output…") { _ = controller.startProgramRecording() }
@@ -1002,6 +1004,7 @@ private struct TaskMenuToolButton: View {
     private var taskMenuAccessibilityLabel: String {
         if item == .live, controller.streaming.isLive { return "Live" }
         if item == .live, controller.streaming.state == .starting { return "Connecting to stream" }
+        if item == .record, controller.isoRecorder.isRecording { return controller.isoRecorder.recordingFormatsLabel }
         return item.title
     }
 }
@@ -1079,7 +1082,8 @@ private struct TaskMenuCustomIcon: View {
             Image(systemName: controller.isoRecorder.isRecording ? "record.circle.fill" : "record.circle")
                 .font(.system(size: TaskMenuMetrics.iconSize + 1, weight: .semibold))
                 .foregroundStyle(controller.isoRecorder.isRecording ? ProShowTheme.liveRed : ProShowTheme.toolbarIcon)
-                .accessibilityLabel(controller.isoRecorder.isRecording ? "Recording" : "Record")
+                .accessibilityLabel(controller.isoRecorder.isRecording ? controller.isoRecorder.recordingFormatsLabel : "Record")
+                .help(controller.isoRecorder.isRecording ? controller.isoRecorder.recordingFormatsLabel : "Record")
         case .live:
             Image(systemName: "antenna.radiowaves.left.and.right")
                 .font(.system(size: TaskMenuMetrics.iconSize, weight: .semibold))
